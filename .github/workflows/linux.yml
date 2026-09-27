@@ -45,7 +45,7 @@ jobs:
           test -s /tmp/carlos-pet.png
           EV_SCREENSHOT_PATH=/tmp/carlos-ui.png carlos/build/ui/ev-ui
           test -s /tmp/carlos-ui.png
-          for desktop in gnome cinnamon mate xfce; do
+          for desktop in gnome cinnamon mate xfce kwin; do
             dbus-run-session -- python3 carlos/tests/linux_pet_smoke.py carlos/build/ui/ev-pet "$desktop"
           done
       - name: Install and check private runtime

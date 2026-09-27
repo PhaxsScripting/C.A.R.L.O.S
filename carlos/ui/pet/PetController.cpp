@@ -109,7 +109,6 @@ PetController::PetController(bool preview, QObject *parent)
                     startTracking();
                 emit changed();
             });
-    startTracking();
     pollCore();
 }
 
@@ -124,6 +123,8 @@ void PetController::stop() {
         scripts.call("unloadScript", plugin);
         m_loaded = false;
     }
+    m_trackingSource.reset();
+    m_dragSource.reset();
 }
 bool PetController::shown() const {
     return !m_locked && !m_hidden && !m_corePrivate && m_clock.elapsed() >= m_snoozeUntil &&
@@ -205,7 +206,8 @@ void PetController::beginDrag() {
         m_dragging = false;
         return;
     }
-    QTemporaryFile file;
+    m_dragSource = std::make_unique<QTemporaryFile>();
+    auto &file = *m_dragSource;
     if (!file.open()) {
         m_dragging = false;
         return;
@@ -221,9 +223,8 @@ void PetController::beginDrag() {
         m_dragging = false;
         return;
     }
-    QDBusInterface script("org.kde.KWin", QString("/Scripting/Script%1").arg(loaded.value()),
-                          "org.kde.kwin.Script");
-    if (script.call("run").type() == QDBusMessage::ErrorMessage)
+    // KWin reuses script IDs. Start through the manager so this one actually runs.
+    if (scripts.call("start").type() == QDBusMessage::ErrorMessage)
         endDrag();
 }
 void PetController::DragPointer(int x, int y, int serial) {
@@ -275,6 +276,7 @@ void PetController::endDrag() {
         m_settings.setValue("right", m_right);
         m_settings.setValue("bottom", m_bottom);
     }
+    m_dragSource.reset();
 }
 void PetController::clearContext() {
     m_bubble.clear();
@@ -375,28 +377,44 @@ void PetController::pollCore() {
 }
 void PetController::startTracking() {
     auto bus = QDBusConnection::sessionBus();
-    m_kwinOwner = bus.interface()->serviceOwner("org.kde.KWin").value();
+    const auto ownerReply = bus.interface()->serviceOwner("org.kde.KWin");
+    if (m_loaded && ownerReply.value() == m_kwinOwner)
+        return;
+    m_kwinOwner = ownerReply.value();
     if (m_kwinOwner.isEmpty())
         return;
     QFile source(":/pet/activity.js");
-    if (!source.open(QIODevice::ReadOnly))
+    if (!source.open(QIODevice::ReadOnly)) {
+        qWarning("Pet activity resource could not be opened");
         return;
-    QTemporaryFile file;
-    if (!file.open())
+    }
+    auto file = std::make_unique<QTemporaryFile>();
+    if (!file->open()) {
+        qWarning("Pet activity script could not be created");
         return;
-    file.write(source.readAll());
-    file.flush();
+    }
+    file->write(source.readAll());
+    file->flush();
     QDBusInterface scripts("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", bus);
     if (!m_dragging)
         scripts.call("unloadScript", dragPlugin);
     scripts.call("unloadScript", plugin);
-    QDBusReply<int> loaded = scripts.call("loadScript", file.fileName(), plugin);
-    if (!loaded.isValid() || loaded.value() < 0)
+    // KWin can read the file after run() returns. Keep it until unload.
+    m_trackingSource = std::move(file);
+    QDBusReply<int> loaded = scripts.call("loadScript", m_trackingSource->fileName(), plugin);
+    if (!loaded.isValid() || loaded.value() < 0) {
+        qWarning() << "Pet activity script load failed:" << loaded.error().message();
         return;
+    }
     m_loaded = true;
-    QDBusInterface script("org.kde.KWin", QString("/Scripting/Script%1").arg(loaded.value()),
-                          "org.kde.kwin.Script", bus);
-    script.call("run");
+    // A reused ScriptN path can point at an older script. The manager knows ours.
+    const auto started = scripts.call("start");
+    if (started.type() == QDBusMessage::ErrorMessage) {
+        qWarning() << "Pet activity script start failed:" << started.errorMessage();
+        scripts.call("unloadScript", plugin);
+        m_loaded = false;
+        m_trackingSource.reset();
+    }
 }
 void PetController::menu() {
     QMenu menu;

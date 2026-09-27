@@ -7,6 +7,9 @@
 #include <QSettings>
 #include <QTimer>
 #include <QWindow>
+#include <memory>
+
+class QTemporaryFile;
 
 class PetController : public QObject, protected QDBusContext {
     Q_OBJECT
@@ -67,6 +70,7 @@ class PetController : public QObject, protected QDBusContext {
     bool m_tracking = false, m_loaded = false, m_corePrivate = false, m_dragging = false;
     bool m_dragMoved = false, m_hasDragPointer = false;
     bool m_nativeOverlay = false;
+    std::unique_ptr<QTemporaryFile> m_trackingSource, m_dragSource;
     qint64 m_bubbleUntil = 0, m_snoozeUntil = 0, m_lastPet = -1000;
     QPointF m_dragStart;
     int m_right = 24, m_bottom = 64;

@@ -41,7 +41,7 @@ window on the laptop display. The screen menu also moved it between both monitor
 
 ## Linux portability
 
-September 27, 2026: the Linux build matrix passed on Ubuntu 24.04, Debian 13,
+September 27, 2026: 983 Python tests passed. The Linux build matrix passed on Ubuntu 24.04, Debian 13,
 Fedora 44, Arch and openSUSE Tumbleweed. Each job built the full UI without
 LayerShellQt, ran all four CTest groups, rendered the pet and main window,
 exercised GNOME/Cinnamon/MATE/Xfce lock interfaces on an isolated D-Bus session,
@@ -56,3 +56,8 @@ Container rendering and simulated lock services do not replace interactive
 testing on those desktops. Voice models, audio devices, fullscreen stacking on
 non-KDE desktops, and compositor-specific automation have the limits described
 in [Linux setup](LINUX.md).
+
+The pet's KWin startup check now simulates an unusable per-script D-Bus ID and a
+script file read after the start call returns. It confirms that activity arrives,
+unlocking does not load duplicate listeners, and exit unloads the script. On the
+live KDE session, a normal pet restart reported activity tracking successfully.
