@@ -15,6 +15,7 @@
 #include <QStandardPaths>
 #include <QSystemTrayIcon>
 #include <QTimer>
+#include <unistd.h>
 
 #include "EvClient.h"
 

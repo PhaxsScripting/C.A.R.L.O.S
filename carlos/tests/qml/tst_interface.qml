@@ -150,7 +150,12 @@ TestCase {
         verify(found !== null,"Missing " + name)
         return found
     }
-    function click(name) { const target=item(name); mouseClick(target,target.width/2,target.height/2) }
+    function click(name) {
+        const target = item(name)
+        tryVerify(function() { return target.visible && target.width > 0 && target.height > 0 })
+        waitForRendering(target)
+        mouseClick(target, target.width / 2, target.height / 2)
+    }
     function test_all_navigation_pages_fit_and_do_not_execute() {
         const stack=item("page-stack")
         for(let i=0;i<11;++i) {

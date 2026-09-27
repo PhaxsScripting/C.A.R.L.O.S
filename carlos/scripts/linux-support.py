@@ -14,7 +14,7 @@ import sys
 PROFILES = {
     "debian": {
         "manager": ["apt-get", "install"],
-        "packages": "build-essential cmake ninja-build pkg-config python3 python3-venv python3-dev python3-dbus python3-gi qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools qt6-tools-dev-tools qt6-wayland qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtqml-workerscript qml6-module-qttest libgl1-mesa-dev libglib2.0-bin dbus-x11 xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat",
+        "packages": "build-essential cmake ninja-build pkg-config python3 python3-venv python3-dev python3-dbus python3-gi qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools qt6-tools-dev-tools qt6-wayland qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qttest libgl1-mesa-dev libglib2.0-bin dbus-x11 xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat",
     },
     "fedora": {
         "manager": ["dnf", "install"],
