@@ -263,13 +263,13 @@ ApplicationWindow {
                 Item {
                     Layout.fillWidth: true; Layout.preferredHeight: 126
                     Text { y: 5; text: "DESKTOP ASSISTANT"; color: "#9bb1c1"; font.pixelSize: 10 }
-                    Text { objectName: "brand-name"; y: 28; width: parent.width; text: "Carlos"; color: "#edfaff"; font.family: "Liberation Sans"; font.pixelSize: 36; font.bold: true }
+                    Text { objectName: "brand-name"; y: 28; width: parent.width; text: "Carlos"; color: "#edfaff"; font.family: "Liberation Sans"; font.pixelSize: 36; minimumPixelSize: 18; fontSizeMode: Text.HorizontalFit; font.bold: true }
                     Rectangle { x: 2; y: 90; width: 32; height: 2; color: appWindow.cyan }
                     Text { x: 43; y: 85; text: "WORKSPACE"; color: appWindow.cyan; font.pixelSize: 10 }
                     Text { y: 111; text: "PAGES"; color: "#9bb1c1"; font.pixelSize: 10 }
                 }
                 ListView {
-                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                    ScrollBar.vertical: ListScrollBar {}
                     id: navigation
                     objectName: "navigation"
                     Layout.fillWidth: true; Layout.fillHeight: true
@@ -485,7 +485,7 @@ ApplicationWindow {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 ListView {
-                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                    ScrollBar.vertical: ListScrollBar {}
                                     anchors.fill: parent
                                     anchors.margins: 10
                                     spacing: 7
@@ -523,7 +523,7 @@ ApplicationWindow {
                         SectionPanel {
                             Layout.fillWidth: true; Layout.fillHeight: true
                             ListView {
-                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                ScrollBar.vertical: ListScrollBar {}
                                 id: commandTimeline
                                 anchors.fill: parent; anchors.margins: 18; clip: true; spacing: 10; model: evClient.timeline
                                 onCountChanged: positionViewAtEnd()
@@ -604,7 +604,7 @@ ApplicationWindow {
                         SectionPanel {
                             Layout.fillWidth: true; Layout.fillHeight: true
                             ListView {
-                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                ScrollBar.vertical: ListScrollBar {}
                                 anchors.fill: parent; anchors.margins: 16; spacing: 9; clip: true; model: evClient.memories
                                 delegate: HudPanel {
                                     required property var modelData
@@ -656,7 +656,7 @@ ApplicationWindow {
                         SectionPanel {
                             Layout.fillWidth: true; Layout.fillHeight: true
                             ListView {
-                                ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                ScrollBar.vertical: ListScrollBar {}
                                 anchors.fill: parent; anchors.margins: 14; spacing: 7; clip: true; model: evClient.tools
                                 delegate: HudPanel {
                                     required property var modelData
@@ -701,7 +701,7 @@ ApplicationWindow {
                                 }
                                 Text { Layout.fillWidth: true; text: get(tasksPage.shownPlan, "request", "Carlos is ready for a typed or spoken multi-step request."); color: appWindow.dim; font.pixelSize: 10; elide: Text.ElideRight }
                                 ListView {
-                                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                    ScrollBar.vertical: ListScrollBar {}
                                     Layout.fillWidth: true; Layout.fillHeight: true; spacing: 5; clip: true
                                     model: get(tasksPage.shownPlan, "steps", [])
                                     delegate: HudPanel {
@@ -726,7 +726,7 @@ ApplicationWindow {
                                 ColumnLayout { anchors.fill: parent; anchors.margins: 13
                                     Text { text: "RECENT TASKS"; color: appWindow.cyan; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.3 }
                                     ListView {
-                                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                        ScrollBar.vertical: ListScrollBar {}
                                         Layout.fillWidth: true; Layout.fillHeight: true; spacing: 6; clip: true; model: evClient.plans
                                         delegate: HudPanel {
                                             required property var modelData
@@ -803,7 +803,7 @@ ApplicationWindow {
                                 ColumnLayout { anchors.fill: parent; anchors.margins: 13
                                     Text { text: "FINDINGS WITH EVIDENCE"; color: appWindow.cyan; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.2 }
                                     ListView {
-                                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                        ScrollBar.vertical: ListScrollBar {}
                                         Layout.fillWidth: true; Layout.fillHeight: true; spacing: 6; clip: true; model: get(evClient.security, "findings", [])
                                         delegate: HudPanel {
                                             required property var modelData
@@ -826,7 +826,7 @@ ApplicationWindow {
                                 ColumnLayout { anchors.fill: parent; anchors.margins: 13
                                     Text { text: "Carlos SELF-DIAGNOSTICS"; color: appWindow.cyan; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.2 }
                                     ListView {
-                                        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                                        ScrollBar.vertical: ListScrollBar {}
                                         Layout.fillWidth: true; Layout.fillHeight: true; spacing: 5; clip: true; model: get(evClient.diagnostics, "checks", [])
                                         delegate: HudPanel {
                                             required property var modelData
@@ -851,7 +851,7 @@ ApplicationWindow {
                     SectionPanel {
                         anchors.fill: parent; anchors.margins: 18
                         ListView {
-                            ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
+                            ScrollBar.vertical: ListScrollBar {}
                             anchors.fill: parent; anchors.margins: 14; spacing: 5; clip: true; model: evClient.events
                             delegate: HudPanel {
                                 required property var modelData

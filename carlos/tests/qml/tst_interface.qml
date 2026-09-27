@@ -223,6 +223,9 @@ TestCase {
     function test_brand_fits_small_window_and_wide_content_is_bounded() {
         const brand = item("brand-name")
         verify(brand.contentWidth <= brand.width)
+        brand.font.pixelSize = 72
+        waitForRendering(ui.contentItem)
+        verify(brand.contentWidth <= brand.width)
         ui.width = 3840
         waitForRendering(ui.contentItem)
         verify(item("page-stack").width < 1760)
@@ -231,6 +234,8 @@ TestCase {
         mock.timeline = []
         click("nav-2")
         tryCompare(item("conversation-empty"), "visible", true)
+        const timeline = item("conversation-empty").parent
+        tryCompare(timeline.ScrollBar.vertical.contentItem, "visible", false)
         const input = item("command-input")
         const send = item("send-command")
         input.text = "   "
