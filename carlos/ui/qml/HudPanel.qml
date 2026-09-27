@@ -6,8 +6,8 @@ Item {
     property color accent: "#66e5ff"
     property color lineColor: "#294456"
     property real cut: 14
-    property bool technical: true
-    property real tint: 0.07
+    property bool technical: false
+    property real tint: 0
     onVisibleChanged: if (visible) frame.requestPaint()
     onColorChanged: frame.requestPaint()
     onAccentChanged: frame.requestPaint()
@@ -24,7 +24,7 @@ Item {
         onHeightChanged: requestPaint()
         onPaint: {
             const c = getContext("2d"); c.reset()
-            const w = width - 1, h = height - 1, k = Math.min(root.cut, h / 3, w / 3)
+            const w = width - 1, h = height - 1, k = root.technical ? Math.min(root.cut, h / 3, w / 3) : 0
             c.beginPath(); c.moveTo(k, 0.5); c.lineTo(w, 0.5); c.lineTo(w, h-k)
             c.lineTo(w-k, h); c.lineTo(0.5, h); c.lineTo(0.5, k); c.closePath()
             c.fillStyle = root.color; c.fill(); c.strokeStyle = root.lineColor; c.lineWidth = 1; c.stroke()
@@ -33,6 +33,7 @@ Item {
             g.addColorStop(0, Qt.rgba(root.accent.r,root.accent.g,root.accent.b,root.tint))
             g.addColorStop(0.6, "transparent")
             c.fillStyle = g; c.fillRect(0,0,w,h); c.restore()
+            if (!root.technical) return;
             c.strokeStyle = root.accent; c.lineWidth = 2
             c.beginPath(); c.moveTo(0.5,k+22); c.lineTo(0.5,k); c.lineTo(k,0.5); c.lineTo(k+32,0.5); c.stroke()
             c.globalAlpha = 0.6

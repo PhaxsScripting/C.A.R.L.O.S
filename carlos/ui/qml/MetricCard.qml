@@ -12,9 +12,9 @@ HudPanel {
     color: "#0a1927"; lineColor: "#2c475b"; cut: 12
     Column {
         anchors.fill: parent; anchors.margins: 15; spacing: root.height > 140 ? 12 : 7
-        Text { width: parent.width; text: root.label; color: "#8caabd"; font.family: "Hack"; font.pixelSize: 9; font.letterSpacing: 1.2; elide: Text.ElideRight }
+        Text { width: parent.width; text: root.label; color: "#a6bdcb"; font.family: "Liberation Sans"; font.pixelSize: 11; elide: Text.ElideRight }
         Text { width: parent.width; height: root.height > 140 ? 44 : 29; text: root.value; color: "#edfaff"; font.family: "Hack"; font.pixelSize: root.height > 140 ? 34 : 24; minimumPixelSize: 12; fontSizeMode: Text.HorizontalFit; font.weight: Font.Medium; elide: Text.ElideRight }
-        Text { width: parent.width; text: root.detail; color: root.accent; opacity: .85; font.family: "Hack"; font.pixelSize: 8; elide: Text.ElideRight }
+        Text { width: parent.width; text: root.detail; color: "#a6bdcb"; font.family: "Liberation Sans"; font.pixelSize: 10; elide: Text.ElideRight }
     }
     Row {
         id: meter

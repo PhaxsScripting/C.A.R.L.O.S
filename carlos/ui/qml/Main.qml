@@ -12,9 +12,21 @@ ApplicationWindow {
     minimumWidth: 1080
     minimumHeight: 680
     visible: !backgroundMode
-    title: "Carlos // AUTONOMOUS DESKTOP INTELLIGENCE"
+    title: "Carlos"
     color: "#050a0f"
     font.family: "Liberation Sans"
+    palette.window: "#071019"
+    palette.windowText: "#e0f1f5"
+    palette.base: "#0c1c29"
+    palette.alternateBase: "#132838"
+    palette.text: "#e0f1f5"
+    palette.button: "#132838"
+    palette.buttonText: "#e0f1f5"
+    palette.highlight: "#275a71"
+    palette.highlightedText: "#ffffff"
+    palette.mid: "#657f90"
+    palette.light: "#657f90"
+    palette.dark: "#071019"
     property bool reducedMotion: settingValue("hud_reduce_motion", false)
     readonly property bool hudEnabled: settingValue("hud_enabled", true)
     objectName: "ev-main-window"
@@ -36,8 +48,8 @@ ApplicationWindow {
     property string inspectedPlanId: ""
     property bool commandInputExpanded: false
     property bool reviseCurrentTask: false
-    readonly property var pageTitles: ["COMMAND DECK", "NEURAL INTERFACE", "COMMUNICATIONS", "MEMORY ARCHIVE", "SYSTEM TELEMETRY", "CAPABILITY MATRIX", "MISSION CONTROL", "SECURITY OPERATIONS", "EVENT STREAM", "SYSTEM CONFIGURATION", "ENVIRONMENT CONTROL"]
-    readonly property var pageDetails: ["Your desktop intelligence. All systems in view.", "Perception. Memory. Reasoning. Explore the architecture.", "One conversation. Real actions. Verified outcomes.", "Your explicit memories, kept under your control.", "Live host measurements. No simulated readings.", "Discover every registered operation and its boundaries.", "Trace each request from intent to verified result.", "Local evidence, runtime inspection and access boundaries.", "A timestamped record of what actually happened.", "Tune the connection, voice and interaction pipeline.", "Your atmosphere, routines and daily essentials."]
+    readonly property var pageTitles: ["Overview", "Brain", "Conversation", "Memory", "System", "Tools", "Tasks", "Security", "Activity", "Settings", "Daily"]
+    readonly property var pageDetails: ["Assistant status, voice and recent activity.", "Inspect how input, memory and actions connect.", "Send a message or a desktop request.", "Review what you asked Carlos to remember.", "CPU, memory, storage and network usage.", "Available tools and the permissions they need.", "Review steps, results and unfinished work.", "Inspect access, runtime checks and findings.", "Recent events from the assistant.", "Connection, voice and interaction settings.", "Scenes, reminders and saved routines."]
 
     Connections {
         target: evClient
@@ -234,7 +246,9 @@ ApplicationWindow {
 
     HudBackdrop { anchors.fill: parent }
     RowLayout {
-        anchors.fill: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        height: parent.height
+        width: Math.min(parent.width, 1760)
         spacing: 0
         Accessible.name: "Carlos Control Center"
         Accessible.description: "Local voice assistant controls, diagnostics, tools, and task status"
@@ -248,11 +262,11 @@ ApplicationWindow {
                 anchors.fill: parent; anchors.margins: 16; spacing: 8
                 Item {
                     Layout.fillWidth: true; Layout.preferredHeight: 126
-                    Text { y: 5; text: "PERSONAL INTELLIGENCE"; color: "#7290a5"; font.family: "Hack"; font.pixelSize: 8; font.letterSpacing: 1.4 }
-                    Text { y: 28; text: "Carlos"; color: "#edfaff"; font.family: "Liberation Sans"; font.pixelSize: 50; font.bold: true; font.letterSpacing: 9 }
+                    Text { y: 5; text: "DESKTOP ASSISTANT"; color: "#9bb1c1"; font.pixelSize: 10 }
+                    Text { objectName: "brand-name"; y: 28; width: parent.width; text: "Carlos"; color: "#edfaff"; font.family: "Liberation Sans"; font.pixelSize: 36; font.bold: true }
                     Rectangle { x: 2; y: 90; width: 32; height: 2; color: appWindow.cyan }
-                    Text { x: 43; y: 85; text: "NEXUS / 01"; color: appWindow.cyan; font.family: "Hack"; font.pixelSize: 9; font.letterSpacing: 2 }
-                    Text { y: 111; text: "OPERATIONS"; color: "#6f889c"; font.family: "Hack"; font.pixelSize: 8; font.letterSpacing: 2 }
+                    Text { x: 43; y: 85; text: "WORKSPACE"; color: appWindow.cyan; font.pixelSize: 10 }
+                    Text { y: 111; text: "PAGES"; color: "#9bb1c1"; font.pixelSize: 10 }
                 }
                 ListView {
                     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; contentItem: Rectangle { implicitWidth: 4; radius: 2; color: "#527f98" } }
@@ -277,8 +291,8 @@ ApplicationWindow {
                             lineColor: navItem.activeFocus ? "#ddfaff" : navItem.selected ? "#4ea7c4" : "#2b485b"
                             accent: navItem.selected ? appWindow.cyan : "#406077"
                         }
-                        Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: String(index + 1).padStart(2,"0"); color: navItem.selected ? "#70e6ff" : "#53748b"; font.family: "Hack"; font.pixelSize: 9 }
-                        Text { x: 39; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: navItem.selected ? "#f0fbff" : "#9bb1c1"; font.family: "Hack"; font.pixelSize: 10; font.bold: navItem.selected; font.letterSpacing: .7 }
+                        Text { x: 10; anchors.verticalCenter: parent.verticalCenter; text: String(index + 1).padStart(2,"0"); color: navItem.selected ? "#70e6ff" : "#91aabb"; font.family: "Hack"; font.pixelSize: 10 }
+                        Text { x: 39; anchors.verticalCenter: parent.verticalCenter; text: modelData; color: navItem.selected ? "#f0fbff" : "#9bb1c1"; font.family: "Liberation Sans"; font.pixelSize: 11; font.bold: navItem.selected }
                         Text { anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter; text: "›"; color: appWindow.cyan; visible: navItem.selected }
                         activeFocusOnTab: true
                         Keys.onReturnPressed: navigation.currentIndex = index
@@ -316,7 +330,7 @@ ApplicationWindow {
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 7
                         Text { objectName: "voice-status"; Layout.fillWidth: true; text: "Carlos  //  " + appWindow.voiceStatus(); color: evClient.connected ? appWindow.cyan : "#ff6478"; font.family: "Hack"; font.pixelSize: 10; font.letterSpacing: 1; elide: Text.ElideRight; Accessible.name: text }
-                        Text { Layout.fillWidth: true; text: appWindow.pageTitles[navigation.currentIndex]; color: "#edfaff"; font.pixelSize: appWindow.width < 1250 ? 21 : 26; font.bold: true; font.letterSpacing: 2.5; elide: Text.ElideRight }
+                        Text { Layout.fillWidth: true; text: appWindow.pageTitles[navigation.currentIndex]; color: "#edfaff"; font.pixelSize: appWindow.width < 1250 ? 24 : 28; font.bold: true; elide: Text.ElideRight }
                         Text { Layout.fillWidth: true; text: appWindow.pageDetails[navigation.currentIndex]; color: "#91aabb"; font.pixelSize: 11; elide: Text.ElideRight }
                     }
                     Column {
@@ -513,13 +527,22 @@ ApplicationWindow {
                                 id: commandTimeline
                                 anchors.fill: parent; anchors.margins: 18; clip: true; spacing: 10; model: evClient.timeline
                                 onCountChanged: positionViewAtEnd()
+                                Column {
+                                    objectName: "conversation-empty"
+                                    anchors.centerIn: parent
+                                    width: Math.min(420, parent.width - 32)
+                                    spacing: 10
+                                    visible: commandTimeline.count === 0
+                                    Text { width: parent.width; text: evClient.connected ? "What are we working on?" : "Carlos is disconnected"; color: "#e0f1f5"; font.pixelSize: 22; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap }
+                                    Text { width: parent.width; text: evClient.connected ? "Type a message below. Requests that need permission will ask first." : "Your message will stay here while the connection recovers."; color: appWindow.dim; font.pixelSize: 13; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap }
+                                }
                                 delegate: Item {
                                     id: bubbleRow
                                     required property var modelData
                                     width: commandTimeline.width
                                     height: conversationColumn.implicitHeight + 30
                                     Rectangle {
-                                    width: bubbleRow.width * 0.86; height: bubbleRow.height
+                                    width: Math.min(760, bubbleRow.width * 0.86); height: bubbleRow.height
                                     x: bubbleRow.modelData.kind === "USER" ? bubbleRow.width - width : 0
                                     radius: 3
                                     color: bubbleRow.modelData.kind === "USER" ? "#172c40" : bubbleRow.modelData.kind === "ERROR" ? "#2b1219" : "#0b1b2b"
@@ -527,7 +550,7 @@ ApplicationWindow {
                                     Rectangle { anchors.left: parent.left; anchors.top: parent.top; anchors.topMargin: 9; width: 2; height: 20; color: bubbleRow.modelData.kind === "USER" ? "#a8b2ff" : "#70e6ff" }
                                     Column { id: conversationColumn; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 12; spacing: 5
                                         Text { text: bubbleRow.modelData.title; color: bubbleRow.modelData.kind === "ERROR" ? "#ff6478" : appWindow.cyan; font.family: "Hack"; font.pixelSize: 9; font.bold: true; font.letterSpacing: 1.2 }
-                                        Text { width: parent.width; text: bubbleRow.modelData.body; color: "#e0f1f5"; font.pixelSize: 14; wrapMode: Text.WordWrap; lineHeight: 1.3 }
+                                        Text { width: parent.width; text: bubbleRow.modelData.body; textFormat: Text.PlainText; color: "#e0f1f5"; font.pixelSize: 14; wrapMode: Text.Wrap; lineHeight: 1.3 }
                                     }
                                     }
                                 }
@@ -542,10 +565,14 @@ ApplicationWindow {
                                 placeholderText: "Talk to Carlos…"
                                 color: "#e5f9ff"
                                 placeholderTextColor: "#829fb2"
-                                background: HudPanel { color: "#071320"; cut: 8; technical: false; accent: "#466b80" }
-                                onAccepted: { evClient.sendCommand(text); text = "" }
+                                function submit() {
+                                    if (!evClient.connected || text.trim().length === 0) return;
+                                    evClient.sendCommand(text);
+                                    text = "";
+                                }
+                                onAccepted: submit()
                             }
-                            HudButton { objectName: "send-command"; text: "SEND"; onClicked: { evClient.sendCommand(commandInput.text); commandInput.text = "" } }
+                            HudButton { objectName: "send-command"; text: "Send"; enabled: evClient.connected && commandInput.text.trim().length > 0; onClicked: commandInput.submit() }
                             HudButton { text: evClient.state === "LISTENING" ? "STOP" : "PTT"; onClicked: evClient.state === "LISTENING" ? evClient.stopListening() : evClient.startListening() }
                         }
                     }
@@ -559,13 +586,19 @@ ApplicationWindow {
                             Layout.fillWidth: true
                             SciField {
                                 id: memoryInput
+                                objectName: "memory-input"
                                 Layout.fillWidth: true
                                 placeholderText: "Create an explicit memory…"
                                 color: "#e5f9ff"
                                 placeholderTextColor: "#829fb2"
-                                background: HudPanel { color: "#071320"; cut: 8; technical: false; accent: "#466b80" }
+                                function submit() {
+                                    if (!evClient.connected || text.trim().length === 0) return;
+                                    evClient.remember(text);
+                                    text = "";
+                                }
+                                onAccepted: submit()
                             }
-                            HudButton { text: "REMEMBER"; onClicked: { evClient.remember(memoryInput.text); memoryInput.text = "" } }
+                            HudButton { objectName: "save-memory"; text: "Remember"; enabled: evClient.connected && memoryInput.text.trim().length > 0; onClicked: memoryInput.submit() }
                             HudButton { text: "REFRESH"; onClicked: evClient.refreshMemories() }
                         }
                         SectionPanel {
@@ -585,7 +618,7 @@ ApplicationWindow {
                                         HudButton { text: "FORGET"; accent: "#ff6478"; onClicked: evClient.forget(modelData.id) }
                                     }
                                 }
-                                Text { anchors.centerIn: parent; visible: parent.count === 0; text: "NO EXPLICIT MEMORIES"; color: appWindow.dim; font.pixelSize: 11; font.letterSpacing: 1.3 }
+                                Text { anchors.centerIn: parent; width: Math.min(420, parent.width - 32); visible: parent.count === 0; text: evClient.connected ? "No saved memories yet. Add something you want Carlos to remember above." : "Connect to Carlos to load your saved memories."; color: appWindow.dim; font.pixelSize: 13; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter }
                             }
                         }
                     }
@@ -1177,33 +1210,5 @@ ApplicationWindow {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: "#b0060b10"
-        visible: evClient.confirmation.id !== undefined && evClient.confirmation.id !== ""
-        z: 100
-        MouseArea { anchors.fill: parent }
-        HudPanel {
-            width: Math.min(600, parent.width - 60)
-            height: 300
-            anchors.centerIn: parent
-            cut: 20
-            color: "#0b1720"
-            accent: permissionColor(get(evClient.confirmation, "permission", "SENSITIVE"))
-            ColumnLayout {
-                anchors.fill: parent; anchors.margins: 24; spacing: 13
-                Text { text: "PERMISSION GATE"; color: permissionColor(get(evClient.confirmation, "permission", "SENSITIVE")); font.pixelSize: 11; font.bold: true; font.letterSpacing: 2 }
-                Text { text: get(evClient.confirmation, "tool", "UNKNOWN TOOL"); color: "#e6f9fd"; font.pixelSize: 20; font.bold: true }
-                Text { Layout.fillWidth: true; text: get(evClient.confirmation, "reason", "This action requires explicit approval."); color: "#a9c0cb"; font.pixelSize: 12; wrapMode: Text.WordWrap }
-                Text { text: "CLASSIFICATION  //  " + get(evClient.confirmation, "permission", "SENSITIVE"); color: "#748f9f"; font.pixelSize: 10; font.letterSpacing: 1 }
-                Item { Layout.fillHeight: true }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Item { Layout.fillWidth: true }
-                    HudButton { text: "DENY"; accent: "#ff6478"; onClicked: evClient.respondToConfirmation(false) }
-                    HudButton { text: "APPROVE ONCE"; accent: "#53efae"; onClicked: evClient.respondToConfirmation(true) }
-                }
-            }
-        }
-    }
+    ConfirmationPrompt { parent: Overlay.overlay; client: evClient }
 }

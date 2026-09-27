@@ -24,7 +24,7 @@ set_source_files_properties(qml/MetricCard.qml PROPERTIES QT_RESOURCE_ALIAS Metr
 set_source_files_properties(qml/BrainView.qml PROPERTIES QT_RESOURCE_ALIAS BrainView.qml)
 set_source_files_properties(qml/BrainExplorer.qml PROPERTIES QT_RESOURCE_ALIAS BrainExplorer.qml)
 set_source_files_properties(qml/DailyView.qml PROPERTIES QT_RESOURCE_ALIAS DailyView.qml)
-foreach(component HudPanel SciButton SciField HudBackdrop NeuralHologram AgentOrb)
+foreach(component HudPanel SciButton SciField HudBackdrop NeuralHologram AgentOrb ConfirmationPrompt)
     set_source_files_properties(qml/${component}.qml PROPERTIES QT_RESOURCE_ALIAS ${component}.qml)
 endforeach()
 set_source_files_properties(assets/ev-neural-brain.png PROPERTIES QT_RESOURCE_ALIAS assets/ev-neural-brain.png)
@@ -48,6 +48,7 @@ qt_add_qml_module(ev-ui
     QML_FILES
         ${EV_HUD_SOURCE}
         qml/Main.qml
+        qml/ConfirmationPrompt.qml
         qml/CoreGraph.qml
         qml/MetricCard.qml
         qml/BrainView.qml

@@ -51,6 +51,8 @@ TestCase {
         function refreshTools() {}
         function refreshSnapshot() {}
         function sendCommand(text) { commands = commands.concat([text]) }
+        function remember(text) { calls = calls.concat([{memory:text}]) }
+        function respondToConfirmation(approved) { calls = calls.concat([{approved:approved}]) }
         function steerTask(id,text) { calls = calls.concat([{task_id:id,text:text}]) }
         function callTool(name,args) { calls = calls.concat([{name:name,args:args}]) }
         function stopSpeaking() {}
@@ -58,6 +60,8 @@ TestCase {
     Component { id: appComponent; EV.Main { width:1080; height:680 } }
     function init() {
         mock.commands=[]; mock.calls=[]
+        mock.connected=true; mock.confirmation={}; mock.state="DORMANT"
+        mock.timeline=[{kind:"USER",title:"ME",body:"Fixture request"}]
         mock.voice={wake_active:true}
         mock.daily={reminders:[],aliases:{},routines:{},scenes:[{id:"test-scene",name:"Fixture scene",live:false,preview:Qt.resolvedUrl("../../ui/assets/ev-neural-brain.png"),accent:"#70e6ff",background:"#061320",secondary:"#b1baff"}],spotify:{}}
         ui=createTemporaryObject(appComponent,null)
@@ -215,6 +219,60 @@ TestCase {
         click("send-command")
         compare(mock.commands,["test fixture only"])
         compare(item("command-input").text,"")
+    }
+    function test_brand_fits_small_window_and_wide_content_is_bounded() {
+        const brand = item("brand-name")
+        verify(brand.contentWidth <= brand.width)
+        ui.width = 3840
+        waitForRendering(ui.contentItem)
+        verify(item("page-stack").width < 1760)
+    }
+    function test_empty_conversation_and_disconnected_draft() {
+        mock.timeline = []
+        click("nav-2")
+        tryCompare(item("conversation-empty"), "visible", true)
+        const input = item("command-input")
+        const send = item("send-command")
+        input.text = "   "
+        verify(!send.enabled)
+        input.text = "keep this draft"
+        mock.connected = false
+        input.accepted()
+        verify(!send.enabled)
+        compare(input.text, "keep this draft")
+        compare(mock.commands.length, 0)
+        mock.connected = true
+        send.clicked()
+        input.accepted()
+        compare(mock.commands, ["keep this draft"])
+    }
+    function test_memory_requires_content_and_connection() {
+        click("nav-3")
+        const input = item("memory-input")
+        const save = item("save-memory")
+        verify(!save.enabled)
+        input.text = "remember the fixture"
+        mock.connected = false
+        input.accepted()
+        compare(mock.calls.length, 0)
+        mock.connected = true
+        save.clicked()
+        save.clicked()
+        compare(mock.calls.length, 1)
+        compare(mock.calls[0].memory, "remember the fixture")
+    }
+    function test_confirmation_uses_keyboard_and_submits_once() {
+        mock.confirmation = {id:"test-request",tool:"fixture.tool",reason:"Long reason ".repeat(200)}
+        const prompt = item("confirmation-prompt")
+        tryCompare(prompt, "opened", true)
+        const deny = item("confirmation-deny")
+        tryCompare(deny, "activeFocus", true)
+        keyClick(Qt.Key_Escape)
+        tryCompare(mock, "calls", [{approved:false}])
+        prompt.respond(true)
+        compare(mock.calls.length, 1)
+        mock.confirmation = {}
+        tryCompare(prompt, "opened", false)
     }
     function test_scene_card_sends_only_selected_fixture_id() {
         click("nav-10")

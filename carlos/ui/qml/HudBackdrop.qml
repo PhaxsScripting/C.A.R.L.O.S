@@ -11,6 +11,11 @@ Canvas {
     onPerspectiveChanged: requestPaint()
     onPaint: {
         const c = getContext("2d"); c.reset()
+        if (!root.perspective) {
+            c.fillStyle = "#071019";
+            c.fillRect(0, 0, width, height);
+            return;
+        }
         const glow = c.createRadialGradient(width*.55,height*.4,0,width*.55,height*.4,width*.65)
         glow.addColorStop(0,"#102d42"); glow.addColorStop(1,"#050b13")
         c.fillStyle=glow; c.fillRect(0,0,width,height)
