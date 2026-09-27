@@ -1,0 +1,59 @@
+name: Linux builds
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  distro:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: ubuntu:24.04
+            profile: debian
+            bootstrap: apt-get update && apt-get install -y python3 git ca-certificates
+          - image: debian:13
+            profile: debian
+            bootstrap: apt-get update && apt-get install -y python3 git ca-certificates
+          - image: fedora:44
+            profile: fedora
+            bootstrap: dnf install -y python3 git
+          - image: archlinux:base-devel
+            profile: arch
+            bootstrap: pacman -Syu --noconfirm python git
+          - image: opensuse/tumbleweed:latest
+            profile: opensuse
+            bootstrap: zypper --non-interactive refresh && zypper --non-interactive install python3 git
+    container: ${{ matrix.image }}
+    steps:
+      - name: Bootstrap container
+        run: ${{ matrix.bootstrap }}
+      - uses: actions/checkout@v4
+      - name: Install distro dependencies
+        run: python3 carlos/scripts/linux-support.py install-deps --distro ${{ matrix.profile }} --yes
+      - name: Build without KDE libraries
+        run: |
+          cmake -S carlos/ui -B carlos/build/ui -DBUILD_TESTING=ON -DCARLOS_LAYER_SHELL=OFF
+          cmake --build carlos/build/ui -j2
+      - name: Qt tests and rendering
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QT_QUICK_BACKEND: software
+        run: |
+          ctest --test-dir carlos/build/ui --output-on-failure
+          CARLOS_PET_PREVIEW=/tmp/carlos-pet.png carlos/build/ui/ev-pet --preview
+          test -s /tmp/carlos-pet.png
+          EV_SCREENSHOT_PATH=/tmp/carlos-ui.png carlos/build/ui/ev-ui
+          test -s /tmp/carlos-ui.png
+      - name: Install and check private runtime
+        env:
+          CARLOS_INSTALL_TEST: '1'
+        run: |
+          export HOME=/tmp/carlos-install-test
+          export XDG_DATA_HOME="$HOME/.local/share"
+          export XDG_CONFIG_HOME="$HOME/.config"
+          export XDG_STATE_HOME="$HOME/.local/state"
+          sh carlos/scripts/install-user.sh --no-start
+          "$HOME/.local/bin/ev-core" --help
+          "$HOME/.local/bin/evctl" --help
+          "$XDG_DATA_HOME/ev/app/venv/bin/python" -c 'import aiohttp, psutil, PIL, jeepney, dbus, gi'

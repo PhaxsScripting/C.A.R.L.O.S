@@ -53,8 +53,8 @@ keep their own licenses.
 
 ## Linux support
 
-Tested on Gentoo with KDE Plasma Wayland. The pet needs KDE, LayerShellQt and
-Qt 6.6 or newer. Other distributions with those dependencies may work, but they
-haven't had full desktop and voice testing. GNOME, Xfce and other compositors
-aren't supported by the pet's KWin integration. This isn't a universal Linux
-installer yet; the core also needs the platform tools described in [setup](docs/SETUP.md).
+Package setup for Ubuntu/Mint, Debian, Fedora, Arch/EndeavourOS, openSUSE
+Tumbleweed and Gentoo is in [Linux setup](docs/LINUX.md). The UI builds with Qt 6.4+
+and runs outside KDE too. The pet has a portable X11/XWayland backend; KWin app
+comments and verified desktop automation remain KDE features. The guide lists
+those differences and the actual test coverage.

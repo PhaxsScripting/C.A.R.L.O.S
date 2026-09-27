@@ -32,6 +32,7 @@ class PetController : public QObject, protected QDBusContext {
     Q_INVOKABLE void pet();
     Q_INVOKABLE void menu();
     Q_INVOKABLE void beginDrag();
+    Q_INVOKABLE void dragPortable();
     Q_INVOKABLE void endDrag();
     void stop();
   public slots:
@@ -65,6 +66,7 @@ class PetController : public QObject, protected QDBusContext {
     bool m_needsScreen = true;
     bool m_tracking = false, m_loaded = false, m_corePrivate = false, m_dragging = false;
     bool m_dragMoved = false, m_hasDragPointer = false;
+    bool m_nativeOverlay = false;
     qint64 m_bubbleUntil = 0, m_snoozeUntil = 0, m_lastPet = -1000;
     QPointF m_dragStart;
     int m_right = 24, m_bottom = 64;

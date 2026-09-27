@@ -1,3 +1,4 @@
+#include "../platform/DesktopPlatform.h"
 #include "PetController.h"
 #include <QApplication>
 #include <QDBusConnection>
@@ -16,6 +17,7 @@ void finish(int) { quitting = 1; }
 } // namespace
 
 int main(int argc, char **argv) {
+    CarlosDesktop::choosePlatform();
     QApplication app(argc, argv);
     app.setOrganizationName("Carlos");
     app.setApplicationName("CarlosPet");
@@ -41,13 +43,15 @@ int main(int argc, char **argv) {
     PetController pet(preview);
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty("pet", &pet);
-    engine.loadFromModule("Carlos.Pet", "Pet");
+    engine.addImportPath(QStringLiteral("qrc:/qt/qml"));
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/Carlos/Pet/Pet.qml")));
     if (engine.rootObjects().isEmpty())
         return 2;
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
     if (!window)
         return 2;
     pet.attach(window);
+    window->setProperty("surfaceReady", true);
     QPixmap icon(48, 48);
     icon.fill(Qt::transparent);
     QPainter paint(&icon);

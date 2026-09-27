@@ -2,14 +2,15 @@
 
 Little guy. Big desk responsibilities.
 
-Carlos Pet is a separate, lightweight companion in the Carlos UI build. It works
-on KDE Plasma Wayland and can hang out even when the main assistant is stopped.
+Carlos Pet is a separate, lightweight companion in the Carlos UI build. It uses native
+KDE Plasma Wayland overlays or a portable X11/XWayland window on other desktops.
+It can hang out even when the main assistant is stopped.
 It doesn't start the core, load a model, use a microphone or call a cloud service.
 
 ## Get him on your desktop
 
 Build the UI with the [setup guide](SETUP.md), including Qt DBus development
-files and LayerShellQt. Then install just the pet:
+files and optional LayerShellQt for KDE. Then install just the pet:
 
 ```sh
 sh carlos/scripts/install-pet.sh
@@ -26,12 +27,14 @@ assistant and login startup alone.
 
 ## Things he does
 
-- Comments on the kind of app you're using: coding, browsing, games, music,
-  drawing, chat, files or the terminal.
+- On KDE, comments on the kind of app you're using: coding, browsing, games, music,
+  drawing, chat, files or the terminal. Other desktops get generic companion comments.
 - Waits for an app category to settle for eight seconds. Automatic comments
   are at least 90 seconds apart and disappear after about eight seconds.
 - Reacts when you click him. Drag his body to move him; he remembers the spot.
-- Stays above windows, including fullscreen apps, by default. Screen locking
+- On native KDE Wayland, stays above windows including fullscreen apps by default.
+  The portable backend asks the window manager to keep it above normal windows;
+  fullscreen behavior depends on that desktop. Screen locking
   and Carlos privacy modes still hide him. You can enable fullscreen hiding
   from the pet menu.
 - Uses the running Carlos core's small panel status reply to show a thinking
@@ -61,7 +64,7 @@ Comments are playful guesses about the app category, not claims that he saw you
 finish a task or understood what was on screen.
 
 Only KWin's current D-Bus owner can submit app observations. If KWin is unavailable,
-app-aware comments stop. A lock service that cannot answer leaves the pet hidden.
+comments stay generic. See [Linux setup](LINUX.md) for desktop differences. A lock service that cannot answer leaves the pet hidden.
 Privacy changes from a running core are checked every 15 seconds. No commands
 are sent to the core. Opening the main Carlos window requires an explicit click.
 

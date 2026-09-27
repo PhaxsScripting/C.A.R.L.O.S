@@ -30,7 +30,12 @@ if [ "$(uname -s)" = Linux ] && [ ! -x "$project_root/build/ui/ev-pet" ]; then
     exit 1
 fi
 
-PYTHONPATH="$project_root/core" /usr/bin/python3 -m unittest discover -s "$project_root/tests" >/dev/null
+install_python=${CARLOS_PYTHON:-python3}
+"$install_python" -c 'import sys; assert sys.version_info >= (3, 11), "Carlos needs Python 3.11 or newer"'
+if [ "$(id -u)" = 0 ] && [ "${CARLOS_INSTALL_TEST:-}" != 1 ]; then
+    printf '%s\n' 'Run this installer as your desktop user, without sudo.' >&2
+    exit 1
+fi
 
 mkdir -p "$backup_root/files" "$bin_home" "$applications_dir" "$autostart_dir" "$icon_dir" "$dbus_services_dir" "$(dirname -- "$app_root")"
 chmod 700 "$backup_root" "$(dirname -- "$app_root")"
@@ -74,7 +79,7 @@ finish_install() {
     rm -rf -- "$stage_root"
     if [ "$result" -ne 0 ] && [ "$installation_changed" = true ] && [ "$rollback_attempted" = false ]; then
         printf '%s\n' "Installation interrupted; restoring the recorded previous files." >&2
-        if ! /usr/bin/python3 "$project_root/scripts/rollback-user.py" "$backup_root" --apply; then
+        if ! "$install_python" "$project_root/scripts/rollback-user.py" "$backup_root" --apply; then
             printf '%s\n' "Restore needs attention. Preserved manifest: $manifest" >&2
         fi
     fi
@@ -92,6 +97,9 @@ install -m 755 "$project_root/build/ui/ev-ui" "$stage_root/app/bin/ev-ui"
 if [ -x "$project_root/build/ui/ev-pet" ]; then
     install -m 755 "$project_root/build/ui/ev-pet" "$stage_root/app/bin/ev-pet"
 fi
+
+"$install_python" "$project_root/scripts/prepare-runtime.py" "$stage_root/app/venv" "$app_root/venv" "$project_root/requirements.txt"
+PYTHONPATH="$stage_root/app/core" "$stage_root/app/venv/bin/python" -c 'import aiohttp, psutil, PIL, jeepney, dbus, gi; import ev.service'
 
 installation_changed=true
 backup_target app "$app_root"
@@ -154,7 +162,7 @@ if [ "$start_core" = true ]; then
         "$bin_home/evctl" stop >/dev/null 2>&1 || true
         attempts=0
         while [ "$attempts" -lt 150 ]; do
-            if ! /usr/bin/gdbus call --session \
+            if ! gdbus call --session \
                 --dest org.freedesktop.DBus \
                 --object-path /org/freedesktop/DBus \
                 --method org.freedesktop.DBus.NameHasOwner com.ev.Core 2>/dev/null | grep -q true; then
@@ -164,7 +172,7 @@ if [ "$start_core" = true ]; then
             sleep 0.2
         done
     fi
-    /usr/bin/gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ReloadConfig >/dev/null 2>&1 || true
+    gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ReloadConfig >/dev/null 2>&1 || true
     "$bin_home/ev-activate" >/dev/null || true
     ready=false
     attempts=0
@@ -179,7 +187,7 @@ if [ "$start_core" = true ]; then
     if [ "$ready" != true ]; then
         printf '%s\n' "New Carlos core did not become healthy; restoring the previous installation." >&2
         rollback_attempted=true
-        if /usr/bin/python3 "$project_root/scripts/rollback-user.py" "$backup_root" --apply; then
+        if "$install_python" "$project_root/scripts/rollback-user.py" "$backup_root" --apply; then
             printf '%s\n' "Previous installation restored and health-checked; the failed version was retained in the rollback directory." >&2
         else
             printf '%s\n' "Automatic rollback did not finish. Preserved rollback manifest: $backup_root/manifest.tsv" >&2

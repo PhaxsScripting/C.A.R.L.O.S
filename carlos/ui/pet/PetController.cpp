@@ -1,5 +1,5 @@
 #include "PetController.h"
-#include <LayerShellQt/Window>
+#include "../platform/DesktopPlatform.h"
 #include <QApplication>
 #include <QCursor>
 #include <QDBusConnection>
@@ -40,10 +40,21 @@ PetController::PetController(bool preview, QObject *parent)
     bus.registerObject("/Pet", this,
                        QDBusConnection::ExportScriptableSlots |
                            QDBusConnection::ExportAllProperties);
-    bus.connect("org.freedesktop.ScreenSaver", "/ScreenSaver", "org.freedesktop.ScreenSaver",
-                "ActiveChanged", this, SLOT(SetLocked(bool)));
-    QDBusInterface saver("org.freedesktop.ScreenSaver", "/ScreenSaver",
-                         "org.freedesktop.ScreenSaver", bus);
+    QString lockService = "org.freedesktop.ScreenSaver", lockPath = "/ScreenSaver";
+    const QStringList lockServices = {"org.gnome.ScreenSaver", "org.cinnamon.ScreenSaver",
+                                      "org.mate.ScreenSaver", "org.xfce.ScreenSaver"};
+    if (!bus.interface()->isServiceRegistered(lockService).value()) {
+        for (const auto &candidate : lockServices) {
+            if (bus.interface()->isServiceRegistered(candidate).value()) {
+                lockService = candidate;
+                lockPath = "/" + candidate;
+                lockPath.replace('.', '/');
+                break;
+            }
+        }
+    }
+    bus.connect(lockService, lockPath, lockService, "ActiveChanged", this, SLOT(SetLocked(bool)));
+    QDBusInterface saver(lockService, lockPath, lockService, bus);
     auto *watcher = new QDBusPendingCallWatcher(saver.asyncCall("GetActive"), this);
     connect(watcher, &QDBusPendingCallWatcher::finished, this,
             [this](QDBusPendingCallWatcher *done) {
@@ -120,6 +131,8 @@ bool PetController::shown() const {
 }
 void PetController::attach(QWindow *window) {
     m_window = window;
+    m_nativeOverlay = CarlosDesktop::nativeOverlay();
+    CarlosDesktop::configureOverlay(window, true);
     moveToScreen(QGuiApplication::screenAt(QCursor::pos()));
     position();
     auto mask = [this] {
@@ -141,7 +154,10 @@ void PetController::moveToScreen(QScreen *screen) {
     m_hidden = true;
     emit changed();
     m_window->setScreen(screen);
-    LayerShellQt::Window::get(m_window)->setScreen(screen);
+#ifdef CARLOS_HAVE_LAYER_SHELL
+    if (m_nativeOverlay)
+        LayerShellQt::Window::get(m_window)->setScreen(screen);
+#endif
     position();
     m_hidden = wasHidden;
     emit changed();
@@ -155,8 +171,14 @@ void PetController::position() {
     const auto size = screen->availableGeometry().size();
     m_right = qBound(0, m_right, qMax(0, size.width() - m_window->width()));
     m_bottom = qBound(0, m_bottom, qMax(0, size.height() - m_window->height()));
-    auto *layer = LayerShellQt::Window::get(m_window);
-    layer->setMargins(QMargins(0, 0, m_right, m_bottom));
+#ifdef CARLOS_HAVE_LAYER_SHELL
+    if (m_nativeOverlay)
+        LayerShellQt::Window::get(m_window)->setMargins(QMargins(0, 0, m_right, m_bottom));
+    else
+#endif
+        m_window->setPosition(screen->availableGeometry().topLeft() +
+                              QPoint(size.width() - m_window->width() - m_right,
+                                     size.height() - m_window->height() - m_bottom));
     // Margins wait for a surface commit. Don't make the next click do it.
     if (auto *quick = qobject_cast<QQuickWindow *>(m_window))
         quick->update();
@@ -172,6 +194,12 @@ void PetController::beginDrag() {
     emit dragChanged();
     if (m_preview)
         return;
+    if (!m_nativeOverlay) {
+        m_dragStart = QCursor::pos();
+        if (QGuiApplication::platformName() == "wayland" && m_window)
+            m_window->startSystemMove();
+        return;
+    }
     QFile source(":/pet/drag.js");
     if (!source.open(QIODevice::ReadOnly)) {
         m_dragging = false;
@@ -219,13 +247,31 @@ void PetController::DragPointer(int x, int y, int serial) {
     m_bottom = m_dragBottom - qRound(delta.y());
     position();
 }
+void PetController::dragPortable() {
+    if (!m_dragging || m_nativeOverlay || !m_window)
+        return;
+    const auto delta = QCursor::pos() - m_dragStart;
+    if (delta.manhattanLength() <= 5 && !m_dragMoved)
+        return;
+    if (!m_dragMoved) {
+        m_dragMoved = true;
+        emit dragChanged();
+    }
+    if (QGuiApplication::platformName() == "wayland")
+        return;
+    m_right = m_dragRight - qRound(delta.x());
+    m_bottom = m_dragBottom - qRound(delta.y());
+    position();
+}
 void PetController::endDrag() {
     if (!m_dragging)
         return;
     m_dragging = false;
     if (!m_preview) {
-        QDBusInterface scripts("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting");
-        scripts.call("unloadScript", dragPlugin);
+        if (m_nativeOverlay) {
+            QDBusInterface scripts("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting");
+            scripts.call("unloadScript", dragPlugin);
+        }
         m_settings.setValue("right", m_right);
         m_settings.setValue("bottom", m_bottom);
     }
@@ -310,7 +356,7 @@ void PetController::tick() {
         m_snoozeUntil = 0;
         emit changed();
     }
-    say(m_policy.next(m_clock.elapsed(), shown() && !quiet() && m_tracking && !m_dragging));
+    say(m_policy.next(m_clock.elapsed(), shown() && !quiet() && !m_dragging));
 }
 void PetController::pollCore() {
     if (m_locked || m_core.state() != QLocalSocket::UnconnectedState)

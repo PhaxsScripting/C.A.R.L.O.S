@@ -20,4 +20,6 @@ if [ -r "$provider_env" ]; then
         esac
     done < "$provider_env"
 fi
-exec /usr/bin/python3 -m ev "$@"
+ev_python="$ev_app_root/venv/bin/python"
+[ -x "$ev_python" ] || ev_python=$(command -v python3)
+exec "$ev_python" -m ev "$@"

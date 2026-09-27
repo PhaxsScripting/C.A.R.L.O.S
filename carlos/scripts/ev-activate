@@ -15,7 +15,7 @@ attempt=0
 # Keep retrying D-Bus activation until the previous owner has fully released
 # the name instead of reporting a false startup failure during that handoff.
 while [ "$attempt" -lt 150 ]; do
-    /usr/bin/gdbus call --session \
+    gdbus call --session \
         --dest org.freedesktop.DBus \
         --object-path /org/freedesktop/DBus \
         --method org.freedesktop.DBus.StartServiceByName \

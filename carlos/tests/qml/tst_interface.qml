@@ -62,6 +62,7 @@ TestCase {
         mock.daily={reminders:[],aliases:{},routines:{},scenes:[{id:"test-scene",name:"Fixture scene",live:false,preview:Qt.resolvedUrl("../../ui/assets/ev-neural-brain.png"),accent:"#70e6ff",background:"#061320",secondary:"#b1baff"}],spotify:{}}
         ui=createTemporaryObject(appComponent,null)
         verify(ui !== null)
+        findChild(ui, "voice-hud").surfaceReady = true
         ui.reducedMotion=true
         waitForRendering(ui.contentItem)
     }

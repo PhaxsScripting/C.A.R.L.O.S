@@ -11,9 +11,24 @@ IS_FREEBSD = sys.platform.startswith("freebsd")
 
 
 def executable(original: str) -> str:
-    """Preserve audited Linux paths; resolve FreeBSD base/ports binaries centrally."""
+    """Keep working paths; account for the usual distro and ports layouts."""
     if not IS_FREEBSD:
-        return original
+        if os.path.isfile(original) and os.access(original, os.X_OK):
+            return original
+        name = Path(original).name
+        prefixes = ("/usr/bin", "/usr/sbin", "/bin", "/sbin", "/usr/local/bin")
+        candidates = [Path(prefix) / name for prefix in prefixes]
+        if name == "qdbus6":
+            candidates += [
+                Path(p)
+                for p in (
+                    "/usr/lib/qt6/bin/qdbus",
+                    "/usr/lib64/qt6/bin/qdbus",
+                    "/usr/bin/qdbus-qt6",
+                    "/usr/bin/qdbus6",
+                )
+            ]
+        return next((str(p) for p in candidates if p.is_file() and os.access(p, os.X_OK)), original)
     name = Path(original).name
     if name == "python3":
         return sys.executable

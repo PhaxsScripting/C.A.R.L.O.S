@@ -1124,15 +1124,12 @@ ApplicationWindow {
         Timer { id: failureTimer; interval: 12000; onTriggered: voiceHud.showFailure = false }
         width: 510
         height: 142
-        visible: appWindow.hudEnabled && (interactionActive || engineeringActive)
+        visible: surfaceReady && appWindow.hudEnabled && (interactionActive || engineeringActive)
         // Do not make this status-only surface a transient of the control
         // center: some Wayland compositors activate the transient's parent
         // when it is mapped, stealing focus from a desktop action target.
         transientParent: null
-        // Wayland xdg-toplevel cannot promise no activation just from Qt's
-        // WindowDoesNotAcceptFocus hint. Give ONLY this overlay a native layer
-        // surface, with keyboard interactivity disabled at compositor level.
-        // Zero exclusion leaves the user's panels/work area completely intact.
+        // Native KDE layer when available, regular window hints elsewhere.
         color: "transparent"
         flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
         x: Screen.virtualX + Math.round((Screen.width - width) / 2)

@@ -1,3 +1,4 @@
+#include "../platform/DesktopPlatform.h"
 #include <QAction>
 #include <QApplication>
 #include <QFileInfo>
@@ -53,6 +54,7 @@ QIcon stateIcon(const QString &state, bool privacy) {
 } // namespace
 
 int main(int argc, char *argv[]) {
+    CarlosDesktop::choosePlatform();
     QApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("Carlos"));
     app.setApplicationDisplayName(QStringLiteral("Carlos Control Center"));
@@ -103,12 +105,18 @@ int main(int argc, char *argv[]) {
     QObject::connect(
         &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
         [] { QCoreApplication::exit(1); }, Qt::QueuedConnection);
-    engine.loadFromModule(QStringLiteral("EV.ControlCenter"), QStringLiteral("Main"));
+    engine.addImportPath(QStringLiteral("qrc:/qt/qml"));
+    engine.load(QUrl(QStringLiteral("qrc:/qt/qml/EV/ControlCenter/Main.qml")));
     if (engine.rootObjects().isEmpty())
         return 2;
     auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().constFirst());
     if (!window)
         return 2;
+
+    if (auto *hud = window->findChild<QQuickWindow *>(QStringLiteral("voice-hud"))) {
+        CarlosDesktop::configureOverlay(hud, false);
+        hud->setProperty("surfaceReady", true);
+    }
 
     QObject::connect(
         &instanceServer, &QLocalServer::newConnection, &app, [&instanceServer, window] {

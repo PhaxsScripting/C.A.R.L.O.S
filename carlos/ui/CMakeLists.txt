@@ -5,13 +5,18 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.6 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Widgets)
+find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Network Widgets)
 # LayerShellQt keeps the HUD from stealing keyboard focus on KDE Wayland.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    find_package(LayerShellQt 6.6 REQUIRED)
+    option(CARLOS_LAYER_SHELL "Build native KDE Wayland overlays when available" ON)
+    if(CARLOS_LAYER_SHELL)
+        find_package(LayerShellQt 6.6 QUIET)
+    endif()
 endif()
-qt_standard_project_setup(REQUIRES 6.6)
-qt_policy(SET QTP0001 NEW)
+qt_standard_project_setup()
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.5)
+    qt_policy(SET QTP0001 NEW)
+endif()
 
 set_source_files_properties(qml/Main.qml PROPERTIES QT_RESOURCE_ALIAS Main.qml)
 set_source_files_properties(qml/CoreGraph.qml PROPERTIES QT_RESOURCE_ALIAS CoreGraph.qml)
@@ -39,6 +44,7 @@ set_source_files_properties(${EV_HUD_SOURCE} PROPERTIES QT_RESOURCE_ALIAS HudWin
 qt_add_qml_module(ev-ui
     URI EV.ControlCenter
     VERSION 1.0
+    RESOURCE_PREFIX /qt/qml
     QML_FILES
         ${EV_HUD_SOURCE}
         qml/Main.qml
@@ -82,9 +88,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     qt_add_executable(ev-pet pet/main.cpp pet/PetController.cpp pet/PetController.h)
     set_source_files_properties(pet/Pet.qml PROPERTIES QT_RESOURCE_ALIAS Pet.qml)
     set_source_files_properties(pet/PetSprite.qml PROPERTIES QT_RESOURCE_ALIAS PetSprite.qml)
-    qt_add_qml_module(ev-pet URI Carlos.Pet VERSION 1.0 QML_FILES pet/Pet.qml pet/PetSprite.qml)
+    qt_add_qml_module(ev-pet URI Carlos.Pet VERSION 1.0 RESOURCE_PREFIX /qt/qml QML_FILES pet/Pet.qml pet/PetSprite.qml)
     qt_add_resources(ev-pet pet-scripts PREFIX "/pet" BASE pet FILES pet/activity.js pet/drag.js)
-    target_link_libraries(ev-pet PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Network Qt6::DBus LayerShellQt::Interface)
+    target_link_libraries(ev-pet PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Network Qt6::DBus)
     install(TARGETS ev-pet RUNTIME DESTINATION bin)
     if(BUILD_TESTING)
         add_executable(carlos-pet-tests ../tests/pet/test_pet.cpp)
@@ -93,8 +99,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_test(NAME carlos-pet-policy COMMAND carlos-pet-tests)
         qt_add_executable(carlos-pet-controller-tests ../tests/pet/test_controller.cpp pet/PetController.cpp pet/PetController.h)
         target_include_directories(carlos-pet-controller-tests PRIVATE pet)
-        target_link_libraries(carlos-pet-controller-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Test LayerShellQt::Interface)
+        target_link_libraries(carlos-pet-controller-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Test)
         add_test(NAME carlos-pet-controller COMMAND carlos-pet-controller-tests)
         set_tests_properties(carlos-pet-controller PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
+endif()
+
+if(TARGET LayerShellQt::Interface AND CARLOS_LAYER_SHELL)
+    foreach(target ev-ui ev-pet carlos-pet-controller-tests)
+        if(TARGET ${target})
+            target_compile_definitions(${target} PRIVATE CARLOS_HAVE_LAYER_SHELL=1)
+            target_link_libraries(${target} PRIVATE LayerShellQt::Interface)
+        endif()
+    endforeach()
 endif()

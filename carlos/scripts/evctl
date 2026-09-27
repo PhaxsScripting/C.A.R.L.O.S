@@ -2,4 +2,6 @@
 set -eu
 ev_app_root="${XDG_DATA_HOME:-$HOME/.local/share}/ev/app"
 export PYTHONPATH="$ev_app_root/core${PYTHONPATH:+:$PYTHONPATH}"
-exec /usr/bin/python3 -m ev.cli "$@"
+ev_python="$ev_app_root/venv/bin/python"
+[ -x "$ev_python" ] || ev_python=$(command -v python3)
+exec "$ev_python" -m ev.cli "$@"

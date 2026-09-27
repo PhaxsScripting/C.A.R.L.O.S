@@ -1,15 +1,16 @@
 # Setup
 
-Gentoo KDE Plasma is where I work on Carlos. FreeBSD scripts are included, but
-that port hasn't been validated for this release. Run these commands from the
-repo root as your normal user.
+For the main Linux distro families, start with [Linux setup](LINUX.md).
+The commands below are the manual source build. FreeBSD scripts are separate
+and that port has not been validated for this release. Run these commands from
+the repo root as your normal user.
 
 ## What you need
 
 - Python 3.11+; tested with 3.14.
-- CMake 3.21+, a C++20 compiler and Qt 6.6+ with Core, Gui, Qml, Quick,
+- CMake 3.21+, a C++20 compiler and Qt 6.4+ with Core, Gui, Qml, Quick,
   QuickControls2, Network, Widgets, DBus and Test.
-- LayerShellQt 6.6+ on Linux for the voice HUD and desktop pet. The pet also needs
+- LayerShellQt 6.4+ on Linux for the voice HUD and desktop pet. The pet also needs
   a KDE Plasma Wayland session.
 - Qt's `qmltestrunner` for the QML tests.
 - Bubblewrap (`bwrap`) for sandboxed project execution and its Linux tests.
@@ -74,8 +75,9 @@ home directory, backs up replaced files, registers launchers, **enables login
 autostart**, and starts the core. `--no-start` skips starting it right now; it
 still enables autostart.
 
-The installed launchers use system Python. Install the core dependencies through
-your distro too; activating this repo's venv won't provide them to the launchers.
+The Linux installer builds a private venv for the pinned core requirements, with
+the distro's native GI/D-Bus bindings. Launchers prefer that runtime; old installs
+without a private runtime still use system Python.
 `rollback-user.py` and `uninstall-user.sh` are in the same scripts folder.
 
 The optional Plasma widget has its own installer. After installing it, add it
