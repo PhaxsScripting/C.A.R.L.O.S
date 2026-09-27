@@ -346,7 +346,9 @@ class DailyUpgradeTests(unittest.IsolatedAsyncioTestCase):
         }
         with patch("ev.security_center._run", side_effect=[denied, denied, allowed]) as run, patch(
             "ev.security_center.Path.is_file", return_value=True
-        ), patch("ev.security_center.shutil.which", return_value="available"):
+        ), patch("ev.security_center.shutil.which", return_value="available"), patch(
+            "ev.security_center._platform_executable", side_effect=lambda path: path
+        ):
             result = SecurityCenter(Mock(), {}).firewall_runtime(authorize=True)
             self.assertEqual(
                 run.call_args.args[0], ["/usr/bin/pkexec", "/usr/bin/nft", "-j", "list", "ruleset"]

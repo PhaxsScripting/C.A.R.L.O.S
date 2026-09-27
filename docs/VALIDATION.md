@@ -38,3 +38,21 @@ The temporary pointer listener was gone after release. Dragging now uses KWin's
 actual pointer coordinates and requests a frame for each position update.
 A screenshot confirmed the pet remained visible above a focused fullscreen test
 window on the laptop display. The screen menu also moved it between both monitors.
+
+## Linux portability
+
+September 27, 2026: the Linux build matrix passed on Ubuntu 24.04, Debian 13,
+Fedora 44, Arch and openSUSE Tumbleweed. Each job built the full UI without
+LayerShellQt, ran all four CTest groups, rendered the pet and main window,
+exercised GNOME/Cinnamon/MATE/Xfce lock interfaces on an isolated D-Bus session,
+and installed the app and private Python runtime into a temporary home.
+
+On Gentoo, the native build and portable pet build passed their checks. A fresh
+temporary-home install started the core, answered a health request and shut down
+cleanly on a separate D-Bus session without KWin. The private runtime also passed
+imports and dependency checks after moving to its final path.
+
+Container rendering and simulated lock services do not replace interactive
+testing on those desktops. Voice models, audio devices, fullscreen stacking on
+non-KDE desktops, and compositor-specific automation have the limits described
+in [Linux setup](LINUX.md).
