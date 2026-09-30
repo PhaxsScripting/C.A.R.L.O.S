@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+from .worker_info import runtime_versions
 import sys
 
 
@@ -26,7 +27,7 @@ def main() -> None:
     state = np.zeros((2, 1, 128), dtype=np.float32)
     context = np.zeros((1, 64), dtype=np.float32)
     last_probability = 0.0
-    print(json.dumps({"ready": True}), flush=True)
+    print(json.dumps({"ready": True, "versions": runtime_versions("numpy", "onnxruntime")}), flush=True)
     while line := sys.stdin.buffer.readline(16384):
         request = json.loads(line)
         if request["capture"] != previous:

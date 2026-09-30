@@ -5,6 +5,7 @@ from ev.platform import executable as _platform_executable
 import asyncio
 import io
 import json
+from .worker_info import safe_versions
 import os
 import shutil
 import time
@@ -42,6 +43,7 @@ class PiperAdapter:
         self.config = config
         self._worker: asyncio.subprocess.Process | None = None
         self._worker_lock = asyncio.Lock()
+        self.worker_versions = {}
 
     @property
     def python(self) -> Path:
@@ -111,6 +113,7 @@ class PiperAdapter:
             ready = json.loads(raw_ready)
             if ready.get("type") != "ready":
                 raise RuntimeError("Piper worker did not become ready")
+            self.worker_versions = safe_versions(ready.get("versions"))
         except BaseException:
             if process.returncode is None:
                 process.terminate()

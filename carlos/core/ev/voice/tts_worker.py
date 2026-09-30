@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from .worker_info import runtime_versions
 import sys
 import time
 import uuid
@@ -39,7 +40,7 @@ def main() -> int:
             providers=["CPUExecutionProvider"],
         ),
     )
-    _write_header({"type": "ready", "sample_rate": voice.config.sample_rate})
+    _write_header({"type": "ready", "sample_rate": voice.config.sample_rate, "versions": runtime_versions("piper-tts", "onnxruntime")})
 
     for raw_line in sys.stdin.buffer:
         request_id = uuid.uuid4().hex

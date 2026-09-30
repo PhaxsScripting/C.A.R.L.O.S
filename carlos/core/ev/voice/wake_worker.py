@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from .worker_info import runtime_versions
 import os
 import sys
 import time
@@ -39,7 +40,7 @@ def main() -> int:
             provider="cpu",
         )
         stream = spotter.create_stream()
-        emit("ready", pid=os.getpid(), engine="sherpa-onnx", sample_rate=16000)
+        emit("ready", pid=os.getpid(), engine="sherpa-onnx", sample_rate=16000, versions=runtime_versions("sherpa-onnx" ))
         input_stream = sys.stdin.buffer
         processed_bytes = 0
         last_progress_bytes = 0

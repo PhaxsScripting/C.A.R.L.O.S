@@ -7,6 +7,7 @@ from ev.platform import executable as _platform_executable
 import asyncio
 import base64
 import json
+from .worker_info import safe_versions
 import os
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ class NeuralVadWorker:
         self.lock = asyncio.Lock()
         self.retry_at = 0.0
         self.error = ""
+        self.worker_versions = {}
 
     async def start(self) -> None:
         async with self.lock:
@@ -53,8 +55,10 @@ class NeuralVadWorker:
             )
             assert self.process.stdout is not None
             ready = await asyncio.wait_for(self.process.stdout.readline(), 5)
-            if json.loads(ready).get("ready") is not True:
+            ready = json.loads(ready)
+            if ready.get("ready") is not True:
                 raise RuntimeError("Local speech detector did not become ready")
+            self.worker_versions = safe_versions(ready.get("versions"))
             self.error = ""
         except (OSError, ValueError, RuntimeError, asyncio.TimeoutError) as error:
             self.error = f"Speech detector fallback: {type(error).__name__}"

@@ -4,6 +4,7 @@ from ev.platform import executable as _platform_executable
 
 import asyncio
 import json
+from .worker_info import safe_versions
 import os
 import time
 from pathlib import Path
@@ -30,6 +31,7 @@ class WakeWordWorker:
         self.started_at = 0.0
         self.backlog_since = 0.0
         self.callback_active = False
+        self.worker_versions = {}
 
     @property
     def health(self) -> dict[str, Any]:
@@ -180,6 +182,7 @@ class WakeWordWorker:
             message = json.loads(line)
             if not isinstance(message, dict) or message.get("type") != "ready":
                 raise RuntimeError("Wake worker failed during initialization")
+            self.worker_versions = safe_versions(message.get("versions"))
             self._notify("ACTIVE", "Listening locally for E.V.")
             self.reader_task = asyncio.create_task(self._read_events())
         except TimeoutError:

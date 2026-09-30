@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from .worker_info import worker_report
+
 from ev.platform import executable as _platform_executable
 
 import asyncio
@@ -226,6 +228,11 @@ class VoiceManager:
             "wake_speech_backup": self.speech_wake.snapshot(),
         }
         return {
+            "worker_versions": {
+                "wake": worker_report(self.wake, self.wake.process),
+                "vad": worker_report(self.neural_vad, self.neural_vad.process),
+                "tts": worker_report(self.tts.piper, self.tts.piper._worker),
+            },
             "echo_cancellation": self.echo.state,
             "speech_detector": {
                 "engine": (
