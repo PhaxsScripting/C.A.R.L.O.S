@@ -88,3 +88,10 @@ through Plasma's Add Widgets menu.
 For the little desktop buddy, see [Carlos Pet](PET.md). The standard Linux install includes it and
 starts it with Carlos. The pet-only installer is also available if you want the
 buddy without starting the core or changing login startup.
+
+
+If Codex comes bundled with your editor rather than from a standalone install,
+set `coding_agent.executable` in the Carlos configuration to that executable's
+absolute path. Carlos checks its version and saved login before preparing a job.
+A missing configured executable is reported unavailable. Review commits use the
+project's Git name and email; configure both before running a repair.

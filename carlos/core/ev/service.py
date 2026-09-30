@@ -122,6 +122,7 @@ class CarlosCore:
             list(self.config.get("security", {}).get("allowed_roots", [])),
             self.paths.state_dir / "coding-tasks",
             self._coding_event,
+            executable=self.config.get("coding_agent", {}).get("executable"),
         )
         self.tools = ToolRegistry(
             ToolContext(

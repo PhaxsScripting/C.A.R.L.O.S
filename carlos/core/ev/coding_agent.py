@@ -26,10 +26,12 @@ class CodingAgentGateway:
         allowed_roots: list[str],
         state_root: Path | None = None,
         event_sink: EventSink | None = None,
+        executable: str | None = None,
     ) -> None:
         self.allowed_roots = [Path(item).expanduser().resolve() for item in allowed_roots]
         self.state_root = state_root.resolve() if state_root is not None else None
         self.event_sink = event_sink
+        self.executable = str(Path(executable).expanduser()) if executable else None
         self._proposals: dict[str, dict[str, Any]] = {}
         self._running: dict[str, threading.Event] = {}
         self._running_lock = threading.RLock()
@@ -50,7 +52,9 @@ class CodingAgentGateway:
         now = time.monotonic()
         if not refresh and self._status_cache is not None and now - self._status_cache[0] < 10:
             return dict(self._status_cache[1])
-        executable = self._codex_executable()
+        executable = self.executable or self._codex_executable()
+        if executable and not (Path(executable).is_file() and os.access(executable, os.X_OK)):
+            executable = None
         authenticated = False
         version = ""
         reason = "No codex executable is discoverable in the E.V. service PATH"
@@ -558,66 +562,27 @@ class CodingAgentGateway:
         }
 
     def _validate(self, worktree: Path) -> list[dict[str, Any]]:
-        commands: list[tuple[str, list[str], int]] = [
-            (
-                "git diff --check",
-                [_platform_executable("/usr/bin/git"), "-C", str(worktree), "diff", "--check"],
-                30,
-            )
-        ]
-        if (worktree / "core/ev").is_dir():
-            commands.append(
-                (
-                    "python compileall",
-                    [_platform_executable("/usr/bin/python3"), "-m", "compileall", "-q", "core"],
-                    120,
-                )
-            )
-        if (worktree / "tests").is_dir() and (worktree / "core/ev").is_dir():
-            commands.append(
-                (
-                    "Python unit suite",
-                    [
-                        _platform_executable("/usr/bin/python3"),
-                        "-m",
-                        "unittest",
-                        "discover",
-                        "-s",
-                        "tests",
-                    ],
-                    600,
-                )
-            )
-        results: list[dict[str, Any]] = []
-        for label, command, timeout in commands:
-            result = self._run(
-                command, cwd=worktree, timeout=timeout, environment=self._clean_environment()
-            )
-            results.append(
-                {
-                    "name": label,
-                    "passed": result["returncode"] == 0,
-                    "returncode": result["returncode"],
-                    "output": (result["stdout"] + result["stderr"])[-20_000:],
-                }
-            )
+        commands = [("git diff --check", [_platform_executable("/usr/bin/git"), "-C", str(worktree), "diff", "--check"], 30, worktree)]
+        for project in (worktree, worktree / "carlos"):
+            if (project / "core/ev").is_dir():
+                commands.append(("python compileall", [_platform_executable("/usr/bin/python3"), "-m", "compileall", "-q", "core"], 120, project))
+                if (project / "tests").is_dir():
+                    commands.append(("Python unit suite", [_platform_executable("/usr/bin/python3"), "-m", "unittest", "discover", "-s", "tests"], 600, project))
+        results = []
+        for label, command, timeout, directory in commands:
+            environment = self._clean_environment()
+            environment["PYTHONPATH"] = str(directory / "core")
+            result = self._run(command, cwd=directory, timeout=timeout, environment=environment)
+            results.append({"name": label, "passed": result["returncode"] == 0,
+                            "returncode": result["returncode"],
+                            "output": (result["stdout"] + result["stderr"])[-20_000:]})
         return results
 
     def _commit_result(self, worktree: Path, proposal_id: str) -> dict[str, Any]:
         added = self._git(worktree, "add", "--all", timeout=30)
         if added["returncode"] != 0:
             return added
-        return self._git(
-            worktree,
-            "-c",
-            "user.name=E.V. Coding Agent",
-            "-c",
-            "user.email=ev-coding-agent@localhost",
-            "commit",
-            "-m",
-            f"feat: implement E.V. coding task {proposal_id[:12]}",
-            timeout=60,
-        )
+        return self._git(worktree, "commit", "-m", "fixed that bit", timeout=60)
 
     @staticmethod
     def _prompt(proposal: dict[str, Any]) -> str:
