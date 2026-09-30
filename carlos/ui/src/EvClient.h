@@ -141,6 +141,9 @@ class EvClient final : public QObject {
 
     QLocalSocket m_socket;
     QTimer m_reconnectTimer;
+    QTimer m_healthTimer;
+    QTimer m_healthTimeout;
+    QString m_healthRequest;
     QTimer m_activityTimer;
     QTimer m_voiceRefreshTimer;
     QTimer m_eventRefreshTimer;

@@ -21,6 +21,27 @@ QVariantMap objectMap(const QJsonValue &value) {
 
 EvClient::EvClient(QObject *parent) : QObject(parent) {
     m_recoveryClock.start();
+    m_healthTimer.setObjectName(QStringLiteral("coreHealthPoll"));
+    m_healthTimeout.setObjectName(QStringLiteral("coreHealthDeadline"));
+    m_healthTimer.setParent(this);
+    m_healthTimeout.setParent(this);
+    m_healthTimer.setInterval(5000);
+    m_healthTimeout.setInterval(15000);
+    m_healthTimeout.setSingleShot(true);
+    connect(&m_healthTimer, &QTimer::timeout, this, [this] {
+        if (!connected() || !m_healthRequest.isEmpty())
+            return;
+        m_healthRequest = sendRequest(QStringLiteral("health"));
+        if (!m_healthRequest.isEmpty())
+            m_healthTimeout.start();
+    });
+    connect(&m_healthTimeout, &QTimer::timeout, this, [this] {
+        if (!m_reconnectEnabled || !connected())
+            return;
+        // Don't replay commands. The old request may still be running.
+        m_socket.abort();
+        setStatus(QStringLiteral("Core stopped responding; reconnecting. Pending commands were not resent."));
+    });
     m_activationTimeout.setSingleShot(true);
     m_activationTimeout.setInterval(10000);
     connect(&m_activationTimeout, &QTimer::timeout, this, [this] {
@@ -61,6 +82,8 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
     connect(&m_socket, &QLocalSocket::connected, this, [this] {
         m_connecting = false;
         m_reconnectTimer.stop();
+        m_healthRequest.clear();
+        m_healthTimer.start();
         m_events.clear();
         emit eventsChanged();
         emit connectedChanged();
@@ -78,7 +101,11 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
     connect(&m_socket, &QLocalSocket::disconnected, this, [this] {
         m_connecting = false;
         m_state = QStringLiteral("OFFLINE");
-        m_detail = QStringLiteral("Core disconnected; reconnecting");
+        m_detail = m_reconnectEnabled ? QStringLiteral("Core disconnected; reconnecting")
+                                      : QStringLiteral("Core stopped; automatic reconnect is off");
+        m_healthTimer.stop();
+        m_healthTimeout.stop();
+        m_healthRequest.clear();
         m_pendingRequests.clear();
         m_readBuffer.clear();
         m_voiceRefreshTimer.stop();
@@ -98,7 +125,7 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         }
         emit connectedChanged();
         emit stateChanged();
-        setStatus(QStringLiteral("Core unavailable — reconnecting"));
+        setStatus(m_detail);
         if (m_reconnectEnabled)
             m_reconnectTimer.start();
     });
@@ -191,6 +218,9 @@ void EvClient::connectToCore() {
 
 void EvClient::disconnectFromCore() {
     m_reconnectEnabled = false;
+    m_healthTimer.stop();
+    m_healthTimeout.stop();
+    m_healthRequest.clear();
     m_activationTimeout.stop();
     if (m_activationProcess.state() != QProcess::NotRunning)
         m_activationProcess.kill();
@@ -243,8 +273,9 @@ void EvClient::sendCommand(const QString &text) {
     const QString clean = text.trimmed();
     if (clean.isEmpty())
         return;
+    if (sendRequest(QStringLiteral("command.submit"), {{QStringLiteral("text"), clean}}).isEmpty())
+        return;
     appendTimeline(QStringLiteral("USER"), QStringLiteral("ME"), clean);
-    sendRequest(QStringLiteral("command.submit"), {{QStringLiteral("text"), clean}});
     setStatus(QStringLiteral("Message sent to Carlos"));
 }
 
@@ -276,6 +307,9 @@ void EvClient::refreshConfirmations() { sendRequest(QStringLiteral("confirmation
 void EvClient::stopCore() {
     // If the user hit Stop, dont bring Carlos right back.
     m_reconnectEnabled = false;
+    m_healthTimer.stop();
+    m_healthTimeout.stop();
+    m_healthRequest.clear();
     m_reconnectTimer.stop();
     m_activationTimeout.stop();
     sendRequest(QStringLiteral("core.stop"));
@@ -359,6 +393,13 @@ void EvClient::processLine(const QByteArray &line) {
 void EvClient::processResponse(const QJsonObject &message) {
     const QString id = valueString(message, "id");
     const QString requestType = m_pendingRequests.take(id);
+    if (id == m_healthRequest) {
+        if (message.value(QStringLiteral("payload")).toObject().value(QStringLiteral("ok")).toBool()) {
+            m_healthTimeout.stop();
+            m_healthRequest.clear();
+        }
+        return;
+    }
     const QJsonObject payload = message.value(QStringLiteral("payload")).toObject();
     if (requestType == QStringLiteral("snapshot")) {
         applySnapshot(payload);

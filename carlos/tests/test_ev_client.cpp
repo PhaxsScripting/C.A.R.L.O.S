@@ -31,6 +31,69 @@ class EvClientTests : public QObject {
     }
 
   private slots:
+    void offlineCommandIsNotReportedAsSent()
+    {
+        client->disconnectFromCore();
+        const auto before = client->timeline().size();
+        client->sendCommand("open calculator");
+        QCOMPARE(client->timeline().size(), before);
+        QVERIFY(client->statusMessage().contains("offline"));
+    }
+
+    void stoppedCoreDoesNotClaimItIsReconnecting()
+    {
+        client->stopCore();
+        peer->disconnectFromServer();
+        QTRY_VERIFY(!client->connected());
+        QVERIFY(client->statusMessage().contains("automatic reconnect is off"));
+    }
+
+    void hungConnectionRecoversWithoutReplayingCommands()
+    {
+        auto *poll = client->findChild<QTimer *>("coreHealthPoll");
+        auto *deadline = client->findChild<QTimer *>("coreHealthDeadline");
+        QVERIFY(poll); QVERIFY(deadline);
+        poll->setInterval(20);
+        deadline->setInterval(150);
+        client->sendCommand("open calculator");
+        QTRY_VERIFY_WITH_TIMEOUT(!client->connected(), 1000);
+        QVERIFY(client->statusMessage().contains("not resent"));
+        delete peer; peer = nullptr;
+        QTRY_VERIFY_WITH_TIMEOUT(server.hasPendingConnections(), 3000);
+        peer = server.nextPendingConnection();
+        QTRY_VERIFY(client->connected());
+        poll->stop();
+        QTRY_VERIFY(peer->canReadLine());
+        while (peer->canReadLine()) {
+            const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+            QVERIFY(request.value("type").toString() != "command.submit");
+        }
+    }
+
+    void healthRepliesKeepLongCommandsConnected()
+    {
+        auto *poll = client->findChild<QTimer *>("coreHealthPoll");
+        auto *deadline = client->findChild<QTimer *>("coreHealthDeadline");
+        QVERIFY(poll); QVERIFY(deadline);
+        poll->setInterval(20);
+        deadline->setInterval(300);
+        client->sendCommand("inspect this project");
+        int heartbeats = 0;
+        QElapsedTimer elapsed; elapsed.start();
+        while (elapsed.elapsed() < 650) {
+            QTest::qWait(10);
+            while (peer->canReadLine()) {
+                const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+                if (request.value("type").toString() == "health") {
+                    ++heartbeats;
+                    send({{"type", "response"}, {"id", request.value("id")}, {"payload", QJsonObject{{"ok", true}}}});
+                }
+            }
+        }
+        QVERIFY(heartbeats >= 3);
+        QVERIFY(client->connected());
+    }
+
     void recoveryBudgetStopsCrashLoopUntilExplicitRetry() {
         BigBootyBudget budget;
         QVERIFY(budget.take(0));
