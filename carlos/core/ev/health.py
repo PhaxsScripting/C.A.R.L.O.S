@@ -7,6 +7,7 @@ from collections import defaultdict, deque
 
 class GiggleGuard:
     def __init__(self, core):
+        self.probe_timeout = 3.0
         self.core = core
         self.attempts = defaultdict(deque)
         self.components = {}
@@ -17,7 +18,7 @@ class GiggleGuard:
         while attempts and now - attempts[0] > 600:
             attempts.popleft()
         try:
-            if await healthy():
+            if await asyncio.wait_for(healthy(), self.probe_timeout):
                 self.components[name] = {
                     "state": "READY",
                     "observed_at": time.time(),
@@ -38,7 +39,7 @@ class GiggleGuard:
                 "health.repair_started", "health", {"component": name, "attempt": len(attempts)}
             )
             await asyncio.wait_for(repair(), 30)
-            verified = await healthy()
+            verified = await asyncio.wait_for(healthy(), self.probe_timeout)
             self.components[name] = {
                 "state": "READY" if verified else "FAILED",
                 "observed_at": time.time(),
@@ -73,7 +74,17 @@ class GiggleGuard:
             return
         if model._ownership_path is None or not model.config.get("prewarm", True):
             return
-        if await model._managed_healthy():
+        try:
+            healthy = await asyncio.wait_for(model._managed_healthy(), self.probe_timeout)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            self.components['Local AI'] = {'state': 'FAILED', 'observed_at': time.time(),
+                                           'reason': 'Model health probe did not complete'}
+            self.core.bus.publish('health.probe_failed', 'health',
+                                  {'component': 'Local AI', 'error_type': type(error).__name__})
+            return
+        if healthy:
             self.components["Local AI"] = {"state": "READY", "observed_at": time.time()}
             return
         temperature = (await asyncio.to_thread(read_temperature)).get("celsius")

@@ -84,3 +84,28 @@ class HealthTests(unittest.IsolatedAsyncioTestCase):
                 await health.run()
         health.check.assert_not_awaited()
         health.check_local_model.assert_awaited_once()
+
+    async def test_hung_probe_does_not_block_other_workers(self):
+        import asyncio
+        health = GiggleGuard(SimpleNamespace(bus=PhaxEventBus()))
+        health.probe_timeout = .02
+        async def hung(): await asyncio.Event().wait()
+        repair = AsyncMock()
+        await asyncio.wait_for(health.check('stuck', hung, repair), .3)
+        repair.assert_not_awaited()
+        self.assertEqual(health.components['stuck']['state'], 'FAILED')
+        await health.check('next', AsyncMock(return_value=True), repair)
+        self.assertEqual(health.components['next']['state'], 'READY')
+
+    async def test_model_probe_failure_does_not_kill_supervision(self):
+        from ev.ai.local_llama import LocalLlamaProvider
+        model = LocalLlamaProvider({'prewarm': True}, ownership_path='/unused-owner')
+        model._managed_healthy = AsyncMock(side_effect=OSError('probe failed'))
+        model.prewarm = AsyncMock()
+        health = GiggleGuard(SimpleNamespace(bus=PhaxEventBus(), brain=SimpleNamespace(provider=model)))
+        await health.check_local_model()
+        self.assertEqual(health.components['Local AI']['state'], 'FAILED')
+        model.prewarm.assert_not_awaited()
+        model._managed_healthy = AsyncMock(return_value=True)
+        await health.check_local_model()
+        self.assertEqual(health.components['Local AI']['state'], 'READY')
