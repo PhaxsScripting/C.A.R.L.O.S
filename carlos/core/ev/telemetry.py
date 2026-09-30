@@ -56,6 +56,8 @@ class TelemetrySampler:
         self._last_network_time = time.monotonic()
         self._last_thermal_warning = 0.0
         self._resource_mode = "NORMAL"
+        self._last_link = None
+        self._last_power = None
         psutil.cpu_percent(interval=None)
         self.process.cpu_percent(interval=None)
 
@@ -74,16 +76,16 @@ class TelemetrySampler:
         root = psutil.disk_usage("/")
         net = psutil.net_io_counters()
         elapsed = max(0.001, now - self._last_network_time)
+        interfaces = psutil.net_if_stats()
+        linked = sum(1 for name, stats in interfaces.items()
+                     if stats.isup and name not in {"lo", "lo0"}
+                     and "loopback" not in getattr(stats, "flags", ""))
         network = {
-            "download_bytes_per_second": round(
-                (net.bytes_recv - self._last_network.bytes_recv) / elapsed
-            ),
-            "upload_bytes_per_second": round(
-                (net.bytes_sent - self._last_network.bytes_sent) / elapsed
-            ),
-            "connected_interfaces": sum(
-                1 for stats in psutil.net_if_stats().values() if stats.isup
-            ),
+            "download_bytes_per_second": max(0, round((net.bytes_recv - self._last_network.bytes_recv) / elapsed)),
+            "upload_bytes_per_second": max(0, round((net.bytes_sent - self._last_network.bytes_sent) / elapsed)),
+            "connected_interfaces": linked,
+            "link_state": "UP" if linked else "DOWN",
+            "internet_reachability": "UNVERIFIED",
         }
         self._last_network = net
         self._last_network_time = now
@@ -126,6 +128,19 @@ class TelemetrySampler:
             "ev_core": own,
         }
 
+    def observe_transitions(self, sample):
+        link = sample["network"]["link_state"]
+        battery = sample.get("battery")
+        power = ("EXTERNAL" if battery["plugged"] else "BATTERY") if battery else "UNAVAILABLE"
+        for previous, current, event in (
+            (self._last_link, link, "system.network_link_changed"),
+            (self._last_power, power, "system.power_source_changed"),
+        ):
+            if previous is not None and previous != current:
+                self.bus.publish(event, "telemetry", {"from": previous, "to": current,
+                                 "observed_at": time.time(), "poll_interval_seconds": self.interval})
+        self._last_link, self._last_power = link, power
+
     async def run(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
             started = time.perf_counter()
@@ -137,6 +152,7 @@ class TelemetrySampler:
                     sample,
                     duration_ms=(time.perf_counter() - started) * 1000,
                 )
+                self.observe_transitions(sample)
                 resource_mode = str(sample["resource_mode"])
                 if resource_mode != self._resource_mode:
                     previous = self._resource_mode

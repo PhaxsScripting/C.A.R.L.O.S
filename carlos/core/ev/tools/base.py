@@ -89,6 +89,8 @@ class ToolSpec:
 
 
 def _type_matches(value: Any, expected: str) -> bool:
+    if isinstance(expected, list):
+        return any(_type_matches(value, kind) for kind in expected)
     if expected == "string":
         return isinstance(value, str)
     if expected == "integer":

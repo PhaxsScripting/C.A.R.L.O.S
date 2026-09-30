@@ -903,6 +903,23 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                            Repeater {
+                                objectName: "settings-choices"
+                                model: get(get(evClient.daily, "settings", {}), "choices", [])
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: modelData.section + " / " + modelData.label; color: appWindow.dim }
+                                    ComboBox {
+                                        objectName: "setting-" + modelData.key
+                                        model: modelData.choices
+                                        textRole: "label"
+                                        valueRole: "value"
+                                        currentIndex: modelData.choices.findIndex(function(option) { return option.value === modelData.value })
+                                        onActivated: evClient.callTool("carlos.settings.set", {key: modelData.key, value: currentValue})
+                                    }
+                                }
+                            }
                             RowLayout {
                                 Layout.fillWidth: true
                                 Text { Layout.fillWidth: true; text: "HoloHand gesture control"; color: appWindow.dim }
@@ -1126,6 +1143,12 @@ ApplicationWindow {
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 20; anchors.rightMargin: 16; spacing: 20
                     Text { text: get(evClient.voice,"privacy_profile","NORMAL") + " / " + (get(evClient.voice,"privacy_mode",false) ? "MIC OFF" : get(evClient.voice,"wake_active",false) ? "WAKE ONLINE" : "WAKE INACTIVE"); color: "#8cb5c7"; font.family: "Hack"; font.pixelSize: 9 }
+                    Text {
+                        objectName: "dev-performance"
+                        visible: (get(get(evClient.daily, "settings", {}), "choices", []).filter(function(field) { return field.key === "operating_mode" && field.value === "DEV" }).length > 0)
+                        text: "CORE " + Number(get(get(evClient.telemetry, "ev_core", {}), "cpu_percent", 0)).toFixed(1) + "% / " + Math.round(get(get(evClient.telemetry, "ev_core", {}), "rss_bytes", 0) / 1048576) + " MiB"
+                        color: appWindow.dim; font.pixelSize: 9
+                    }
                     Text { text: "TOOLS / " + evClient.tools.length; color: "#6d93aa"; font.family: "Hack"; font.pixelSize: 9 }
                     Item { Layout.fillWidth: true }
                     SciButton { objectName: "motion-toggle"; text: appWindow.reducedMotion ? "MOTION OFF" : "MOTION AUTO"; implicitHeight: 25; topPadding: 5; bottomPadding: 5; onClicked: evClient.callTool("carlos.settings.set", {key: "hud_reduce_motion", value: !appWindow.reducedMotion}) }

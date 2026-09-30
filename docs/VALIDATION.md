@@ -75,3 +75,11 @@ deadline. Losing the connection does not cancel or repeat an already submitted
 task. Check task history before retrying an action whose result is unknown.
 
 This does not measure room acoustics or establish general desktop-task accuracy.
+
+
+September 30 settings and telemetry pass:
+
+- Daily/Development settings persist and apply at runtime. Development enables debug file logging and a core CPU/RAM readout; Daily hides the readout and returns file logging to INFO. Neither mode changes permissions, microphone state, or loads plugins automatically.
+- Greeting delay and cooldown can be changed from Settings. The first return no longer depends on machine uptime.
+- Network telemetry excludes loopback and reports link state separately from unverified internet reachability. Counter resets cannot produce negative traffic. Network link and power-source transitions emit bounded events through the existing sampler.
+- 1,000 Python tests passed. Qt settings coverage verifies typed selection and performance-readout visibility. Acoustic and remote-device acceptance remain separate.

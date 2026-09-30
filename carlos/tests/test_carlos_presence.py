@@ -68,3 +68,20 @@ class PresenceTests(unittest.TestCase):
         p.observe_lock(True, 2000)
         p.observe_lock(False, 2400)
         self.assertFalse(any(e["type"] == "presence.returned" for e in bus.history()))
+
+    def test_first_return_does_not_wait_for_system_uptime(self):
+        bus=PhaxEventBus(); p=PresenceMonitor(bus)
+        p.observe_lock(True,10); p.observe_lock(False,311)
+        self.assertEqual(sum(e['type']=='presence.returned' for e in bus.history()),1)
+
+    def test_greeting_timing_changes_apply_without_restart(self):
+        bus=PhaxEventBus(); config={'away_seconds':60,'cooldown_seconds':300}
+        p=PresenceMonitor(bus,config)
+        p.observe_lock(True,10); p.observe_lock(False,71)
+        p.observe_lock(True,100); p.observe_lock(False,161)
+        self.assertEqual(sum(e['type']=='presence.returned' for e in bus.history()),1)
+        config['away_seconds']=300
+        p.observe_lock(True,400); p.observe_lock(False,461)
+        self.assertEqual(sum(e['type']=='presence.returned' for e in bus.history()),1)
+        p.observe_lock(True,500); p.observe_lock(False,801)
+        self.assertEqual(sum(e['type']=='presence.returned' for e in bus.history()),2)

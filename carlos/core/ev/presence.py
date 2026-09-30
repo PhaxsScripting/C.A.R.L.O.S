@@ -13,7 +13,7 @@ class PresenceMonitor:
         self.sleep_offset = None
         self.last_addressed = 0.0
         self.locked_since = None
-        self.last_greeting = 0.0
+        self.last_greeting = None
         self.idle_supported = None
         self.state.update(presence="UNKNOWN", attention="DORMANT", confidence=0.0)
 
@@ -59,8 +59,8 @@ class PresenceMonitor:
             if (
                 self.config.get("greetings", True)
                 and self.previous_lock is True
-                and away >= 300
-                and now - self.last_greeting >= 1800
+                and away >= self.config.get("away_seconds", 300)
+                and (self.last_greeting is None or now - self.last_greeting >= self.config.get("cooldown_seconds", 1800))
             ):
                 self.bus.publish(
                     "presence.returned",

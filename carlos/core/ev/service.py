@@ -69,7 +69,7 @@ class CarlosCore:
             if self.config.get("carlos", {}).get("strict_permissions", False)
             else "codex_only"
         )
-        self.logger = configure_logging(self.paths.log_file, verbose)
+        self.logger = configure_logging(self.paths.log_file, verbose or self.config.get("carlos", {}).get("mode") == "DEV")
         self.bus = PhaxEventBus(
             history_limit=int(self.config["telemetry"]["history_limit"]),
             queue_size=int(self.config["ipc"]["client_queue_size"]),

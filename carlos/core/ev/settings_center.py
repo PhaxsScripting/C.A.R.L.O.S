@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import json
+import logging
 import os
 import tempfile
 
@@ -41,6 +42,30 @@ FIELDS = {
 }
 
 
+CHOICES = {
+    "operating_mode": ("carlos", "mode", "DAILY", "General", "Operating mode",
+                       [("DAILY", "Daily"), ("DEV", "Development")]),
+    "greeting_away_seconds": ("presence", "away_seconds", 300, "Presence", "Greet after being away",
+                              [(60, "1 minute"), (300, "5 minutes"), (900, "15 minutes")]),
+    "greeting_cooldown_seconds": ("presence", "cooldown_seconds", 1800, "Presence", "Time between greetings",
+                                  [(300, "5 minutes"), (1800, "30 minutes"), (3600, "1 hour")]),
+}
+
+
+def apply_mode(core):
+    level = logging.DEBUG if core.config.get("carlos", {}).get("mode") == "DEV" else logging.INFO
+    core.logger.setLevel(level)
+
+
+def choice_fields(config):
+    fields = []
+    for key, (path, name, default, group, label, choices) in CHOICES.items():
+        fields.append(dict(key=key, section=group, label=label,
+                           value=section(config, path).get(name, default),
+                           choices=[dict(value=value, label=title) for value, title in choices]))
+    return fields
+
+
 def section(config, path):
     for key in path.split("."):
         config = config.setdefault(key, {})
@@ -63,6 +88,7 @@ class SettingsCenter:
                 )
                 for key, (path, name, default, group, label) in FIELDS.items()
             ],
+            "choices": choice_fields(self.core.config),
             "privacy": self.core.privacy.mode,
             "routing": "Local first. Cloud requires an explicit use cloud: request in NORMAL mode.",
             "wake_active": self.core.voice.snapshot().get("wake_active", False),
@@ -71,7 +97,14 @@ class SettingsCenter:
 
     async def update(self, args, context):
         key, value = args["key"], args["value"]
-        if key not in FIELDS or not isinstance(value, bool):
+        if key in FIELDS:
+            valid = type(value) is bool
+        elif key in CHOICES:
+            valid = any(type(value) is type(option) and value == option
+                        for option, _ in CHOICES[key][5])
+        else:
+            valid = False
+        if not valid:
             raise ValidationError("Unknown setting or invalid value")
         if self.core.privacy.ephemeral:
             raise ValidationError(
@@ -87,7 +120,7 @@ class SettingsCenter:
                 "Finish the current voice interaction before changing echo cancellation"
             )
         async with self.lock:
-            path, name, default, _, _ = FIELDS[key]
+            path, name, default, _, _ = (FIELDS[key] if key in FIELDS else CHOICES[key][:5])
             data = json.loads(self.core.paths.config_file.read_text())
             section(data, path)[name] = value
             previous = copy.deepcopy(self.core.config)
@@ -98,6 +131,8 @@ class SettingsCenter:
             self._save(data)
             try:
                 section(self.core.config, path)[name] = value
+                if key == "operating_mode":
+                    apply_mode(self.core)
                 if key == "wake_enabled":
                     self.core.voice.wake_desired = value
                     await self.core.voice.set_wake_paused(not value)
@@ -114,6 +149,8 @@ class SettingsCenter:
                     target[name] = before[name]
                 else:
                     target.pop(name, None)
+                if key == "operating_mode":
+                    apply_mode(self.core)
                 self.core.voice.wake_desired = previous_desired
                 if key in {"wake_enabled", "echo_cancel"}:
                     if key == "echo_cancel":
@@ -173,7 +210,7 @@ class SettingsCenter:
                 "Change one named Carlos setting. Enabling wake starts local microphone listening when available. Hard mute is never overridden.",
                 Permission.LOW_RISK,
                 object_schema(
-                    {"key": {"type": "string", "enum": list(FIELDS)}, "value": {"type": "boolean"}},
+                    {"key": {"type": "string", "enum": list(FIELDS) + list(CHOICES)}, "value": {"type": ["boolean", "string", "integer"]}},
                     ["key", "value"],
                 ),
                 self.update,

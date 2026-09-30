@@ -202,6 +202,22 @@ TestCase {
         compare(mock.calls[0].args.title,"Fixture task, not a command")
         compare(mock.commands.length,0)
     }
+    function test_mode_setting_sends_typed_choice_and_controls_performance_readout() {
+        mock.daily = {settings: {choices: [{key:"operating_mode", section:"General", label:"Mode", value:"DAILY", choices:[{value:"DAILY",label:"Daily"},{value:"DEV",label:"Development"}]}]}}
+        click("nav-9")
+        const choices = item("settings-choices")
+        tryVerify(function() { return choices.itemAt(0) !== null })
+        const mode = findChild(choices.itemAt(0), "setting-operating_mode")
+        verify(mode !== null)
+        compare(mode.currentValue, "DAILY")
+        compare(item("dev-performance").visible, false)
+        mode.currentIndex = 1
+        mode.activated(1)
+        compare(mock.calls[mock.calls.length-1].name, "carlos.settings.set")
+        compare(mock.calls[mock.calls.length-1].args.value, "DEV")
+        mock.daily = {settings: {choices: [{key:"operating_mode", section:"General", label:"Mode", value:"DEV", choices:[{value:"DAILY",label:"Daily"},{value:"DEV",label:"Development"}]}]}}
+        tryCompare(item("dev-performance"), "visible", true)
+    }
     function test_native_settings_button_requests_only_selected_page() {
         click("nav-10")
         const pages=item("native-settings-pages")

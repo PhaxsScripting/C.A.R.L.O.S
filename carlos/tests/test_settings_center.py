@@ -87,3 +87,33 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
             json.loads(self.core.paths.config_file.read_text())["voice"]["wake"], {"enabled": False}
         )
         self.assertEqual(self.core.voice.set_wake_paused.await_count, 2)
+
+    async def test_choices_validate_before_saving_and_keep_strict_types(self):
+        from ev.tools.base import validate_schema
+        validate_schema({"value": 300}, {"type": "object", "properties": {"value": {"type": ["boolean", "string", "integer"]}}})
+        for key, value in [("operating_mode", "ROOT"), ("greeting_away_seconds", True),
+                           ("greeting_away_seconds", 300.0), ("greeting_away_seconds", -1)]:
+            with self.assertRaises(ValidationError):
+                await self.settings.update({"key": key, "value": value}, None)
+        self.assertNotIn("presence", json.loads(self.core.paths.config_file.read_text()))
+        result = await self.settings.update({"key": "greeting_away_seconds", "value": 60}, None)
+        self.assertTrue(result["verified"])
+        self.assertEqual(self.core.config["presence"]["away_seconds"], 60)
+
+    async def test_mode_changes_log_level_and_survives_reload(self):
+        import logging
+        self.core.logger = logging.Logger("settings-test")
+        for mode, level in [("DEV", logging.DEBUG), ("DAILY", logging.INFO)]:
+            result = await self.settings.update({"key": "operating_mode", "value": mode}, None)
+            self.assertTrue(result["verified"])
+            self.assertEqual(self.core.logger.level, level)
+            self.core.config = json.loads(self.core.paths.config_file.read_text())
+            fields = {f["key"]: f for f in self.settings.snapshot()["choices"]}
+            self.assertEqual(fields["operating_mode"]["value"], mode)
+            self.assertFalse(self.core.voice.wake_desired)
+
+    async def test_private_session_cannot_persist_mode(self):
+        self.core.privacy.ephemeral = True
+        with self.assertRaises(ValidationError):
+            await self.settings.update({"key": "operating_mode", "value": "DEV"}, None)
+        self.assertNotIn("carlos", json.loads(self.core.paths.config_file.read_text()))
