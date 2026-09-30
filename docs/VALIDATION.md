@@ -61,3 +61,17 @@ The pet's KWin startup check now simulates an unusable per-script D-Bus ID and a
 script file read after the start call returns. It confirms that activity arrives,
 unlocking does not load duplicate listeners, and exit unloads the script. On the
 live KDE session, a normal pet restart reported activity tracking successfully.
+
+## September 30: recovery
+
+990 Python tests passed. All four Qt/QML/pet test groups passed on Gentoo. New
+connection tests cover a hung socket, reconnection without command replay,
+healthy connections during long requests, explicit Stop and offline submissions.
+Worker tests cover a stalled probe and recovery after a model health exception.
+Readiness tests reject stale, missing and invalid observation timestamps.
+
+The control center checks health every five seconds, with a 15-second response
+deadline. Losing the connection does not cancel or repeat an already submitted
+task. Check task history before retrying an action whose result is unknown.
+
+This does not measure room acoustics or establish general desktop-task accuracy.
