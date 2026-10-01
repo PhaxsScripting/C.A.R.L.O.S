@@ -222,3 +222,13 @@ Five new tests cover overflow accounting with Queue.join balance, failure
 results, separate verification, exclusions and malformed metadata. 1,081 Python
 tests passed, plus the five development tests. Existing diagnostics render two
 new observation rows; those rows do not decide overall component health.
+
+`carlos/scripts/check-model-owner-recovery.py --run` exercised abrupt owner
+SIGKILL against disposable real llama.cpp and whisper.cpp servers. A second
+adapter refused takeover while the original owner was alive. After that owner
+exited, the adapter stopped and reaped the exact recorded orphan and loaded a
+fresh ready server. End-to-end fixture times were 11.667 seconds for llama and
+0.835 seconds for Whisper, including initial loading and the live-owner check.
+Private ports/storage and pidfds constrained cleanup to fixture children; the
+running Carlos core and its models were unchanged. This tests model ownership
+recovery, not the entire Core/HUD failure or physical chaos matrix.
