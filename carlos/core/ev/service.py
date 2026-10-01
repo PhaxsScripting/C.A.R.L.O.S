@@ -735,6 +735,7 @@ class CarlosCore:
         return capability_evidence(tools, self.bus.history(1000), desktop_input)
 
     def self_diagnostics(self) -> dict[str, Any]:
+        event_metrics = self.bus.metrics()
         voice = self.voice.snapshot()
         wake_status = (
             "PAUSED"
@@ -755,6 +756,13 @@ class CarlosCore:
         desktop_input = self.desktop.input.status()
         coding = self.coding_agent.status()
         checks = [
+            {'component': 'event_delivery', 'status': 'OBSERVED',
+             'evidence': f"{event_metrics['queued_deliveries']}/{event_metrics['queue_capacity']} pending; "
+                         f"{event_metrics['dropped_deliveries']} subscriber deliveries dropped since startup"},
+            {'component': 'tool_outcomes', 'status': 'OBSERVED',
+             'evidence': f"{event_metrics['tools']['succeeded']} succeeded, "
+                         f"{event_metrics['tools']['failed']} failed, "
+                         f"{event_metrics['tools']['verified']} verified; nonprivate leaf executions since startup"},
             {"component": "core", "status": "PASS", "evidence": f"pid {os.getpid()}"},
             {"component": "local_ipc", "status": "PASS", "evidence": str(self.paths.socket)},
             {
@@ -821,7 +829,8 @@ class CarlosCore:
             },
         ]
         return {
-            "status": "PASS" if all(item["status"] == "PASS" for item in checks) else "DEGRADED",
+            "status": "PASS" if all(item["status"] in {'PASS', 'OBSERVED'} for item in checks) else "DEGRADED",
+            'event_metrics': event_metrics,
             "checks": checks,
             "capability_gaps": [
                 *(

@@ -55,6 +55,8 @@ class PhaxEventBus:
         self._history: deque[Event] = deque(maxlen=history_limit)
         self._subscribers: dict[str, asyncio.Queue[Event]] = {}
         self._queue_size = queue_size
+        self._dropped_deliveries = 0
+        self._tool_outcomes = {'succeeded': 0, 'failed': 0, 'verified': 0, 'unclassified': 0}
         self.private = False
 
     def publish(
@@ -66,6 +68,17 @@ class PhaxEventBus:
         duration_ms: float | None = None,
     ) -> Event:
         self._sequence += 1
+        if (not self.private and source == 'tools'
+                and (payload or {}).get('tool') != 'agent.execute_plan'):
+            if event_type == 'tool.failed':
+                self._tool_outcomes['failed'] += 1
+            elif event_type == 'tool.completed':
+                ok = (payload or {}).get('ok')
+                self._tool_outcomes['succeeded' if ok is True else
+                                    'failed' if ok is False else 'unclassified'] += 1
+                execution = (payload or {}).get('execution')
+                if ok is True and isinstance(execution, dict) and execution.get('verified') is True:
+                    self._tool_outcomes['verified'] += 1
         event = Event(
             sequence=self._sequence,
             type=event_type,
@@ -82,6 +95,7 @@ class PhaxEventBus:
             self._history.append(event)
         for queue in tuple(self._subscribers.values()):
             if queue.full():
+                self._dropped_deliveries += 1
                 # Retain critical events under telemetry pressure without
                 # reordering a task's start/result sequence. This runs without
                 # yielding, so subscribers cannot race the bounded refill.
@@ -109,6 +123,19 @@ class PhaxEventBus:
 
     def unsubscribe(self, subscriber_id: str) -> None:
         self._subscribers.pop(subscriber_id, None)
+
+    def metrics(self):
+        queues = list(self._subscribers.values())
+        measured = self._tool_outcomes['succeeded'] + self._tool_outcomes['failed']
+        return {'scope': 'since_core_start', 'published_events': self._sequence,
+                'subscribers': len(queues), 'queued_deliveries': sum(q.qsize() for q in queues),
+                'queue_capacity': sum(q.maxsize for q in queues),
+                'max_queue_depth': max((q.qsize() for q in queues), default=0),
+                'dropped_deliveries': self._dropped_deliveries,
+                'tools': {**self._tool_outcomes,
+                          'success_percent': round(self._tool_outcomes['succeeded'] / measured * 100, 1)
+                          if measured else None,
+                          'scope': 'nonprivate leaf tool execution; success is not verification'}}
 
     def history(self, limit: int = 100) -> list[dict[str, Any]]:
         bounded = max(1, min(limit, len(self._history)))

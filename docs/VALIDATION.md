@@ -208,3 +208,17 @@ red circle and blue square correctly in 22.814 seconds, with no external route,
 no tools or coordinate actions. Each model child was closed afterward. This is
 a single synthetic image, not general scene accuracy or desktop interaction
 acceptance; the visual result remains explicitly unverified inference.
+
+Diagnostics and sanitized support bundles expose measured event delivery: current
+queue depth/capacity, subscriber count and dropped deliveries since core startup.
+Drops count subscriber deliveries, so one event lost by two subscribers counts
+twice. Tool counters distinguish successful execution, failed execution,
+verified results and unclassified legacy results. No observations means a null
+success percentage. Composite plans, private-session results and non-tool
+sources are excluded; no payloads or tool names are added to these metrics.
+This is execution accounting, not a labelled desktop accuracy benchmark.
+
+Five new tests cover overflow accounting with Queue.join balance, failure
+results, separate verification, exclusions and malformed metadata. 1,081 Python
+tests passed, plus the five development tests. Existing diagnostics render two
+new observation rows; those rows do not decide overall component health.

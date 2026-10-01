@@ -135,6 +135,7 @@ class WakeWorkerHealthTests(unittest.IsolatedAsyncioTestCase):
 
     def test_diagnostics_do_not_equate_installed_model_with_live_listener(self):
         service = CarlosCore.__new__(CarlosCore)
+        service.bus = PhaxEventBus()
         voice = {
             "wake_available": True,
             "wake_enabled": True,

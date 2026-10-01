@@ -244,6 +244,7 @@ class HoloSystem:
             "generated_at": time.time(),
             "core": self.status(),
             "bundle_version": 1,
+            'event_metrics': self.core.bus.metrics(),
             "component_version_scope": "Core environment plus last successful speech-worker startups; running flags are current",
             "component_versions": dependencies,
             "speech_worker_versions": s["voice"].get("worker_versions", {}),
