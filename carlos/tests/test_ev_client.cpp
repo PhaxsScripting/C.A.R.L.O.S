@@ -153,6 +153,49 @@ class EvClientTests : public QObject {
         QTRY_VERIFY(client->connected());
     }
 
+    void disconnectInvalidatesLiveEvidenceAndApprovals() {
+        client->refreshSnapshot();
+        client->refreshDaily();
+        QTRY_VERIFY(peer->canReadLine());
+        while (peer->canReadLine()) {
+            const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+            requestIds.insert(request.value("type").toString(), request.value("id").toString());
+        }
+        send({{"type", "response"}, {"id", requestIds.value("snapshot")},
+              {"payload", QJsonObject{
+                  {"core", QJsonObject{{"state", "THINKING"}}},
+                  {"voice", QJsonObject{{"wake_active", true}}},
+                  {"telemetry", QJsonObject{{"cpu_percent", 12}}},
+                  {"provider", QJsonObject{{"status", "READY"}}},
+                  {"activity", QJsonObject{{"phase", "EXECUTING"}}},
+                  {"planner", QJsonObject{{"active", QJsonObject{{"id", "old-plan"}}}}}
+              }}});
+        send({{"type", "response"}, {"id", requestIds.value("daily.snapshot")},
+              {"payload", QJsonObject{{"readiness", QJsonObject{{"state", "FULLY_READY"}}}}}});
+        client->refreshConfirmations();
+        QTRY_VERIFY(peer->canReadLine());
+        while (peer->canReadLine()) {
+            const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+            if (request.value("type").toString() == "confirmation.list")
+                send({{"type", "response"}, {"id", request.value("id")},
+                      {"payload", QJsonObject{{"confirmations", QJsonArray{QJsonObject{
+                          {"id", "old-approval"}, {"approval_token", "old-token"}}}}}}});
+        }
+        QTRY_VERIFY(!client->confirmation().isEmpty());
+        QTRY_VERIFY(!client->voice().isEmpty());
+        QTRY_VERIFY(!client->daily().isEmpty());
+        peer->disconnectFromServer();
+        QTRY_VERIFY(!client->connected());
+        QCOMPARE(client->state(), QString("OFFLINE"));
+        QVERIFY(client->voice().isEmpty());
+        QVERIFY(client->telemetry().isEmpty());
+        QVERIFY(client->provider().isEmpty());
+        QVERIFY(client->confirmation().isEmpty());
+        QVERIFY(client->activePlan().isEmpty());
+        QVERIFY(client->activity().isEmpty());
+        QVERIFY(client->daily().isEmpty());
+    }
+
     void explicitStopDoesNotAutoReconnect() {
         client->stopCore();
         peer->disconnectFromServer();

@@ -248,3 +248,17 @@ actions and are not resumable tasks. Prefixes preview, please preview and
 dry-run use the dry executor; quoted text to type is not treated as policy.
 Three new boundary tests and all 1,084 Python tests passed. General previews
 of model-generated actions remain unavailable rather than running those actions.
+
+Core failure acceptance now has a reusable check-core-recovery.py --run fixture.
+It launches the real core on a separate session bus and temporary XDG storage,
+with audio/display endpoints isolated and speech disabled. A duplicate core was
+refused. SIGKILL closed the old IPC stream; explicitly restarting the fixture
+produced responsive IPC in 469.5 ms. A completed real file-tool receipt survived,
+and the file kept its inode, mtime and SHA-256 after recovery and another local
+request. A seeded unfinished receipt became INTERRUPTED_UNCERTAIN. This does
+not prove automatic HUD activation, interruption mid-mutation, or boot timing.
+
+The native client now invalidates current wake/provider/telemetry/readiness,
+approvals, activity and active-plan readings when IPC disconnects. Conversation
+history remains visible. The real socket test verifies invalidation; existing
+reconnect/no-replay tests passed with all four native groups in 11.63 seconds.

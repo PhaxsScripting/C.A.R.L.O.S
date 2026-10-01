@@ -111,6 +111,26 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         m_voiceRefreshTimer.stop();
         m_eventRefreshTimer.stop();
         m_activityTimer.stop();
+        m_telemetry.clear();
+        m_provider.clear();
+        m_voice.clear();
+        m_cognition.clear();
+        m_confirmation.clear();
+        m_activePlan.clear();
+        m_activity.clear();
+        m_insights.clear();
+        m_security.clear();
+        m_diagnostics.clear();
+        m_daily.clear();
+        emit telemetryChanged();
+        emit snapshotChanged();
+        emit voiceChanged();
+        emit cognitionChanged();
+        emit confirmationChanged();
+        emit activityChanged();
+        emit insightsChanged();
+        emit phase3Changed();
+        emit dailyChanged();
         if (!m_activeNodes.isEmpty()) {
             m_activeNodes.clear();
             emit activeNodesChanged();
