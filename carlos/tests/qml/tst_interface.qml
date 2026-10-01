@@ -31,6 +31,7 @@ TestCase {
         property var plans: []
         property var activePlan: ({})
         property var activity: ({phase:"IDLE"})
+        property var activityHistory: ({})
         property var insights: []
         property var security: ({})
         property var latency: ({})
@@ -44,6 +45,7 @@ TestCase {
         property var commands: []
         property var calls: []
         function refreshDaily() {}
+        function refreshActivityHistory() { calls = calls.concat([{name:"memory.timeline",args:{limit:100}}]) }
         function retryCore() {}
         function rememberFailureCard(id) {}
         function refreshMemories() {}
@@ -63,6 +65,7 @@ TestCase {
         mock.connected=true; mock.confirmation={}; mock.state="DORMANT"
         mock.timeline=[{kind:"USER",title:"ME",body:"Fixture request"}]
         mock.voice={wake_active:true}
+        mock.activityHistory={}
         mock.daily={reminders:[],aliases:{},routines:{},scenes:[{id:"test-scene",name:"Fixture scene",live:false,preview:Qt.resolvedUrl("../../ui/assets/ev-neural-brain.png"),accent:"#70e6ff",background:"#061320",secondary:"#b1baff"}],spotify:{}}
         ui=createTemporaryObject(appComponent,null)
         verify(ui !== null)
@@ -71,6 +74,19 @@ TestCase {
         waitForRendering(ui.contentItem)
     }
     function cleanup() { ui.close() }
+    function test_saved_activity_empty_state_and_clear_request() {
+        click("nav-8")
+        click("activity-saved")
+        compare(mock.calls.length, 1)
+        compare(mock.calls[0].name, "memory.timeline")
+        mock.activityHistory={recording_enabled:false,events:[]}
+        tryVerify(function() { return item("activity-empty").text.indexOf("No saved activity") >= 0 })
+        verify(!item("activity-clear").enabled)
+        mock.activityHistory={recording_enabled:true,events:[{type:"core.started",source:"core",timestamp:"2026-10-01T12:00:00Z",payload:{}}]}
+        tryCompare(item("activity-event-list"), "count", 1)
+        click("activity-clear")
+        compare(mock.calls[1].name, "memory.timeline.clear")
+    }
     function test_insight_never_executes_until_explicit_click() {
         mock.insights = [{id:"thermal", title:"CPU hot", detail:"Inspect only", action:{tool:"system.get_temperature", arguments:{}}}]
         click("nav-10")

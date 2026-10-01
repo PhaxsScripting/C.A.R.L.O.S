@@ -54,3 +54,14 @@ Don't put keys, recordings, screenshots, memory databases or private logs in thi
 repo. The default provider is offline. Cloud providers need your own account and
 configuration; read the relevant provider settings before enabling one.
 Local speech and chat still need separately installed models.
+
+Activity has two views: This session for live events and Saved history for
+recorded activity from earlier sessions. Settings → Privacy → Save local
+activity history enables recording; it starts off. Once enabled, it keeps the
+latest 2,000 metadata events, including core/resume, actions, Codex job states,
+power requests and component recovery. It skips private events, transcripts,
+screenshots, audio, form fields and tool output. Turning recording off keeps
+existing history. Clear history asks for approval and leaves explicit memories,
+conversations and permission receipts alone. Leave Private Session before
+clearing saved history. CLI access: `evctl tool memory.timeline --arguments
+'{"limit":50}'`. This is workstation activity; mobile login history is separate.

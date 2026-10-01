@@ -270,3 +270,26 @@ that credential canaries never reach either output while ordinary error text
 remains useful. All 1,086 Python tests and both development tests passed.
 This protects recognizable credential patterns; it is not a detector for an
 unlabelled arbitrary secret. Existing historical log files were not rewritten.
+
+Activity history is now optional, off by default, and available in Activity →
+Saved history. It records selected scalar metadata, keeps the newest 2,000
+events and never records private events. Clearing requires approval, preserves
+other memory tiers and discards older events still waiting in the queue. New
+events after the clear can still be recorded. Old history is retained while
+recording is off; legacy payloads are filtered when displayed. Nine tests cover
+the actual persistence worker, setting changes, filtering, retention, private
+mode, approval requirements and the clear boundary.
+
+The history pass reproduced a worker-thread queue race: synchronous tools could
+publish while the event consumer was waiting, causing a lost wakeup under asyncio
+debug checks and a stuck cancellation. Publications now deliver on the owning
+loop through a bounded ingress queue, preserving priority, sequence and original
+recipients. History/counters and privacy transitions share the publication lock.
+Eight thread tests cover waiting/cancelled consumers, order, overflow, bounded
+ingress, new subscribers and privacy. The stalled insight-worker test passes.
+
+All 1,103 Python tests passed in 53.374 seconds; nine development timeline tests
+and eight development thread tests passed. All four native groups passed in
+11.85 seconds, including saved-history empty states and the actual socket route.
+The native UI clears its saved-history cache on disconnect and privacy changes.
+This is workstation metadata, not full room observation or mobile login history.

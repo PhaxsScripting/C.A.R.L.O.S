@@ -28,6 +28,7 @@ class EvClient final : public QObject {
     Q_PROPERTY(QVariantList plans READ plans NOTIFY phase3Changed)
     Q_PROPERTY(QVariantMap activePlan READ activePlan NOTIFY phase3Changed)
     Q_PROPERTY(QVariantMap activity READ activity NOTIFY activityChanged)
+    Q_PROPERTY(QVariantMap activityHistory READ activityHistory NOTIFY activityHistoryChanged)
     Q_PROPERTY(QVariantList insights READ insights NOTIFY insightsChanged)
     Q_PROPERTY(QVariantMap security READ security NOTIFY phase3Changed)
     Q_PROPERTY(QVariantMap latency READ latency NOTIFY phase3Changed)
@@ -58,6 +59,8 @@ class EvClient final : public QObject {
     QVariantList plans() const { return m_plans; }
     QVariantMap activePlan() const { return m_activePlan; }
     QVariantMap activity() const { return m_activity; }
+    QVariantMap activityHistory() const { return m_activityHistory; }
+    Q_INVOKABLE void refreshActivityHistory();
     QVariantList insights() const { return m_insights; }
     Q_INVOKABLE void steerTask(const QString &taskId, const QString &text);
     QVariantMap security() const { return m_security; }
@@ -104,6 +107,7 @@ class EvClient final : public QObject {
   signals:
     void sceneActivated(const QString &hud);
     void activityChanged();
+    void activityHistoryChanged();
     void insightsChanged();
     void dailyChanged();
     void toolResultChanged();
@@ -172,6 +176,7 @@ class EvClient final : public QObject {
     QVariantList m_plans;
     QVariantMap m_activePlan;
     QVariantMap m_activity;
+    QVariantMap m_activityHistory;
     QVariantList m_insights;
     QVariantMap m_security;
     QVariantMap m_latency;

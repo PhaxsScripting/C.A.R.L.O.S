@@ -135,7 +135,7 @@ class NotificationIsolationTests(unittest.IsolatedAsyncioTestCase):
         _subscriber, queue = bus.subscribe()
         calls = 0
 
-        def record_event(_event):
+        def record_event(_event, **_limits):
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -154,6 +154,9 @@ class NotificationIsolationTests(unittest.IsolatedAsyncioTestCase):
             latest_telemetry={},
             logger=Mock(),
         )
+        from ev.timeline import ActivityTimeline
+        service.config = {'memory': {'activity_timeline': True}}
+        service.timeline = ActivityTimeline(service)
         persistence = asyncio.create_task(CarlosCore._persist_events(service, queue))
         try:
             bus.publish("system.error", "test", {"message": "first"})
@@ -188,12 +191,15 @@ class NotificationIsolationTests(unittest.IsolatedAsyncioTestCase):
             bus=bus,
             activity=SimpleNamespace(consume=Mock(return_value=False)),
             memory=SimpleNamespace(
-                record_event=lambda _event: loop.call_soon_threadsafe(recorded.set)
+                record_event=lambda _event, **_limits: loop.call_soon_threadsafe(recorded.set)
             ),
             voice=SimpleNamespace(set_resource_mode=AsyncMock()),
             latest_telemetry={},
             logger=Mock(),
         )
+        from ev.timeline import ActivityTimeline
+        service.config = {'memory': {'activity_timeline': True}}
+        service.timeline = ActivityTimeline(service)
         persistence = asyncio.create_task(CarlosCore._persist_events(service, queue))
         notifications = asyncio.create_task(CarlosCore._deliver_notifications(service))
         try:

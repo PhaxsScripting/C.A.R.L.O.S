@@ -118,6 +118,7 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         m_confirmation.clear();
         m_activePlan.clear();
         m_activity.clear();
+        m_activityHistory.clear();
         m_insights.clear();
         m_security.clear();
         m_diagnostics.clear();
@@ -128,6 +129,7 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         emit cognitionChanged();
         emit confirmationChanged();
         emit activityChanged();
+        emit activityHistoryChanged();
         emit insightsChanged();
         emit phase3Changed();
         emit dailyChanged();
@@ -343,6 +345,9 @@ void EvClient::refreshMemories() {
 }
 void EvClient::refreshTools() { sendRequest(QStringLiteral("tool.catalog")); }
 void EvClient::refreshDaily() { sendRequest(QStringLiteral("daily.snapshot")); }
+void EvClient::refreshActivityHistory() {
+    callTool(QStringLiteral("memory.timeline"), {{QStringLiteral("limit"), 100}});
+}
 void EvClient::callTool(const QString &name, const QVariantMap &arguments) {
     sendRequest(QStringLiteral("tool.call"),
                 {{QStringLiteral("name"), name},
@@ -486,6 +491,10 @@ void EvClient::processResponse(const QJsonObject &message) {
                 const QJsonObject result = payload.value(QStringLiteral("result")).toObject();
                 m_toolResult = result.toVariantMap();
                 emit toolResultChanged();
+                if (payload.value(QStringLiteral("tool")).toString() == QStringLiteral("memory.timeline")) {
+                    m_activityHistory = result.toVariantMap();
+                    emit activityHistoryChanged();
+                }
                 const QString report =
                     result.value(QStringLiteral("message"))
                         .toString(
@@ -518,6 +527,8 @@ void EvClient::processResponse(const QJsonObject &message) {
         }
     } else if (requestType == QStringLiteral("confirmation.respond")) {
         refreshMemories();
+        if (payload.value(QStringLiteral("tool")).toString() == QStringLiteral("memory.timeline.clear"))
+            refreshActivityHistory();
         const QJsonObject command = payload.value(QStringLiteral("command")).toObject();
         if (!command.isEmpty() && command.contains(QStringLiteral("response"))) {
             m_cognition = objectMap(command.value(QStringLiteral("cognition")));
@@ -567,6 +578,7 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         m_activePlan.clear();
         m_confirmation.clear();
         m_cognition.clear();
+        m_activityHistory.clear();
         emit voiceChanged();
         emit timelineChanged();
         emit eventsChanged();
@@ -575,6 +587,7 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         emit phase3Changed();
         emit confirmationChanged();
         emit cognitionChanged();
+        emit activityHistoryChanged();
     }
     const bool audioSample =
         type == QStringLiteral("voice.audio_level") || type == QStringLiteral("tts.audio_level");

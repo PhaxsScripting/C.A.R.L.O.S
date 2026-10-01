@@ -139,6 +139,22 @@ class EvClientTests : public QObject {
         QVERIFY(!client->activity().value("goal_verified").toBool());
     }
 
+    void savedActivityComesFromItsReadOnlyToolAndExpiresOnDisconnect() {
+        client->refreshActivityHistory();
+        QTRY_VERIFY(peer->canReadLine());
+        const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+        QCOMPARE(request.value("payload").toObject().value("name").toString(), QString("memory.timeline"));
+        send({{"type", "response"}, {"id", request.value("id")},
+              {"payload", QJsonObject{{"status", "completed"}, {"tool", "memory.timeline"},
+                  {"result", QJsonObject{{"recording_enabled", false},
+                      {"events", QJsonArray{QJsonObject{{"type", "core.started"}}}}}}}}});
+        QTRY_COMPARE(client->activityHistory().value("events").toList().size(), 1);
+        QVERIFY(!client->activityHistory().value("recording_enabled").toBool());
+        peer->disconnectFromServer();
+        QTRY_VERIFY(!client->connected());
+        QVERIFY(client->activityHistory().isEmpty());
+    }
+
     void reconnectsWhenSocketReturns() {
         peer->disconnectFromServer();
         QTRY_VERIFY(!client->connected());

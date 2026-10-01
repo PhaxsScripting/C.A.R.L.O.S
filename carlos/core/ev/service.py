@@ -269,6 +269,10 @@ class CarlosCore:
 
         self.settings_center = SettingsCenter(self)
         self.settings_center.register(self.tools)
+        from .timeline import ActivityTimeline
+
+        self.timeline = ActivityTimeline(self)
+        self.timeline.register(self.tools)
         from .plugins import load_enabled_plugins
 
         self.plugins = load_enabled_plugins(
@@ -469,30 +473,6 @@ class CarlosCore:
         self.kwin_bridge.attach_session_bus(bus)
 
     async def _persist_events(self, queue: asyncio.Queue[Event]) -> None:
-        persisted_types = {
-            "core.started",
-            "core.stopping",
-            "core.state_changed",
-            "system.warning",
-            "system.error",
-            "tool.permission_check",
-            "tool.completed",
-            "tool.failed",
-            "memory.remembered",
-            "memory.forgotten",
-            "voice.close_verification_complete",
-            "wake.detected",
-            "wake.test_armed",
-            "wake.test_complete",
-            "wake.test_failed",
-            "voice.full_test_complete",
-            "voice.full_test_failed",
-            "voice.invalid_input",
-            "voice.no_speech",
-            "voice.transcription_failed",
-            "voice.barge_in",
-            "plan.failed",
-        }
         while True:
             event = await queue.get()
             try:
@@ -539,8 +519,8 @@ class CarlosCore:
                         self._notification_queue.get_nowait()
                         self._notification_queue.task_done()
                     self._notification_queue.put_nowait(event)
-                if event.type in persisted_types and not event.private:
-                    await asyncio.to_thread(self.memory.record_event, event.as_dict())
+                if self.timeline.should_record(event):
+                    await asyncio.to_thread(self.timeline.record, event)
             except Exception as error:
                 # Keep telemetry and persistence alive if one callback fails.
                 self.logger.exception(

@@ -851,21 +851,43 @@ ApplicationWindow {
 
                 // LOGS
                 Item {
+                    id: activityPage
+                    property bool showSaved: false
+                    readonly property var saved: get(evClient.activityHistory, "events", [])
+                    Connections {
+                        target: evClient
+                        function onConnectedChanged() {
+                            if (activityPage.showSaved && evClient.connected) evClient.refreshActivityHistory()
+                        }
+                    }
                     SectionPanel {
                         anchors.fill: parent; anchors.margins: 18
-                        ListView {
-                            ScrollBar.vertical: ListScrollBar {}
-                            anchors.fill: parent; anchors.margins: 14; spacing: 5; clip: true; model: evClient.events
-                            delegate: HudPanel {
-                                required property var modelData
-                                width: ListView.view.width; height: 54; cut: 8; technical: false; accent: modelData.type.indexOf("failed") >= 0 ? "#ff6478" : "#456c85"; color: modelData.type === "system.error" || modelData.type === "tool.failed" ? "#261017" : "#0b1b2a"
-                                RowLayout { anchors.fill: parent; anchors.margins: 9
-                                    Text { text: "#" + modelData.sequence; color: "#8ca4b4"; font.pixelSize: 9; Layout.preferredWidth: 48 }
-                                    Text { text: modelData.type; color: modelData.type.indexOf("failed") >= 0 || modelData.type.indexOf("error") >= 0 ? "#ff6478" : appWindow.cyan; font.pixelSize: 10; font.bold: true; Layout.preferredWidth: 215 }
-                                    Text { text: modelData.source; color: "#829dac"; font.pixelSize: 9; Layout.preferredWidth: 100 }
-                                    Text { Layout.fillWidth: true; text: eventSummary(modelData); color: "#a9bdc7"; font.pixelSize: 10; elide: Text.ElideRight }
-                                    Text { text: modelData.duration_ms !== undefined ? Number(modelData.duration_ms).toFixed(1) + " ms" : ""; color: "#8daabd"; font.pixelSize: 9 }
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 14; spacing: 10
+                            RowLayout {
+                                Layout.fillWidth: true
+                                HudButton { objectName: "activity-live"; text: "This session"; onClicked: activityPage.showSaved = false }
+                                HudButton { objectName: "activity-saved"; text: "Saved history"; enabled: evClient.connected; onClicked: { activityPage.showSaved = true; evClient.refreshActivityHistory() } }
+                                Text { Layout.fillWidth: true; text: !evClient.connected ? "Core disconnected" : !activityPage.showSaved ? "Live events stay available without recording." : get(evClient.activityHistory, "events", null) === null ? "Reading saved history…" : get(evClient.activityHistory, "recording_enabled", false) ? "Recording local metadata / latest 2,000 events" : "Recording is off. Enable it in Settings → Privacy."; color: appWindow.dim; font.pixelSize: 10; wrapMode: Text.WordWrap }
+                                HudButton { text: "Refresh"; visible: activityPage.showSaved; enabled: evClient.connected; onClicked: evClient.refreshActivityHistory() }
+                                HudButton { objectName: "activity-clear"; text: "Clear history"; visible: activityPage.showSaved; accent: "#ff6478"; enabled: evClient.connected && activityPage.saved.length > 0; onClicked: evClient.callTool("memory.timeline.clear", {}) }
+                            }
+                            ListView {
+                                objectName: "activity-event-list"
+                                ScrollBar.vertical: ListScrollBar {}
+                                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 5; clip: true; model: activityPage.showSaved ? activityPage.saved : evClient.events
+                                delegate: HudPanel {
+                                    required property var modelData
+                                    width: ListView.view.width; height: 54; cut: 8; technical: false; accent: modelData.type.indexOf("failed") >= 0 ? "#ff6478" : "#456c85"; color: modelData.type === "system.error" || modelData.type === "tool.failed" ? "#261017" : "#0b1b2a"
+                                    RowLayout { anchors.fill: parent; anchors.margins: 9
+                                        Text { text: activityPage.showSaved ? new Date(modelData.timestamp).toLocaleString() : "#" + modelData.sequence; color: "#8ca4b4"; font.pixelSize: 9; Layout.preferredWidth: activityPage.showSaved ? 140 : 48; elide: Text.ElideRight }
+                                        Text { text: modelData.type; color: modelData.type.indexOf("failed") >= 0 || modelData.type.indexOf("error") >= 0 ? "#ff6478" : appWindow.cyan; font.pixelSize: 10; font.bold: true; Layout.preferredWidth: 215 }
+                                        Text { text: modelData.source; color: "#829dac"; font.pixelSize: 9; Layout.preferredWidth: 100 }
+                                        Text { Layout.fillWidth: true; text: eventSummary(modelData); color: "#a9bdc7"; font.pixelSize: 10; elide: Text.ElideRight }
+                                        Text { text: modelData.duration_ms !== undefined ? Number(modelData.duration_ms).toFixed(1) + " ms" : ""; color: "#8daabd"; font.pixelSize: 9 }
+                                    }
                                 }
+                                Text { objectName: "activity-empty"; anchors.centerIn: parent; width: Math.min(420, parent.width - 32); visible: parent.count === 0; text: !evClient.connected ? "Connect to Carlos to read activity." : !activityPage.showSaved ? "No events in this session yet." : get(evClient.activityHistory, "events", null) === null ? "Loading saved activity…" : "No saved activity. Recording is optional in Settings → Privacy."; color: appWindow.dim; font.pixelSize: 13; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter }
                             }
                         }
                     }

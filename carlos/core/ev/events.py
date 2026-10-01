@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import threading
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
@@ -51,6 +52,8 @@ class Event:
 
 class PhaxEventBus:
     def __init__(self, history_limit: int = 300, queue_size: int = 512) -> None:
+        if type(queue_size) is not int or queue_size < 1:
+            raise ValueError('Event queue size must be a positive integer')
         self._sequence = 0
         self._history: deque[Event] = deque(maxlen=history_limit)
         self._subscribers: dict[str, asyncio.Queue[Event]] = {}
@@ -58,6 +61,11 @@ class PhaxEventBus:
         self._dropped_deliveries = 0
         self._tool_outcomes = {'succeeded': 0, 'failed': 0, 'verified': 0, 'unclassified': 0}
         self.private = False
+        self._publish_lock = threading.RLock()
+        self._owner_loop = None
+        self._owner_thread = None
+        self._pending_dispatch = deque()
+        self._dispatch_scheduled = False
 
     def publish(
         self,
@@ -67,33 +75,80 @@ class PhaxEventBus:
         correlation_id: str | None = None,
         duration_ms: float | None = None,
     ) -> Event:
-        self._sequence += 1
-        if (not self.private and source == 'tools'
-                and (payload or {}).get('tool') != 'agent.execute_plan'):
-            if event_type == 'tool.failed':
-                self._tool_outcomes['failed'] += 1
-            elif event_type == 'tool.completed':
-                ok = (payload or {}).get('ok')
-                self._tool_outcomes['succeeded' if ok is True else
-                                    'failed' if ok is False else 'unclassified'] += 1
-                execution = (payload or {}).get('execution')
-                if ok is True and isinstance(execution, dict) and execution.get('verified') is True:
-                    self._tool_outcomes['verified'] += 1
-        event = Event(
-            sequence=self._sequence,
-            type=event_type,
-            source=source,
-            payload=payload or {},
-            correlation_id=correlation_id or uuid.uuid4().hex,
-            duration_ms=duration_ms,
-            private=self.private,
-        )
-        # Waveform samples are live UI telemetry (20-25 Hz), not audit events.
-        # Retaining them would evict the useful 300-entry task history within
-        # seconds even though the UI already consumes them via subscription.
-        if event_type not in TRANSIENT_EVENT_TYPES:
-            self._history.append(event)
-        for queue in tuple(self._subscribers.values()):
+        self._bind_loop()
+        with self._publish_lock:
+            self._sequence += 1
+            if (not self.private and source == 'tools'
+                    and (payload or {}).get('tool') != 'agent.execute_plan'):
+                if event_type == 'tool.failed':
+                    self._tool_outcomes['failed'] += 1
+                elif event_type == 'tool.completed':
+                    ok = (payload or {}).get('ok')
+                    self._tool_outcomes['succeeded' if ok is True else
+                                        'failed' if ok is False else 'unclassified'] += 1
+                    execution = (payload or {}).get('execution')
+                    if ok is True and isinstance(execution, dict) and execution.get('verified') is True:
+                        self._tool_outcomes['verified'] += 1
+            event = Event(
+                sequence=self._sequence,
+                type=event_type,
+                source=source,
+                payload=payload or {},
+                correlation_id=correlation_id or uuid.uuid4().hex,
+                duration_ms=duration_ms,
+                private=self.private,
+            )
+            # Waveform samples are live UI telemetry (20-25 Hz), not audit events.
+            # Retaining them would evict the useful 300-entry task history within
+            # seconds even though the UI already consumes them via subscription.
+            if event_type not in TRANSIENT_EVENT_TYPES:
+                self._history.append(event)
+            recipients = tuple(self._subscribers.values())
+            if len(self._pending_dispatch) >= self._queue_size:
+                ranks = {"BACKGROUND": 0, "NORMAL": 1, "HIGH": 2, "EMERGENCY": 3}
+                victim = min(range(len(self._pending_dispatch)),
+                             key=lambda i: ranks[self._pending_dispatch[i][0].priority])
+                old_event, old_recipients = self._pending_dispatch[victim]
+                if ranks[event.priority] >= ranks[old_event.priority]:
+                    del self._pending_dispatch[victim]
+                    self._pending_dispatch.append((event, recipients))
+                    self._dropped_deliveries += len(old_recipients)
+                else:
+                    self._dropped_deliveries += len(recipients)
+            else:
+                self._pending_dispatch.append((event, recipients))
+            if self._owner_loop is None or threading.get_ident() == self._owner_thread:
+                self._flush_pending()
+            elif not self._dispatch_scheduled:
+                self._dispatch_scheduled = True
+                try:
+                    self._owner_loop.call_soon_threadsafe(self._flush_pending)
+                except RuntimeError:
+                    self._dropped_deliveries += sum(len(recipients) for _, recipients in self._pending_dispatch)
+                    self._pending_dispatch.clear()
+                    self._dispatch_scheduled = False
+            return event
+
+    def _bind_loop(self):
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        with self._publish_lock:
+            if self._owner_loop is None:
+                self._owner_loop = loop
+                self._owner_thread = threading.get_ident()
+            elif self._owner_loop is not loop:
+                raise RuntimeError('An event bus cannot span different asyncio loops')
+
+    def _flush_pending(self):
+        with self._publish_lock:
+            self._dispatch_scheduled = False
+            while self._pending_dispatch:
+                self._deliver(*self._pending_dispatch.popleft())
+
+    def _deliver(self, event, recipients):
+        for queue in recipients:
             if queue.full():
                 self._dropped_deliveries += 1
                 # Retain critical events under telemetry pressure without
@@ -113,39 +168,50 @@ class PhaxEventBus:
                     queue.task_done()
             else:
                 queue.put_nowait(event)
-        return event
 
     def subscribe(self) -> tuple[str, asyncio.Queue[Event]]:
+        self._bind_loop()
         subscriber_id = uuid.uuid4().hex
         queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=self._queue_size)
-        self._subscribers[subscriber_id] = queue
+        with self._publish_lock:
+            self._subscribers[subscriber_id] = queue
         return subscriber_id, queue
 
     def unsubscribe(self, subscriber_id: str) -> None:
-        self._subscribers.pop(subscriber_id, None)
+        with self._publish_lock:
+            self._subscribers.pop(subscriber_id, None)
+
+    def set_private(self, enabled):
+        with self._publish_lock:
+            self.private = bool(enabled)
+            self._history.clear()
 
     def metrics(self):
-        queues = list(self._subscribers.values())
-        measured = self._tool_outcomes['succeeded'] + self._tool_outcomes['failed']
-        return {'scope': 'since_core_start', 'published_events': self._sequence,
-                'subscribers': len(queues), 'queued_deliveries': sum(q.qsize() for q in queues),
-                'queue_capacity': sum(q.maxsize for q in queues),
-                'max_queue_depth': max((q.qsize() for q in queues), default=0),
-                'dropped_deliveries': self._dropped_deliveries,
-                'tools': {**self._tool_outcomes,
-                          'success_percent': round(self._tool_outcomes['succeeded'] / measured * 100, 1)
-                          if measured else None,
-                          'scope': 'nonprivate leaf tool execution; success is not verification'}}
+        with self._publish_lock:
+            queues = list(self._subscribers.values())
+            measured = self._tool_outcomes['succeeded'] + self._tool_outcomes['failed']
+            return {'scope': 'since_core_start', 'published_events': self._sequence,
+                    'subscribers': len(queues), 'queued_deliveries': sum(q.qsize() for q in queues),
+                    'queue_capacity': sum(q.maxsize for q in queues),
+                    'max_queue_depth': max((q.qsize() for q in queues), default=0),
+                    'dropped_deliveries': self._dropped_deliveries,
+                    'tools': {**self._tool_outcomes,
+                              'success_percent': round(self._tool_outcomes['succeeded'] / measured * 100, 1)
+                              if measured else None,
+                              'scope': 'nonprivate leaf tool execution; success is not verification'}}
 
     def history(self, limit: int = 100) -> list[dict[str, Any]]:
-        bounded = max(1, min(limit, len(self._history)))
-        return [event.as_dict() for event in list(self._history)[-bounded:]]
+        with self._publish_lock:
+            bounded = max(1, min(limit, len(self._history)))
+            return [event.as_dict() for event in list(self._history)[-bounded:]]
 
     def latency_report(self, limit: int = 12) -> dict[str, Any]:
         """Return measured pipeline timings without inventing missing stages."""
 
         groups: dict[str, list[Event]] = {}
-        for event in self._history:
+        with self._publish_lock:
+            history = list(self._history)
+        for event in history:
             if event.correlation_id:
                 groups.setdefault(event.correlation_id, []).append(event)
         reports: list[dict[str, Any]] = []

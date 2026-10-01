@@ -166,7 +166,7 @@ class MemoryStore:
             ).fetchall()
         return [dict(row) for row in reversed(rows)]
 
-    def record_event(self, event: dict[str, Any]) -> None:
+    def record_event(self, event: dict[str, Any], *, limit: int | None = None) -> None:
         with self._lock:
             self._connection.execute(
                 "INSERT INTO event_summaries(sequence,event_type,source,correlation_id,payload_json,created_at) VALUES(?,?,?,?,?,?)",
@@ -179,7 +179,30 @@ class MemoryStore:
                     str(event["timestamp"]),
                 ),
             )
+            if limit is not None:
+                self._connection.execute(
+                    "DELETE FROM event_summaries WHERE id NOT IN (SELECT id FROM event_summaries ORDER BY id DESC LIMIT ?)",
+                    (max(1, min(limit, 10000)),),
+                )
             self._connection.commit()
+
+    def list_events(self, limit: int = 50, event_type: str = "") -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT event_type,source,correlation_id,payload_json,created_at FROM event_summaries "
+                "WHERE (?='' OR event_type=?) ORDER BY id DESC LIMIT ?",
+                (event_type, event_type, max(1, min(limit, 200))),
+            ).fetchall()
+        return [{"type": row["event_type"], "source": row["source"],
+                 "correlation_id": row["correlation_id"], "timestamp": row["created_at"],
+                 "payload": json.loads(row["payload_json"])} for row in rows]
+
+    def clear_events(self) -> int:
+        with self._lock:
+            count = self._connection.execute("SELECT COUNT(*) FROM event_summaries").fetchone()[0]
+            self._connection.execute("DELETE FROM event_summaries")
+            self._connection.commit()
+            return count
 
     def record_permission(
         self,

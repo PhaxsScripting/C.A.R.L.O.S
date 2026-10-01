@@ -72,6 +72,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "client_queue_size": 512,
     },
     "memory": {
+        "activity_timeline": False,
         "conversation_turn_limit": 40,
         "context_character_limit": 24_000,
     },

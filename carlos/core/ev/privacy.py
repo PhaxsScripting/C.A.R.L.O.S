@@ -28,9 +28,8 @@ class PrivacyPolicy:
         c.memory.set_private(self.ephemeral, guest=self.mode == "GUEST")
         c.task_journal.set_private(self.ephemeral)
         c.daily.set_private(self.ephemeral, guest=self.mode == "GUEST")
-        c.bus.private = self.ephemeral
+        c.bus.set_private(self.ephemeral)
         c.logger.disabled = self.ephemeral
-        c.bus._history.clear()
         if hasattr(c, "failure_reference"):
             c.failure_reference.clear()
 
