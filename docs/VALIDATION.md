@@ -117,3 +117,13 @@ calls and signals on a disposable D-Bus session for every supported object path.
 It does not lock the user's desktop. The Python suite passed 1,042 tests before
 the subsequent offline transport checks. Interactive testing on other desktops
 and physical occupancy detection remain separate.
+
+The offline transport fixture runs the real Unix-socket command handler in a
+separate Linux network namespace with no route. It verifies greetings, CPU/RAM
+queries, file creation, memory readback, Local Only refusing cloud transport,
+and a local command after an actual failed cloud connection. All data is
+temporary; the desktop's network is unchanged. The fixture skips on hosts that
+forbid unprivileged namespaces. It passed on Gentoo; the complete Python suite
+passed 1,045 tests. This does not establish offline microphone, model or desktop
+acceptance. Router shutdown also closes the cloud transport when the local
+provider has no cleanup method or its cleanup raises an exception.

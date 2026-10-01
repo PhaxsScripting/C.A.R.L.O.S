@@ -55,7 +55,11 @@ class CarlosRouter(Provider):
         return await self.local.continue_with_tools(turn, outputs, tools)
 
     async def close(self):
-        await self.local.close()
-        close = getattr(self.cloud, "close", None)
-        if close:
-            await close()
+        try:
+            close = getattr(self.local, "close", None)
+            if close:
+                await close()
+        finally:
+            close = getattr(self.cloud, "close", None)
+            if close:
+                await close()
