@@ -42,4 +42,6 @@ class OfflineTransportTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         report = json.loads(result.stdout)
         self.assertEqual(report['network_namespace'], 'isolated; no route')
-        self.assertEqual(len(report['checks']), 6)
+        operations = {check['operation']:check['status'] for check in report['checks']}
+        self.assertEqual(len(operations), 7)
+        self.assertEqual(operations['scoped dated history and natural request'], 'actual offline IPC; no mutations')

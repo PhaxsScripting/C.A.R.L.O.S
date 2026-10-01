@@ -243,6 +243,16 @@ class MemoryStore:
             ).fetchall()
         return [dict(row) for row in reversed(rows)]
 
+    def conversation_history(self, project: str, start: str, end: str, query: str = '', limit: int = 40) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                "SELECT id,correlation_id,project,role,content,created_at FROM conversations "
+                "WHERE project=? AND julianday(created_at)>=julianday(?) AND julianday(created_at)<julianday(?) "
+                "AND (?='' OR instr(lower(content),lower(?))>0) ORDER BY id DESC LIMIT ?",
+                (project, start, end, query, query, max(1, min(limit, 101))),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def record_event(self, event: dict[str, Any], *, limit: int | None = None) -> None:
         with self._lock:
             self._connection.execute(

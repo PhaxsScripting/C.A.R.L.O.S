@@ -85,3 +85,14 @@ Changing projects clears historical window references. A reply or approval
 started earlier stays in its original context; selection does not cancel it or
 change approved arguments. Global explicit notes are still shared preferences.
 Task receipts and optional activity history remain separate workstation records.
+
+Ask “What was I working on last night?”, “What was I doing yesterday?” or “What
+happened with HoloHand?” to read saved receipts locally without a provider call.
+`memory.recall` supports last_night, yesterday, today and past_week, an optional
+text query and limit. It uses the selected project unless you explicitly supply
+an allowed directory or an empty path for General. Last night means the prior
+evening at 18:00 through 06:00, capped at now, in the machine's local timezone.
+Replies show a short preview; the tool returns bounded entries and has_more.
+Matching explicit notes are separately labelled undated context. Empty history
+cannot establish what happened outside saved conversations, and old text is
+never proof of current files, windows or completed actions.

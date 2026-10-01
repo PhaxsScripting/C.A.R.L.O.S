@@ -40,6 +40,7 @@ class ToolContext:
     task_journal: Any = None
     capability_probe: Any = None
     project_changed: Any = None
+    project_scope: Any = None
 
 
 @dataclass(slots=True)

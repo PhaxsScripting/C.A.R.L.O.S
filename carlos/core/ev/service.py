@@ -145,6 +145,8 @@ class CarlosCore:
         from .tools.project_memory import register_project_memory
 
         register_project_memory(self.tools)
+        from .tools.history import register_history
+        register_history(self.tools)
         register_daily_tools(self.tools)
         from .scenes import SceneEngine
 
@@ -260,6 +262,7 @@ class CarlosCore:
         self.brain.context_provider = self._model_context
         self.brain.project_provider = self._project_scope
         self.tools.context.project_changed = self._project_changed
+        self.tools.context.project_scope = self._captured_project_scope
         self.brain.provider_guard = self.privacy.guard_provider
         self.telemetry = TelemetrySampler(
             self.bus,
@@ -1054,6 +1057,15 @@ class CarlosCore:
         except ValidationError:
             return ''
 
+    async def _captured_project_scope(self):
+        project = self.brain.context_project.get()
+        if project is None:
+            return await self._project_scope()
+        if project:
+            from .tools.project_memory import project_path
+            return await project_path({'project':project}, self.tools.context)
+        return ''
+
     def _project_changed(self, project):
         self.planner.last_entities.clear()
         self.bus.publish('memory.project_changed', 'memory', {'project': project})
@@ -1847,6 +1859,13 @@ class CarlosCore:
                 "correlation_id": correlation,
                 "response": "Queued request cancelled before execution.",
             }
+        from .tools.history import historical_query
+        history = historical_query(text)
+        if history is not None:
+            result = await self._request_model_tool({'name':'memory.recall', 'arguments':history}, correlation)
+            return {'status':result.get('status','failed'), 'correlation_id':correlation,
+                    'response':result.get('result',{}).get('message') or result.get('error') or 'Saved history is unavailable.',
+                    'history':result.get('result',{}), 'actions_executed':0, 'live_state_verified':False}
         planning_started = time.perf_counter()
         plan = self.planner.try_plan(text, correlation)
         if plan is not None:

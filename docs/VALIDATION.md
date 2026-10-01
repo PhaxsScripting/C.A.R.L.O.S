@@ -321,3 +321,14 @@ passed in 13.14 seconds. The actual installed IPC returned a consistent scoped
 conversation list without dumping or changing host content. Task journal and
 optional activity history are workstation records, not isolated chat sessions;
 no claim of complete project data segregation follows from this change.
+
+Dated recall is a read-only local tool with literal text filtering, exact project
+scope, recognized credential filtering on read, bounded UTF-8 output and explicit
+empty/partial results. Eight tests cover local evening windows, spring/fall DST,
+early morning caps, scope changes, undated note labels, legacy credentials, query
+parameters, private/guest rules and provider-free natural requests. Task receipts
+do not duplicate recalled content. All 1,132 Python tests passed in 61.799 s;
+eight development tests passed. The no-route network namespace passed seven
+actual IPC checks, including scoped dated recall and its natural command. The
+installed read completed without adding fixture memories or exposing content in
+the report. History remains limited to data Carlos actually recorded.

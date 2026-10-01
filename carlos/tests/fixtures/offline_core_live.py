@@ -7,6 +7,7 @@ import socket
 import tempfile
 import time
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from ev.ai.carlos_router import CarlosRouter
 from ev.ai.offline import OfflineProvider
@@ -58,6 +59,23 @@ async def main():
             assert result['status']=='completed',result
             assert 'Offline fixture memory' in json.dumps(core.memory.list_memories())
             results.append({'operation':'files and memory','status':'verified by local readback'})
+            result=await call('tool.call',{'name':'memory.project.select','arguments':{'project':str(root)}})
+            assert result['status']=='completed',result
+            core.memory.add_conversation('history-fixture','user','offline_history_canary',project=str(root))
+            core.memory._connection.execute('UPDATE conversations SET created_at=? WHERE correlation_id=?',
+                ((datetime.now(UTC)-timedelta(seconds=2)).isoformat(),'history-fixture'))
+            core.memory._connection.commit()
+            result=await call('tool.call',{'name':'memory.recall','arguments':{'period':'today'}})
+            assert result['status']=='completed',result
+            assert 'offline_history_canary' in json.dumps(result)
+            assert result['result']['project']==str(root)
+            assert result['result']['live_state_verified'] is False
+            result=await call('command.submit',{'text':'What was I doing today?','speak':False})
+            assert result['status']=='completed' and result['actions_executed']==0,result
+            assert 'offline_history_canary' in result['response']
+            result=await call('tool.call',{'name':'memory.project.select','arguments':{'project':''}})
+            assert result['status']=='completed',result
+            results.append({'operation':'scoped dated history and natural request','status':'actual offline IPC; no mutations'})
             result=await call('carlos.privacy.set',{'mode':'LOCAL ONLY'})
             assert result['mode']=='LOCAL ONLY'
             result=await call('command.submit',{'text':'use cloud: Describe a comet'})
