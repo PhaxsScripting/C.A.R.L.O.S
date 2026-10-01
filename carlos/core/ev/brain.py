@@ -132,6 +132,15 @@ class CommandEngine:
             "connected": available,
             "reason": reason,
         }
+        model = self.provider
+        for _ in range(2):
+            nested = getattr(model, "local", None)
+            if nested is None:
+                break
+            model = nested
+        lifecycle = getattr(model, "lifecycle_status", None)
+        if lifecycle:
+            status["lifecycle"] = lifecycle()
         transport_status = getattr(self.provider, "transport_status", None)
         if transport_status is not None:
             transport = transport_status()

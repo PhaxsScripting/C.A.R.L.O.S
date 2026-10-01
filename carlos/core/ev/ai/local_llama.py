@@ -4,6 +4,7 @@ from ev.platform import executable as _platform_executable
 
 import asyncio
 import json
+import math
 import os
 import re
 import signal
@@ -11,6 +12,7 @@ import stat
 import tempfile
 import time
 from pathlib import Path
+from contextlib import asynccontextmanager
 from typing import Any
 
 import aiohttp
@@ -296,6 +298,50 @@ class LocalLlamaProvider(Provider):
         self._process: asyncio.subprocess.Process | None = None
         self._owns_process = False
         self._start_lock = asyncio.Lock()
+        self._active_requests = 0
+        self._last_used = time.monotonic()
+        self.idle_unloaded = False
+
+    @asynccontextmanager
+    async def model_use(self):
+        async with self._start_lock:
+            self._active_requests += 1
+            self._last_used = time.monotonic()
+            self.idle_unloaded = False
+        try:
+            yield
+        finally:
+            self._active_requests -= 1
+            self._last_used = time.monotonic()
+
+    def lifecycle_status(self):
+        running = self._process is not None and self._process.returncode is None
+        return {
+            "state": "HOT" if self._active_requests else "WARM" if running else "UNLOADED",
+            "managed": self._ownership_path is not None,
+            "owned_process_running": running and self._owns_process,
+            "active_requests": self._active_requests,
+            "idle_seconds": round(max(0, time.monotonic() - self._last_used), 1),
+            "idle_unloaded": self.idle_unloaded,
+        }
+
+    async def release_if_idle(self, now=None):
+        try:
+            timeout = float(self.config.get("idle_unload_seconds", 900))
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(timeout) or timeout <= 0 or self._ownership_path is None:
+            return False
+        async with self._start_lock:
+            now = time.monotonic() if now is None else now
+            process = self._process
+            if (self._active_requests or now - self._last_used < timeout
+                    or not self._owns_process or process is None or process.returncode is not None
+                    or not self._managed_endpoint_owned()):
+                return False
+            await self.close()
+            self.idle_unloaded = process.returncode is not None
+            return self.idle_unloaded
 
     def set_personality(self, personality: dict[str, Any]) -> None:
         self.personality = dict(personality)
@@ -793,9 +839,10 @@ class LocalLlamaProvider(Provider):
 
     async def prewarm(self) -> None:
         if bool(self.config.get("prewarm", True)):
-            await self._ensure_server()
-            if bool(self.config.get("prompt_cache", True)):
-                await self._run_guarded(self._warm_prompt)
+            async with self.model_use():
+                await self._ensure_server()
+                if bool(self.config.get("prompt_cache", True)):
+                    await self._run_guarded(self._warm_prompt)
 
     async def _warm_prompt(self):
         payload = {
@@ -918,10 +965,11 @@ class LocalLlamaProvider(Provider):
     async def _post(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *, response_schema=None
     ) -> dict[str, Any]:
-        await self._ensure_server()
-        return await self._run_guarded(
-            lambda: self._post_unchecked(messages, tools, response_schema=response_schema)
-        )
+        async with self.model_use():
+            await self._ensure_server()
+            return await self._run_guarded(
+                lambda: self._post_unchecked(messages, tools, response_schema=response_schema)
+            )
 
     async def _run_guarded(self, request_factory):
         # Only manage servers we own. External endpoints aren't our processes.

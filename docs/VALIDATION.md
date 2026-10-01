@@ -127,3 +127,15 @@ forbid unprivileged namespaces. It passed on Gentoo; the complete Python suite
 passed 1,045 tests. This does not establish offline microphone, model or desktop
 acceptance. Router shutdown also closes the cloud transport when the local
 provider has no cleanup method or its cleanup raises an exception.
+
+Idle model policy: the managed conversation model releases its owned server
+after 900 seconds without model work. `idle_unload_seconds: 0` disables this.
+Explicit reasoning loads it again; deterministic commands do not reset this
+timer. Active requests and startup warming hold an activity lease, so idle
+cleanup waits for work to finish. External endpoints are excluded, and existing
+process identity checks still govern shutdown. The supervisor reports ON_DEMAND
+instead of restarting an intentionally unloaded model. Provider status exposes
+HOT (active request), WARM (resident process) or UNLOADED; WARM alone is not a
+health claim. Six new tests include reaping a real owned child, request/cleanup
+races, cancellation, invalid policy and supervisor behavior. 1,051 Python tests
+passed. Model reload adds cold-start latency after a long idle period.

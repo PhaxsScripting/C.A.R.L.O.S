@@ -95,6 +95,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
             "threads": 3,
             "thermal_ceiling_celsius": 93,
             "minimum_available_memory_mib": 512,
+            "idle_unload_seconds": 900,
             "threads_batch": 3,
             "threads_http": 2,
             "poll": 0,

@@ -72,7 +72,16 @@ class GiggleGuard:
         # automatic recovery targets. Keep the adapter's ownership checks.
         if not isinstance(model, LocalLlamaProvider):
             return
-        if model._ownership_path is None or not model.config.get("prewarm", True):
+        if model._ownership_path is None:
+            return
+        released = await model.release_if_idle()
+        if released:
+            self.core.bus.publish("model.idle_unloaded", "health", {"component": "Local AI"})
+        if model.idle_unloaded:
+            self.components["Local AI"] = {"state": "ON_DEMAND", "observed_at": time.time(),
+                                           "reason": "Idle model released; next reasoning request loads it"}
+            return
+        if not model.config.get("prewarm", True):
             return
         try:
             healthy = await asyncio.wait_for(model._managed_healthy(), self.probe_timeout)
