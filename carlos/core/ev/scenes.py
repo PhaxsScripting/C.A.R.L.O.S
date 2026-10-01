@@ -2,6 +2,7 @@
 
 import re
 import time
+from copy import deepcopy
 from .commands import request_text
 from .permissions import Permission
 from .tools.base import ToolSpec
@@ -47,6 +48,54 @@ class SceneEngine:
     def definitions(self):
         custom = self.core.daily.records("carlos_scene")
         return {name: {**value, "commands": []} for name, value in DEFAULTS.items()} | custom
+
+    async def prepare(self, name, correlation):
+        definition = self.definitions()[name]
+        planner = self.core.planner
+        commands = definition.get("commands", [])
+        command_plan = None
+        if commands:
+            planner.saved_routines['carlos-scene-active'] = commands
+            command_plan = planner.try_plan('run routine carlos-scene-active', correlation)
+            if command_plan is None:
+                raise ValueError('Scene contains a command I cannot safely plan. Nothing ran.')
+        workspace = definition.get('workspace', '')
+        if not workspace:
+            return command_plan, {}
+        observed = await self.core._request_model_tool({
+            'name': 'workspaces.restore_plan', 'arguments': {'name': workspace}}, correlation)
+        layout = observed.get('result', {})
+        if observed.get('status') != 'completed' or not layout.get('plan'):
+            raise ValueError('The saved workspace cannot be restored. No scene actions ran.')
+        from .tools.plans import build_plan
+        plan = build_plan(layout['plan'], planner, correlation)
+        if command_plan:
+            if len(plan.steps) + len(command_plan.steps) > 32:
+                raise ValueError('Scene exceeds 32 actions. Nothing ran.')
+            mapping = {step.id: 'scene_' + step.id for step in command_plan.steps}
+
+            def remap(value):
+                if isinstance(value, dict):
+                    if set(value) == {'$ref'}:
+                        head, tail = value['$ref'].split('.', 1)
+                        return {'$ref': mapping[head] + '.' + tail}
+                    return {key: remap(item) for key, item in value.items()}
+                if isinstance(value, list):
+                    return [remap(item) for item in value]
+                return value
+
+            previous = plan.steps[-1].id
+            for original in command_plan.steps:
+                step = deepcopy(original)
+                step.id = mapping[step.id]
+                step.arguments = remap(step.arguments)
+                step.dependencies = [mapping[item] for item in step.dependencies] or [previous]
+                plan.steps.append(step)
+                previous = step.id
+            plan.goal_conditions += remap(command_plan.goal_conditions)
+        plan.request = f'Activate {name} scene'
+        plan.goal = f'Restore saved workspace {workspace} and activate {name}'
+        return plan, layout
 
     def resolve(self, text):
         clean = request_text(text)
@@ -103,6 +152,9 @@ class SceneEngine:
         )
 
         def save(a, c):
+            workspace = a.get('workspace', '').strip().casefold()
+            if workspace and workspace not in c.daily.records('workspace_layout'):
+                raise ValueError('Choose an existing saved workspace')
             for command in a["commands"]:
                 if request_text(command) is None or self.resolve(command):
                     raise ValueError(
@@ -116,6 +168,7 @@ class SceneEngine:
                     "commands": a["commands"],
                     "hud": a["hud"],
                     "quiet": a["quiet"],
+                    "workspace": workspace,
                 },
             )
 
@@ -139,6 +192,7 @@ class SceneEngine:
                             "enum": ["CARLOS", "PROJECT", "SYSTEM", "MEDIA", "REMOTE"],
                         },
                         "quiet": {"type": "boolean"},
+                        "workspace": {"type": "string", "maxLength": 100},
                     },
                     ["name", "commands", "hud", "quiet"],
                 ),

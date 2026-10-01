@@ -139,3 +139,18 @@ HOT (active request), WARM (resident process) or UNLOADED; WARM alone is not a
 health claim. Six new tests include reaping a real owned child, request/cleanup
 races, cancellation, invalid policy and supervisor behavior. 1,051 Python tests
 passed. Model reload adds cold-start latency after a long idle period.
+
+Scenes can now select an existing saved workspace. The scene editor keeps
+restoration disabled until a workspace is selected explicitly. Saving validates
+the name without restoring anything. Activation prepares the restoration and
+command plan before effects, then runs both through one executor. Missing
+workspaces and unplannable commands prevent the scene from running; Stop during
+preparation prevents activation. Result references and dependencies retain exact
+window identities. Partial restoration reports saved-item gaps and unsupported
+context separately. Guest mode cannot restore personal workspaces.
+
+Eight backend tests and a native QML interaction test cover selection/save,
+missing/deleted workspaces, invalid commands, cancellation and failed/partial
+execution. 1,059 Python tests and all four Qt/QML/pet groups passed on Gentoo.
+Display wake, exact unsaved-buffer recovery and physical homecoming acceptance
+remain separate.

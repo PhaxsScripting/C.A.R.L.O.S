@@ -1762,7 +1762,7 @@ class CarlosCore:
                     "response": "Unknown scene.",
                 }
             commands = definition.get("commands", [])
-            if not commands:
+            if not commands and not definition.get('workspace'):
                 self.scenes.activate(scene_name)
                 return {
                     "status": "completed",
@@ -1771,14 +1771,17 @@ class CarlosCore:
                     "scene": dict(self.scenes.current),
                     "scope": "Assistant HUD and notification policy only; no application or workspace restoration configured",
                 }
-            self.planner.saved_routines["carlos-scene-active"] = commands
-            plan = self.planner.try_plan("run routine carlos-scene-active", correlation)
-            if plan is None:
+            try:
+                plan, layout = await self.scenes.prepare(scene_name, correlation)
+            except ValueError as error:
                 return {
                     "status": "failed",
                     "correlation_id": correlation,
-                    "response": "Scene contains a command I cannot safely plan. Nothing ran.",
+                    "response": str(error),
                 }
+            if generation != self._action_generation:
+                return {'status': 'cancelled', 'correlation_id': correlation,
+                        'response': 'Scene cancelled before execution.'}
             self.scenes.activate(scene_name, running=True)
             activation = self.scenes.current
             try:
@@ -1791,6 +1794,11 @@ class CarlosCore:
                 raise
             self.scenes.finish(activation, result.get("status"))
             result["scene"] = dict(activation)
+            if layout:
+                result['workspace_gaps'] = layout.get('gaps', [])
+                result['context_checks'] = layout.get('context_checks', [])
+                if layout.get('gaps'):
+                    result['response'] = str(result.get('response', '')) + ' Some saved items could not be restored; see workspace gaps.'
             return result
         if generation != self._action_generation:
             return {
@@ -2121,6 +2129,7 @@ class CarlosCore:
                 "readiness": self.holosystem.status()["readiness"],
                 "settings": self.settings_center.snapshot(),
                 "assistant_scenes": await asyncio.to_thread(self.scenes.definitions),
+                "saved_workspaces": list((await asyncio.to_thread(self.daily.records, 'workspace_layout')).keys()),
                 "active_scene": dict(self.scenes.current),
                 "privacy_mode": self.privacy.mode,
                 "component_health": dict(self.health_supervisor.components),

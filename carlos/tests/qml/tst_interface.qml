@@ -190,6 +190,23 @@ TestCase {
         tryCompare(item("scene-picker"),"opened",false)
         compare(mock.calls.length,0)
     }
+    function test_scene_workspace_selection_is_explicit_and_saved_with_scene() {
+        mock.daily = {saved_workspaces:["coding"], assistant_scenes:{homecoming:{commands:[],hud:"CARLOS",quiet:false,workspace:"coding"}}}
+        click("nav-10")
+        const picker = item("assistant-scene-picker")
+        picker.activated(0)
+        const workspace = item("scene-workspace")
+        compare(workspace.currentText, "coding")
+        compare(mock.calls.length, 0)
+        compare(mock.commands.length, 0)
+        item("save-assistant-scene").clicked()
+        compare(mock.calls.length, 1)
+        compare(mock.calls[0].name, "carlos.scenes.save")
+        compare(mock.calls[0].args.workspace, "coding")
+        workspace.currentIndex = 0
+        item("save-assistant-scene").clicked()
+        compare(mock.calls[1].args.workspace, "")
+    }
     function test_personal_library_save_is_explicit_and_keeps_title() {
         click("nav-10")
         item("personal-library-kind").currentIndex=1

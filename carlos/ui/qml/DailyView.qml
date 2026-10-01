@@ -68,6 +68,7 @@ Item {
                         Layout.fillWidth: true
                         ComboBox {
                             id: assistantScene; Layout.fillWidth: true
+                            objectName: "assistant-scene-picker"
                             model: Object.keys(root.dashboardData.assistant_scenes || {})
                             onActivated: {
                                 const scene = root.dashboardData.assistant_scenes[currentText];
@@ -76,17 +77,29 @@ Item {
                                 assistantSceneCommands.text = (scene.commands || []).join("\n");
                                 assistantSceneHud.currentIndex = assistantSceneHud.model.indexOf(scene.hud);
                                 assistantSceneQuiet.checked = !!scene.quiet;
+                                assistantSceneWorkspace.currentIndex = Math.max(0, assistantSceneWorkspace.model.indexOf(scene.workspace || ""));
                             }
                         }
                         ActionButton { text: "RUN SCENE"; enabled: assistantScene.currentText.length > 0; onClicked: root.client.sendCommand("activate " + assistantScene.currentText + " scene") }
                     }
                     RowLayout {
                         Layout.fillWidth: true
-                        Field { id: assistantSceneName; Layout.fillWidth: true; placeholderText: "Scene name" }
+                        Field { id: assistantSceneName; objectName: "assistant-scene-name"; Layout.fillWidth: true; placeholderText: "Scene name" }
                         ComboBox { id: assistantSceneHud; model: ["CARLOS", "PROJECT", "SYSTEM", "MEDIA", "REMOTE"] }
                         CheckBox { id: assistantSceneQuiet; text: "Quiet notifications" }
                     }
                     Field { id: assistantSceneDescription; Layout.fillWidth: true; placeholderText: "Description" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text { text: "Restore workspace"; color: "#91adbf"; font.pixelSize: 11 }
+                        ComboBox {
+                            id: assistantSceneWorkspace
+                            objectName: "scene-workspace"
+                            Layout.fillWidth: true
+                            model: [""].concat(root.dashboardData.saved_workspaces || [])
+                            displayText: currentText || "No workspace restoration"
+                        }
+                    }
                     TextArea {
                         id: assistantSceneCommands; Layout.fillWidth: true; Layout.preferredHeight: 80
                         placeholderText: "One command per line, up to eight. Example: open Firefox"
@@ -94,11 +107,13 @@ Item {
                         background: HudPanel { color: "#071320"; lineColor: "#29485d"; cut: 8 }
                     }
                     ActionButton {
+                        objectName: "save-assistant-scene"
                         text: "SAVE SCENE"; enabled: assistantSceneName.text.trim().length > 0
                         onClicked: root.client.callTool("carlos.scenes.save", {
                             name: assistantSceneName.text.trim(), description: assistantSceneDescription.text,
                             commands: assistantSceneCommands.text.split("\n").map(s => s.trim()).filter(s => s.length > 0),
-                            hud: assistantSceneHud.currentText, quiet: assistantSceneQuiet.checked
+                            hud: assistantSceneHud.currentText, quiet: assistantSceneQuiet.checked,
+                            workspace: assistantSceneWorkspace.currentText
                         })
                     }
                     Text { text: "PRIVACY PROFILE"; color: "#b5eaff"; font.pixelSize: 14; font.bold: true }
