@@ -129,6 +129,45 @@ class SpeechWakeTests(unittest.IsolatedAsyncioTestCase):
         await self.wake._check(bytes(16000))
         self.detected.assert_not_awaited()
 
+    async def test_small_model_false_name_requires_main_model_confirmation(self):
+        self.stt.transcribe.return_value.raw = 'Carlos are getting expensive.'
+        verify = AsyncMock(return_value=SimpleNamespace(raw='Car loans are getting expensive.'))
+        self.wake.verify = verify
+        await self.wake._check(bytes(16000))
+        verify.assert_awaited_once()
+        self.detected.assert_not_awaited()
+        self.assertEqual(self.wake.snapshot()['verification_state'], 'REJECTED')
+
+    async def test_confirmed_wake_uses_verified_command_and_not_preview_text(self):
+        self.stt.transcribe.return_value.raw = 'Carlos, delete stuff.'
+        self.wake.verify = AsyncMock(return_value=SimpleNamespace(raw='Hey Carlos.'))
+        await self.wake._check(bytes(16000))
+        self.detected.assert_awaited_once()
+        self.assertEqual(self.detected.await_args.args[0]['keyword'], 'HEY_CARLOS')
+        self.assertFalse(self.detected.await_args.args[0]['seed_is_command'])
+        self.assertEqual(self.wake.verification_state, 'CONFIRMED')
+
+    async def test_verifier_failure_does_not_fall_back_to_unverified_wake(self):
+        self.wake.verify = AsyncMock(side_effect=OSError('model unavailable'))
+        await self.wake._check(bytes(16000))
+        self.detected.assert_not_awaited()
+        self.assertEqual(self.wake.verification_state, 'UNAVAILABLE')
+        self.assertEqual(self.wake.status, 'RETRY_LATER')
+
+    async def test_attention_change_during_verification_discards_candidate(self):
+        async def verify(_):
+            self.allowed = False
+            return SimpleNamespace(raw='Carlos, open Firefox.')
+        self.wake.verify = verify
+        await self.wake._check(bytes(16000))
+        self.detected.assert_not_awaited()
+        self.assertEqual(self.wake.verification_state, 'REJECTED')
+
+    def test_manager_configures_main_local_stt_verifier(self):
+        bus = PhaxEventBus()
+        manager = VoiceManager({}, bus, StateMachine(bus))
+        self.assertEqual(manager.speech_wake.verify, manager.stt.transcribe)
+
     async def test_stale_result_cannot_wake_after_state_changes(self):
         started, finish = asyncio.Event(), asyncio.Event()
 

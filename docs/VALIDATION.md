@@ -179,3 +179,24 @@ write, speech cleanup failures and setting persistence. 1,071 Python tests
 passed. Existing native settings render this new boolean field dynamically;
 no native/UI files changed. Unsupported players do not duck. The isolated bus
 fixture emits no audio and does not alter the user's players.
+
+Wake speech backup now confirms a candidate using the main local STT adapter
+before emitting a wake. A small-model transcription of “Car loans are getting
+expensive” incorrectly began with Carlos; main-model confirmation rejected that
+exact PCM sample. Verification failure or an attention/privacy change discards
+the candidate. Both transcription stages share an eight-second deadline. The
+primary keyword listener is unchanged; this adds latency only to the speech
+backup. Five new regressions cover rejection, confirmed command provenance,
+unavailable verification, stale attention and manager wiring. 1,076 Python
+tests passed; 18 speech-wake tests passed in the development tree.
+
+`carlos/scripts/check-offline-voice.py --run` requires a disposable Linux network
+namespace with loopback only. It synthesizes silent Piper samples, runs the
+actual keyword worker, neural VAD, main STT and configured small STT backup.
+`--samples` caches only the fixed synthetic corpus for identical-audio
+comparisons. Eight samples passed after confirmation: Hey Carlos plus three
+standalone Carlos samples, and four negative phrases including car loans/call
+us. This is synthetic offline acceptance, not normal-distance or media/AEC
+acceptance. Earlier freshly synthesized short-name samples occasionally missed
+both recognizers, so this does not establish a physical wake success rate.
+No microphone, playback, desktop changes or cloud request is involved.

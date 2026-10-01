@@ -77,6 +77,7 @@ class VoiceManager:
             self._speech_wake_allowed,
             self._on_wake_detected,
             speech_probability=float(config.get("vad", {}).get("speech_probability", 0.45)),
+            verify=self.stt.transcribe,
         )
         self.command_handler: CommandHandler | None = None
         self.response_handler: ResponseHandler | None = None

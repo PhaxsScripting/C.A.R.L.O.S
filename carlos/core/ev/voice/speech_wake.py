@@ -26,8 +26,12 @@ class SpeechWakeFallback:
         detected: Callable[[dict[str, Any]], Awaitable[None]],
         *,
         speech_probability: float = 0.45,
+        verify: Callable[[bytes], Awaitable[Any]] | None = None,
     ) -> None:
         self.vad, self.stt, self.allowed, self.detected = vad, stt, allowed, detected
+        self.verify = verify
+        self.verification_checks = 0
+        self.verification_state = 'NOT_REQUESTED'
         # This gate only selects audio for local transcription. The exact
         # leading name remains mandatory before waking or running anything.
         self.speech_probability = max(0.25, min(0.8, float(speech_probability)))
@@ -58,6 +62,8 @@ class SpeechWakeFallback:
             "max_speech_probability": self.max_probability,
             "speech_threshold": self.speech_probability,
             "rejected_segments": self.rejected_segments,
+            'verification_checks': self.verification_checks,
+            'verification_state': self.verification_state,
         }
 
     def reset(self) -> None:
@@ -116,10 +122,22 @@ class SpeechWakeFallback:
 
     async def _check(self, pcm: bytes) -> None:
         self.status = "CHECKING"
+        self.verification_state = 'NOT_REQUESTED'
         self.checks += 1
         try:
+            deadline = time.monotonic() + 8
             transcript = await asyncio.wait_for(self.stt.transcribe(pcm), 8)
             if self.allowed() and _NAME.match(transcript.raw):
+                if self.verify is not None:
+                    self.verification_checks += 1
+                    self.verification_state = 'CHECKING'
+                    transcript = await asyncio.wait_for(self.verify(pcm),
+                                                        max(0, deadline - time.monotonic()))
+                    if not self.allowed() or not _NAME.match(transcript.raw):
+                        self.verification_state = 'REJECTED'
+                        self.status = 'LISTENING'
+                        return
+                    self.verification_state = 'CONFIRMED'
                 self.matches += 1
                 self.status = "DETECTED"
                 await self.detected(
@@ -137,9 +155,13 @@ class SpeechWakeFallback:
             else:
                 self.status = "LISTENING"
         except asyncio.CancelledError:
+            if self.verification_state == 'CHECKING':
+                self.verification_state = 'CANCELLED'
             self.status = "CANCELLED"
             raise
         except Exception:
+            if self.verification_state == 'CHECKING':
+                self.verification_state = 'UNAVAILABLE'
             self.status = "RETRY_LATER"
             self.next_check = time.monotonic() + 10
         finally:
