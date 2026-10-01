@@ -321,4 +321,15 @@ TestCase {
         tryCompare(ui,"reducedMotion",true)
         compare(ui.animationsRunning,false)
     }
+    function test_readiness_timings_distinguish_unknown_from_zero() {
+        ui.testPage = 9
+        mock.daily = {readiness:{timing:{startup_to_all_ready_seconds:null,last_resume:null}}}
+        tryCompare(item("startup-readiness-time"), "text", "Startup readiness: waiting for all components")
+        compare(item("resume-readiness-time").text, "Resume readiness: no resume observed")
+        mock.daily = {readiness:{timing:{startup_to_all_ready_seconds:0,last_resume:{resume_to_all_ready_range_seconds:null}}}}
+        tryCompare(item("startup-readiness-time"), "text", "Startup readiness: 0.0 s")
+        compare(item("resume-readiness-time").text, "Resume readiness: waiting for fresh checks")
+        mock.daily = {readiness:{timing:{startup_to_all_ready_seconds:3.2,last_resume:{resume_to_all_ready_range_seconds:[2,7.5]}}}}
+        tryCompare(item("resume-readiness-time"), "text", "Resume readiness: 2.0 to 7.5 s (observed range)")
+    }
 }

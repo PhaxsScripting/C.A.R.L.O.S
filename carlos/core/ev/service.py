@@ -511,12 +511,15 @@ class CarlosCore:
                     )
                 if event.type == "system.telemetry":
                     self.latest_telemetry = event.payload
+                    self.holosystem.observe_readiness()
                     if self.insights.consume(event):
                         self.bus.publish(
                             "agent.insights_changed",
                             "insights",
                             {"items": self.insights.snapshot()},
                         )
+                if event.type == "system.resume_observed":
+                    self.holosystem.readiness_timing.resumed(event)
                 if event.type == "voice.conversation_ended":
                     self.desktop.input.cancel_current()
                     cleanup = asyncio.create_task(self.desktop.input.close())

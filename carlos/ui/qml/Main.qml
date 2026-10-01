@@ -940,6 +940,21 @@ ApplicationWindow {
                                     text: modelData + " / " + evClient.daily.readiness.components[modelData]
                                 }
                             }
+                            Text {
+                                objectName: "startup-readiness-time"
+                                Layout.fillWidth: true; color: appWindow.dim; wrapMode: Text.WordWrap
+                                readonly property var measured: get(get(get(evClient.daily, "readiness", {}), "timing", {}), "startup_to_all_ready_seconds", null)
+                                text: "Startup readiness: " + (typeof measured === "number" && isFinite(measured) ? measured.toFixed(1) + " s" : "waiting for all components")
+                            }
+                            Text {
+                                objectName: "resume-readiness-time"
+                                Layout.fillWidth: true; color: appWindow.dim; wrapMode: Text.WordWrap
+                                readonly property var resume: get(get(get(evClient.daily, "readiness", {}), "timing", {}), "last_resume", null)
+                                readonly property var range: resume ? get(resume, "resume_to_all_ready_range_seconds", null) : null
+                                text: !resume ? "Resume readiness: no resume observed" :
+                                      range && range.length === 2 ? "Resume readiness: " + Number(range[0]).toFixed(1) + " to " + Number(range[1]).toFixed(1) + " s (observed range)" :
+                                      "Resume readiness: waiting for fresh checks"
+                            }
                             TitleText { text: "CORE LINK" }
                             SectionPanel {
                                 Layout.fillWidth: true

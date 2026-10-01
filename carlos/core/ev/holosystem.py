@@ -10,6 +10,8 @@ class HoloSystem:
     def __init__(self, core):
         self.core = core
         self.started = time.monotonic()
+        from .readiness import ReadinessTiming
+        self.readiness_timing = ReadinessTiming(self.started)
         self._cache = {}
         self._checked = 0.0
         self._probe_lock = asyncio.Lock()
@@ -161,13 +163,22 @@ class HoloSystem:
         self._checked = time.monotonic()
         return self._cache
 
-    def status(self):
-        c = self.core
+    def observe_readiness(self):
         from .readiness import project_readiness
 
-        readiness = project_readiness(
-            c.snapshot(), self._cache, getattr(c, "startup_ipc_seconds", None)
-        )
+        c = self.core
+        resumed = self.readiness_timing.resume
+        snapshot = {"voice": c.voice.snapshot(), "health": dict(c.health_supervisor.components),
+                    "desktop": c.kwin_bridge.status}
+        readiness = project_readiness(snapshot, self._cache, getattr(c, "startup_ipc_seconds", None),
+                                      fresh_after=resumed["observed_at"] if resumed else None)
+        self.readiness_timing.observe(readiness)
+        readiness["timing"] = self.readiness_timing.snapshot()
+        return readiness
+
+    def status(self):
+        c = self.core
+        readiness = self.observe_readiness()
         return {
             **identity(),
             "state": STATE_NAMES.get(c.state.current.value, c.state.current.value),

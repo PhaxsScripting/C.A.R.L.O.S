@@ -11,6 +11,7 @@ class PresenceMonitor:
         self.state = {"session": "UNKNOWN", "person_identity": "UNVERIFIED", "camera_used": False}
         self.previous_lock = None
         self.sleep_offset = None
+        self.last_clock_check = None
         self.last_addressed = 0.0
         self.locked_since = None
         self.last_greeting = None
@@ -122,21 +123,23 @@ class PresenceMonitor:
                 evidence="No fresh desk evidence; absence is not proven",
             )
 
+    def observe_clock(self, boottime, monotonic):
+        offset = boottime - monotonic
+        if self.sleep_offset is not None and offset - self.sleep_offset > 2:
+            self.bus.publish("system.resume_observed", "presence", {
+                "suspended_seconds": round(offset - self.sleep_offset, 2),
+                "observed_monotonic": monotonic,
+                "detection_interval_seconds": round(max(0, monotonic - self.last_clock_check), 3),
+            })
+        self.sleep_offset = offset
+        self.last_clock_check = monotonic
+
     async def run(self):
         while True:
             p = None
             try:
-                offset = time.clock_gettime(time.CLOCK_BOOTTIME) - time.monotonic()
-                if self.sleep_offset is not None and offset - self.sleep_offset > 2:
-                    self.bus.publish(
-                        "system.resume_observed",
-                        "presence",
-                        {
-                            "suspended_seconds": round(offset - self.sleep_offset, 2),
-                            "detection_interval_seconds": 5,
-                        },
-                    )
-                self.sleep_offset = offset
+                if hasattr(time, "CLOCK_BOOTTIME"):
+                    self.observe_clock(time.clock_gettime(time.CLOCK_BOOTTIME), time.monotonic())
                 p = await asyncio.create_subprocess_exec(
                     "qdbus6",
                     "org.freedesktop.ScreenSaver",
