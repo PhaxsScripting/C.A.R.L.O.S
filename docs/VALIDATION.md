@@ -101,3 +101,19 @@ September 30 installer recovery: 15 targeted tests passed. The real installer sc
 Startup/resume observations now record the first observed READY time per component. Resume samples carry the measured detection interval and expire pre-sleep health evidence; Settings displays an observed range, waiting state, or no sample. No boot benchmark or forced suspend was performed. 1,028 Python tests and all four native Qt/QML/pet groups passed. On the live Gentoo core, hard mute released microphone capture and its wake listener; original privacy settings were restored. Terminating the owned VAD worker recovered in 1.08 seconds while core health remained available.
 
 Power status now keeps AC connection separate from observed charging state. Linux reads documented kernel power-supply status, optional wattage and temperature without writing policy. Unknown, missing and mixed battery states stay explicit; device batteries are excluded. The desktop and battery tool share this observation. Sensor units follow the [kernel power-supply ABI](https://www.kernel.org/doc/Documentation/ABI/testing/sysfs-class-power). 1,036 Python tests and all four Qt/QML/pet groups passed. This does not diagnose the cause of a charging fault.
+
+## October 1: session presence
+
+The core now listens to desktop lock signals directly on the session bus, with
+bounded refresh calls for missed signals. It recognizes the freedesktop, GNOME,
+Cinnamon, MATE and Xfce interfaces without requiring KDE command-line tools.
+Signals must match the service's current bus owner, interface and object path.
+Losing the service clears old presence and attention evidence. Unsupported idle
+time stays unknown; it does not disable lock monitoring.
+
+Six new tests cover invalid signals, a stalled service, unsupported idle time,
+owner changes and loss of service. The transport fixture runs actual method
+calls and signals on a disposable D-Bus session for every supported object path.
+It does not lock the user's desktop. The Python suite passed 1,042 tests before
+the subsequent offline transport checks. Interactive testing on other desktops
+and physical occupancy detection remain separate.

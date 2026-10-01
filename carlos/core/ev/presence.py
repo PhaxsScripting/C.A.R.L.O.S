@@ -134,53 +134,38 @@ class PresenceMonitor:
         self.sleep_offset = offset
         self.last_clock_check = monotonic
 
+    def observe_session(self, locked, idle, backend):
+        if locked is None:
+            changed = self.state.get("session") != "UNKNOWN"
+            self.previous_lock = self.locked_since = None
+            self.last_addressed = 0.0
+            self.idle_supported = None
+            self.state.update(session="UNKNOWN", presence="UNKNOWN", confidence=0.0,
+                              camera_used=False, idle_seconds=None, idle_supported=False,
+                              attention="DORMANT", observed_at=time.time(),
+                              lock_backend=backend, evidence="Session lock service unavailable")
+            if changed:
+                self.bus.publish("presence.session_changed", "presence", dict(self.state))
+            return
+        self.idle_supported = idle is not None
+        self.state.update(idle_seconds=idle, idle_supported=self.idle_supported, lock_backend=backend)
+        self.observe_lock(locked)
+
     async def run(self):
-        while True:
-            p = None
-            try:
+        from .session_lock import SessionLockMonitor
+        monitor = SessionLockMonitor(self.observe_session)
+        task = asyncio.create_task(monitor.run(), name="session-lock-monitor")
+        try:
+            while True:
                 if hasattr(time, "CLOCK_BOOTTIME"):
                     self.observe_clock(time.clock_gettime(time.CLOCK_BOOTTIME), time.monotonic())
-                p = await asyncio.create_subprocess_exec(
-                    "qdbus6",
-                    "org.freedesktop.ScreenSaver",
-                    "/ScreenSaver",
-                    "org.freedesktop.ScreenSaver.GetActive",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.DEVNULL,
-                )
-                out, _ = await asyncio.wait_for(p.communicate(), 2)
-                value = out.strip()
-                if p.returncode == 0 and value in {b"true", b"false"}:
-                    locked = value == b"true"
-                    self.observe_lock(locked)
-                    if self.idle_supported is not False:
-                        p = await asyncio.create_subprocess_exec(
-                            "qdbus6",
-                            "org.freedesktop.ScreenSaver",
-                            "/ScreenSaver",
-                            "org.freedesktop.ScreenSaver.GetSessionIdleTime",
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.DEVNULL,
-                        )
-                        idle, _ = await asyncio.wait_for(p.communicate(), 2)
-                        self.idle_supported = p.returncode == 0 and idle.strip().isdigit()
-                        self.state["idle_seconds"] = (
-                            int(idle.strip()) if self.idle_supported else None
-                        )
-                        self.state["idle_supported"] = self.idle_supported
-                    if not locked and self.config.get("hand_presence", True):
-                        from .tools.holohand import status
-
-                        try:
-                            self.observe_hand(await status({}, None))
-                        except (OSError, ValueError):
-                            self.observe_hand({})
-                else:
-                    self.state["session"] = "UNKNOWN"
-            except (OSError, TimeoutError):
-                self.state["session"] = "UNKNOWN"
-            finally:
-                if p is not None and p.returncode is None:
-                    p.kill()
-                    await p.wait()
-            await asyncio.sleep(5)
+                if self.state.get("session") == "UNLOCKED" and self.config.get("hand_presence", True):
+                    from .tools.holohand import status
+                    try:
+                        self.observe_hand(await status({}, None))
+                    except (OSError, ValueError):
+                        self.observe_hand({})
+                await asyncio.sleep(5)
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
