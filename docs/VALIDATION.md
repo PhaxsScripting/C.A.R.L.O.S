@@ -262,3 +262,11 @@ The native client now invalidates current wake/provider/telemetry/readiness,
 approvals, activity and active-plan readings when IPC disconnects. Conversation
 history remains visible. The real socket test verifies invalidation; existing
 reconnect/no-replay tests passed with all four native groups in 11.63 seconds.
+
+Structured and stderr logging now redact recognized credential patterns after
+message interpolation and from exception tracebacks, as well as from structured
+fields. Two real-handler tests write disposable logs, capture stderr and verify
+that credential canaries never reach either output while ordinary error text
+remains useful. All 1,086 Python tests and both development tests passed.
+This protects recognizable credential patterns; it is not a detector for an
+unlabelled arbitrary secret. Existing historical log files were not rewritten.

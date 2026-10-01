@@ -55,14 +55,19 @@ class JsonFormatter(logging.Formatter):
             "time": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
             "level": record.levelname,
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": redact_credentials(record.getMessage()),
         }
         fields = getattr(record, "fields", None)
         if isinstance(fields, dict):
             payload["fields"] = redact(fields)
         if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+            payload["exception"] = redact_credentials(self.formatException(record.exc_info))
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+class RedactedFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        return redact_credentials(super().format(record))
 
 
 def configure_logging(log_file: Path, verbose: bool = False) -> logging.Logger:
@@ -82,6 +87,6 @@ def configure_logging(log_file: Path, verbose: bool = False) -> logging.Logger:
 
     stderr_handler = logging.StreamHandler()
     stderr_handler.setLevel(logging.DEBUG if verbose else logging.WARNING)
-    stderr_handler.setFormatter(logging.Formatter("Carlos %(levelname)s: %(message)s"))
+    stderr_handler.setFormatter(RedactedFormatter("Carlos %(levelname)s: %(message)s"))
     logger.addHandler(stderr_handler)
     return logger
