@@ -12,8 +12,6 @@ autostart_dir="$config_home/autostart"
 icon_dir="$data_home/icons/hicolor/scalable/apps"
 dbus_services_dir="$data_home/dbus-1/services"
 timestamp=$(date -u +%Y%m%dT%H%M%SZ)
-backup_root="$state_home/ev/install-backups/$timestamp"
-manifest="$backup_root/manifest.tsv"
 start_core=true
 
 if [ "${1:-}" = "--no-start" ]; then
@@ -37,6 +35,9 @@ if [ "$(id -u)" = 0 ] && [ "${CARLOS_INSTALL_TEST:-}" != 1 ]; then
     exit 1
 fi
 
+mkdir -p "$state_home/ev/install-backups"
+backup_root=$(mktemp -d "$state_home/ev/install-backups/$timestamp.XXXXXX")
+manifest="$backup_root/manifest.tsv"
 mkdir -p "$backup_root/files" "$bin_home" "$applications_dir" "$autostart_dir" "$icon_dir" "$dbus_services_dir" "$(dirname -- "$app_root")"
 chmod 700 "$backup_root" "$(dirname -- "$app_root")"
 : > "$manifest"
@@ -47,7 +48,7 @@ backup_target() {
     target=$2
     if [ -e "$target" ] || [ -L "$target" ]; then
         previous="$backup_root/files/$key"
-        mv -- "$target" "$previous"
+        cp -a -- "$target" "$previous"
     else
         previous=-
     fi
@@ -73,13 +74,17 @@ printf 'panel\t%s\nkdeglobals\t%s\nkwin\t%s\n' "$panel_before" "$kdeglobals_befo
 stage_root=$(mktemp -d "$(dirname -- "$app_root")/.ev-stage.XXXXXX")
 installation_changed=false
 rollback_attempted=false
+restore_option=
+if [ "$start_core" = false ]; then
+    restore_option=--no-start
+fi
 finish_install() {
     result=$?
     trap - EXIT HUP INT TERM
     rm -rf -- "$stage_root"
     if [ "$result" -ne 0 ] && [ "$installation_changed" = true ] && [ "$rollback_attempted" = false ]; then
         printf '%s\n' "Installation interrupted; restoring the recorded previous files." >&2
-        if ! "$install_python" "$project_root/scripts/rollback-user.py" "$backup_root" --apply; then
+        if ! "$install_python" "$project_root/scripts/rollback-user.py" "$backup_root" --apply $restore_option; then
             printf '%s\n' "Restore needs attention. Preserved manifest: $manifest" >&2
         fi
     fi
@@ -101,7 +106,6 @@ fi
 "$install_python" "$project_root/scripts/prepare-runtime.py" "$stage_root/app/venv" "$app_root/venv" "$project_root/requirements.txt"
 PYTHONPATH="$stage_root/app/core" "$stage_root/app/venv/bin/python" -c 'import aiohttp, psutil, PIL, jeepney, dbus, gi; import ev.service'
 
-installation_changed=true
 backup_target app "$app_root"
 backup_target ev-core "$bin_home/ev-core"
 backup_target evctl "$bin_home/evctl"
@@ -117,6 +121,36 @@ backup_target shell-autostart "$autostart_dir/ev-shell.desktop"
 backup_target icon "$icon_dir/ev-control-center.svg"
 backup_target dbus-service "$dbus_services_dir/com.ev.Core.service"
 
+if [ "$start_core" = true ]; then
+    if [ -x "$bin_home/evctl" ]; then
+        timeout 8 "$bin_home/evctl" stop >/dev/null 2>&1 || true
+    fi
+    attempts=0
+    while [ "$attempts" -lt 150 ]; do
+        owner=$(gdbus call --session --dest org.freedesktop.DBus \
+            --object-path /org/freedesktop/DBus \
+            --method org.freedesktop.DBus.NameHasOwner com.ev.Core) || {
+            printf '%s\n' "Cannot check Carlos's session; installed files were left alone." >&2
+            exit 1
+        }
+        case "$owner" in
+            '(false,)') break ;;
+            '(true,)') ;;
+            *) printf '%s\n' "Unexpected session response; installed files were left alone." >&2; exit 1 ;;
+        esac
+        attempts=$((attempts + 1))
+        sleep 0.2
+    done
+    if [ "$attempts" -ge 150 ]; then
+        printf '%s\n' "Carlos did not stop; installed files were left alone." >&2
+        exit 1
+    fi
+fi
+
+installation_changed=true
+if [ -e "$app_root" ] || [ -L "$app_root" ]; then
+    mv -- "$app_root" "$stage_root/previous-app"
+fi
 mv -- "$stage_root/app" "$app_root"
 
 install -m 755 "$project_root/scripts/ev-core" "$bin_home/ev-core"
@@ -157,21 +191,6 @@ if command -v update-desktop-database >/dev/null 2>&1; then
 fi
 
 if [ "$start_core" = true ]; then
-    if "$bin_home/evctl" health >/dev/null 2>&1; then
-        "$bin_home/evctl" pause-wake >/dev/null 2>&1 || true
-        "$bin_home/evctl" stop >/dev/null 2>&1 || true
-        attempts=0
-        while [ "$attempts" -lt 150 ]; do
-            if ! gdbus call --session \
-                --dest org.freedesktop.DBus \
-                --object-path /org/freedesktop/DBus \
-                --method org.freedesktop.DBus.NameHasOwner com.ev.Core 2>/dev/null | grep -q true; then
-                break
-            fi
-            attempts=$((attempts + 1))
-            sleep 0.2
-        done
-    fi
     gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus --method org.freedesktop.DBus.ReloadConfig >/dev/null 2>&1 || true
     "$bin_home/ev-activate" >/dev/null || true
     ready=false
@@ -187,7 +206,7 @@ if [ "$start_core" = true ]; then
     if [ "$ready" != true ]; then
         printf '%s\n' "New Carlos core did not become healthy; restoring the previous installation." >&2
         rollback_attempted=true
-        if "$install_python" "$project_root/scripts/rollback-user.py" "$backup_root" --apply; then
+        if "$install_python" "$project_root/scripts/rollback-user.py" "$backup_root" --apply $restore_option; then
             printf '%s\n' "Previous installation restored and health-checked; the failed version was retained in the rollback directory." >&2
         else
             printf '%s\n' "Automatic rollback did not finish. Preserved rollback manifest: $backup_root/manifest.tsv" >&2

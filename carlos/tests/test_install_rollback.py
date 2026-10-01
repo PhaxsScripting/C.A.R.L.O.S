@@ -76,3 +76,33 @@ class RollbackTests(unittest.TestCase):
             self.assertEqual(
                 [(backup / "files" / str(i)).read_text() for i in range(2)], ["old 0", "old 1"]
             )
+
+    def test_restores_broken_launcher_symlink_without_following_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            backup = root / "backup"
+            (backup / "files").mkdir(parents=True)
+            target = root / "launcher"
+            target.write_text("new launcher")
+            previous = backup / "files/launcher"
+            previous.symlink_to("missing-old-runtime")
+            (backup / "manifest.tsv").write_text(f"{target}\t{previous}\n")
+            plan = rollback.read_plan(backup, {target})
+            rollback.restore(plan, backup)
+            self.assertTrue(target.is_symlink())
+            self.assertEqual(str(target.readlink()), "missing-old-runtime")
+            self.assertTrue(previous.is_symlink())
+
+    def test_rejects_backup_parent_symlink_escape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            backup = root / "backup"
+            (backup / "files").mkdir(parents=True)
+            outside = root / "outside"
+            outside.mkdir()
+            (outside / "file").write_text("unrelated")
+            (backup / "files/escape").symlink_to(outside, target_is_directory=True)
+            target = root / "launcher"
+            (backup / "manifest.tsv").write_text(f"{target}\t{backup}/files/escape/file\n")
+            with self.assertRaises(ValueError):
+                rollback.read_plan(backup, {target})

@@ -44,7 +44,8 @@ def read_plan(backup, allowed):
             raise ValueError("Manifest has an unexpected or duplicate target")
         previous = None if previous_text == "-" else Path(previous_text)
         if previous is not None:
-            if not previous.exists() or not previous.resolve().is_relative_to(backup / "files"):
+            if (not (previous.exists() or previous.is_symlink())
+                    or not previous.parent.resolve().is_relative_to(backup / "files")):
                 raise ValueError("Backup entry is missing or escapes its backup directory")
         plan.append((target, previous))
     if not plan:
@@ -59,10 +60,10 @@ def restore(plan, backup):
         for index, (target, previous) in enumerate(plan):
             source = Path(staging) / str(index)
             if previous is not None:
-                if previous.is_dir():
+                if previous.is_dir() and not previous.is_symlink():
                     shutil.copytree(previous, source, symlinks=True)
                 else:
-                    shutil.copy2(previous, source)
+                    shutil.copy2(previous, source, follow_symlinks=False)
             staged.append((target, source if previous is not None else None))
         retained = Path(tempfile.mkdtemp(prefix="replaced-", dir=backup))
         applied = []
@@ -93,6 +94,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("backup", type=Path)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--no-start", action="store_true", help="Restore files without contacting the desktop session")
     args = parser.parse_args()
     home = Path.home()
     data = Path(os.environ.get("XDG_DATA_HOME", home / ".local/share"))
@@ -107,61 +109,62 @@ def main():
     if not args.apply:
         print("Preview only; use --apply to stop Carlos, restore and restart.")
         return
-    ctl = home / ".local/bin/evctl"
-    # A partially completed install may not yet have restored its launcher.
-    # Use the reviewed source CLI when the installed launcher cannot run.
-    try:
-        stopped = subprocess.run(
-            [str(ctl), "stop"],
-            timeout=8,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
-        fallback = stopped.returncode != 0
-    except (OSError, subprocess.TimeoutExpired):
-        fallback = True
-    if fallback:
-        source = Path(__file__).resolve().parents[1] / "core"
+    if not args.no_start:
+        ctl = home / ".local/bin/evctl"
+        # A partially completed install may not yet have restored its launcher.
+        # Use the reviewed source CLI when the installed launcher cannot run.
         try:
-            subprocess.run(
-                ["/usr/bin/python3", "-m", "ev.cli", "stop"],
-                env={**os.environ, "PYTHONPATH": str(source)},
+            stopped = subprocess.run(
+                [str(ctl), "stop"],
                 timeout=8,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
             )
-        except subprocess.TimeoutExpired:
-            pass
-    for _ in range(150):
-        result = subprocess.run(
-            [
-                "gdbus",
-                "call",
-                "--session",
-                "--dest",
-                "org.freedesktop.DBus",
-                "--object-path",
-                "/org/freedesktop/DBus",
-                "--method",
-                "org.freedesktop.DBus.NameHasOwner",
-                "com.ev.Core",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=2,
-            check=True,
-        )
-        if "false" in result.stdout:
-            break
-        time.sleep(0.2)
-    else:
-        raise RuntimeError("Core did not stop; installed files were not restored")
+            fallback = stopped.returncode != 0
+        except (OSError, subprocess.TimeoutExpired):
+            fallback = True
+        if fallback:
+            source = Path(__file__).resolve().parents[1] / "core"
+            try:
+                subprocess.run(
+                    ["/usr/bin/python3", "-m", "ev.cli", "stop"],
+                    env={**os.environ, "PYTHONPATH": str(source)},
+                    timeout=8,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                pass
+        for _ in range(150):
+            result = subprocess.run(
+                [
+                    "gdbus",
+                    "call",
+                    "--session",
+                    "--dest",
+                    "org.freedesktop.DBus",
+                    "--object-path",
+                    "/org/freedesktop/DBus",
+                    "--method",
+                    "org.freedesktop.DBus.NameHasOwner",
+                    "com.ev.Core",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=True,
+            )
+            if "false" in result.stdout:
+                break
+            time.sleep(0.2)
+        else:
+            raise RuntimeError("Core did not stop; installed files were not restored")
     retained = restore(plan, backup)
     print("Replaced files retained at", retained)
     activate = home / ".local/bin/ev-activate"
-    if activate.exists():
+    if not args.no_start and activate.exists():
         subprocess.run([str(activate)], timeout=45, check=True)
         subprocess.run([str(ctl), "health"], timeout=5, check=True)
 
