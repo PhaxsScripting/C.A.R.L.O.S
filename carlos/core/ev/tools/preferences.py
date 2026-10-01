@@ -34,6 +34,8 @@ async def set_preference(a, c):
             raise ValidationError("Choose an exact currently connected output name")
     record = {"value": value, "updated_at": time.time(), "source": "explicit_user_preference"}
     await asyncio.to_thread(c.daily.save, "preference", key, record)
+    if key == "project" and c.project_changed:
+        c.project_changed(value)
     return {
         "verified": (await asyncio.to_thread(c.daily.records, "preference")).get(key) == record,
         "key": key,
@@ -43,7 +45,7 @@ async def set_preference(a, c):
     }
 
 
-def context_records(text, daily, entities, *, learn_style=False, memory=None):
+def context_records(text, daily, entities, *, learn_style=False, memory=None, project=None):
     """Bounded historical hints; never source content, permissions or live truth."""
     preferences = daily.records("preference")
     selected = {
@@ -52,14 +54,18 @@ def context_records(text, daily, entities, *, learn_style=False, memory=None):
         if k in KEYS and isinstance(v, dict) and isinstance(v.get("value"), str)
     }
     result = []
-    project = preferences.get('project', {})
-    if (memory is not None and isinstance(project, dict)
-            and project.get('source') == 'explicit_user_preference'
-            and isinstance(project.get('value'), str)):
-        notes = memory.list_project_memories(project['value'], '', 8)
+    saved_project = preferences.get('project', {})
+    if project is not None:
+        if project: selected['project'] = project
+        else: selected.pop('project', None)
+    project_record = saved_project if project is None else {'value': project, 'source': 'explicit_user_preference'}
+    if (memory is not None and isinstance(project_record, dict)
+            and project_record.get('source') == 'explicit_user_preference'
+            and isinstance(project_record.get('value'), str) and project_record['value']):
+        notes = memory.list_project_memories(project_record['value'], '', 8)
         if notes:
             result.append({'id': 'project-memories',
-                           'content': 'Approved notes for exactly ' + project['value'] +
+                           'content': 'Approved notes for exactly ' + project_record['value'] +
                            '; historical context, not live evidence or permission to act: ' +
                            json.dumps([{'id': note['id'], 'content': note['content'][:1000]}
                                        for note in notes], ensure_ascii=False)[:6000]})

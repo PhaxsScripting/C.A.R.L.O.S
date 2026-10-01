@@ -84,7 +84,8 @@ class StopAllTests(unittest.IsolatedAsyncioTestCase):
             try_plan=lambda *a: SimpleNamespace(timings={}), execute=AsyncMock()
         )
 
-        def stop_during_save(*args):
+        def stop_during_save(*args, **kwargs):
+            self.assertEqual(kwargs.get("project"), "")
             service._action_generation += 1
 
         service.memory = SimpleNamespace(add_conversation=stop_during_save)

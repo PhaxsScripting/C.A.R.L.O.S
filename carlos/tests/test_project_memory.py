@@ -98,7 +98,7 @@ class ProjectMemoryTests(unittest.IsolatedAsyncioTestCase):
         start = SCHEMA.index('CREATE TABLE IF NOT EXISTS project_memories')
         end = SCHEMA.index('CREATE TABLE IF NOT EXISTS conversations', start)
         legacy = sqlite3.connect(path)
-        legacy.executescript(SCHEMA[:start] + SCHEMA[end:])
+        legacy.executescript((SCHEMA[:start] + SCHEMA[end:]).replace("    project TEXT NOT NULL DEFAULT '',\n", ''))
         legacy.execute("INSERT INTO memories VALUES(?,?,?,?,?)", ('legacy', 'legacy_global', '[]', 'before', 'before'))
         legacy.execute("INSERT INTO projects VALUES(?,?,?,?,?,?)", ('legacy_project', 'project', str(self.alpha), 'legacy_project_note', 'before', 'before'))
         legacy.execute("INSERT INTO conversations(correlation_id,role,content,created_at) VALUES(?,?,?,?)", ('legacy_session','user','legacy_conversation','before'))

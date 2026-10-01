@@ -52,8 +52,25 @@ async def forget(args, context):
             'storage': storage(context), 'scope': 'One note in this exact project context'}
 
 
+async def select_project(args, context):
+    from .preferences import set_preference
+    if args['project']:
+        return await set_preference({'key': 'project', 'value': args['project']}, context)
+    await asyncio.to_thread(context.daily.remove, 'preference', 'project')
+    if context.project_changed:
+        context.project_changed('')
+    return {'verified': 'project' not in await asyncio.to_thread(context.daily.records, 'preference'),
+            'project': '', 'scope': 'General conversation; saved notes and past conversations kept'}
+
+
 def register_project_memory(registry):
     project = {'type': 'string', 'minLength': 1, 'maxLength': 4096}
+    registry.register(ToolSpec(
+        'memory.project.select', 'MEMORY',
+        'Select the explicitly requested existing project for conversation context, or an empty path for general conversation. Keeps saved notes and past conversations.',
+        Permission.LOW_RISK, object_schema({'project': {'type': 'string', 'maxLength': 4096}}, ['project']),
+        select_project, offline_available=True, reversible=True,
+    ))
     registry.register(ToolSpec(
         'memory.project.search', 'MEMORY', 'Read explicit notes for one exact project directory.',
         Permission.SAFE, object_schema({'project': project,

@@ -39,6 +39,7 @@ class ToolContext:
     media_focus: Any = None
     task_journal: Any = None
     capability_probe: Any = None
+    project_changed: Any = None
 
 
 @dataclass(slots=True)

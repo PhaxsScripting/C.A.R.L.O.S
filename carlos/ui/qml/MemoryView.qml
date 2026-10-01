@@ -28,6 +28,19 @@ Item {
             onTextChanged: page.client.refreshProjectMemories("")
             onAccepted: if (page.client.connected && page.validScope) page.refresh()
         }
+        RowLayout {
+            Layout.fillWidth: true
+            SciButton {
+                objectName: "select-conversation-project"
+                text: page.projectScope ? "Use this project for conversation" : "Use general conversation"
+                enabled: page.client.connected && page.validScope
+                onClicked: page.client.callTool("memory.project.select", {project:page.projectScope ? projectPath.text.trim() : ""})
+            }
+            Text {
+                Layout.fillWidth: true; color: "#8da6b8"; font.pixelSize: 12; wrapMode: Text.Wrap
+                text: "Conversation: " + (page.client.daily.conversation_project || "General")
+            }
+        }
         Text {
             Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#8da6b8"; font.pixelSize: 12
             text: page.projectScope ? "Notes belong to this directory. Loading them here does not change your preferred project." : "General notes are shared across projects."

@@ -321,6 +321,20 @@ TestCase {
         input.accepted()
         compare(mock.commands, ["keep this draft"])
     }
+    function test_project_conversation_selection_is_a_separate_explicit_action() {
+        click("nav-3")
+        click("memory-project")
+        verify(!item("select-conversation-project").enabled)
+        item("memory-project-path").text="/tmp/selected-project"
+        compare(mock.calls.length,0)
+        click("select-conversation-project")
+        compare(mock.calls[0].name,"memory.project.select")
+        compare(mock.calls[0].args.project,"/tmp/selected-project")
+        click("memory-global")
+        compare(mock.calls.length,1)
+        click("select-conversation-project")
+        compare(mock.calls[1].args.project,"")
+    }
     function test_project_memory_requires_a_scope_and_keeps_general_notes_separate() {
         click("nav-3")
         click("memory-project")

@@ -258,6 +258,8 @@ class CarlosCore:
             int(self.config["memory"]["context_character_limit"]),
         )
         self.brain.context_provider = self._model_context
+        self.brain.project_provider = self._project_scope
+        self.tools.context.project_changed = self._project_changed
         self.brain.provider_guard = self.privacy.guard_provider
         self.telemetry = TelemetrySampler(
             self.bus,
@@ -1035,6 +1037,27 @@ class CarlosCore:
         # authorize power/privileged operations reserved for explicit requests.
         return await self.request_tool(payload, request_id, _planner_owned=True)
 
+    async def _project_scope(self):
+        if getattr(getattr(self, 'privacy', None), 'mode', None) == 'GUEST':
+            return ''
+        from .tools.builtin import resolve_allowed
+        from .tools.base import ValidationError
+        record = (await asyncio.to_thread(self.daily.records, 'preference')).get('project', {})
+        if not isinstance(record, dict) or record.get('source') != 'explicit_user_preference':
+            return ''
+        value = record.get('value')
+        if not isinstance(value, str) or not value:
+            return ''
+        try:
+            path = await asyncio.to_thread(resolve_allowed, value, self.tools.context)
+            return str(path) if await asyncio.to_thread(path.is_dir) else ''
+        except ValidationError:
+            return ''
+
+    def _project_changed(self, project):
+        self.planner.last_entities.clear()
+        self.bus.publish('memory.project_changed', 'memory', {'project': project})
+
     async def _model_context(self, text):
         if self.privacy.mode == "GUEST":
             return [
@@ -1051,6 +1074,7 @@ class CarlosCore:
             self.daily,
             dict(self.planner.last_entities),
             memory=self.memory,
+            project=self.brain.context_project.get(),
             learn_style=not self.privacy.ephemeral
             and self.config.get("personality", {}).get("response_length", "normal") == "normal",
         )
@@ -1299,6 +1323,7 @@ class CarlosCore:
             planned = self.planner.reject_confirmation(pending.id)
             if planned is not None:
                 await asyncio.to_thread(self.task_journal.finish, pending.correlation_id, planned)
+                planned["conversation_project"] = self.memory.conversation_project(pending.correlation_id)
                 return {**result, "command": planned}
             continuation = await self.brain.resume_confirmation(pending.id, result)
             await asyncio.to_thread(
@@ -1313,6 +1338,7 @@ class CarlosCore:
         planned = await self.planner.resume_confirmation(pending.id, result)
         if planned is not None:
             await asyncio.to_thread(self.task_journal.finish, pending.correlation_id, planned)
+            planned["conversation_project"] = self.memory.conversation_project(pending.correlation_id)
             return {**result, "command": planned}
         continuation = await self.brain.resume_confirmation(pending.id, result)
         await asyncio.to_thread(
@@ -1417,13 +1443,21 @@ class CarlosCore:
         if self._interactive_task and not self._interactive_task.done():
             return {"status": "busy", "message": "I'm finishing another action."}
         correlation_id = correlation_id or uuid.uuid4().hex
-        task = asyncio.create_task(
-            self._run_journaled_request(text, correlation_id, previous=previous)
-        )
+        project = await self._project_scope()
+        if self._interactive_task and not self._interactive_task.done():
+            return {"status": "busy", "message": "I'm finishing another action."}
+        token = self.brain.context_project.set(project)
+        try:
+            task = asyncio.create_task(
+                self._run_journaled_request(text, correlation_id, previous=previous)
+            )
+        finally:
+            self.brain.context_project.reset(token)
         self._interactive_task = task
         self._interactive_correlation = correlation_id
         try:
             result = await task
+            result["conversation_project"] = project
             await self.reply_streams.finish(correlation_id)
             return result
         except asyncio.CancelledError:
@@ -1817,7 +1851,11 @@ class CarlosCore:
         plan = self.planner.try_plan(text, correlation)
         if plan is not None:
             plan.timings["planning"] = round((time.perf_counter() - planning_started) * 1000, 3)
-            await asyncio.to_thread(self.memory.add_conversation, correlation, "user", text.strip())
+            scoped_context = getattr(getattr(self, "brain", None), "context_project", None)
+            project = scoped_context.get() if scoped_context is not None else None
+            if project is None:
+                project = await self._project_scope()
+            await asyncio.to_thread(self.memory.add_conversation, correlation, "user", text.strip(), project=project)
             if generation != self._action_generation:
                 return {
                     "status": "cancelled",
@@ -2142,6 +2180,7 @@ class CarlosCore:
                 "assistant_scenes": await asyncio.to_thread(self.scenes.definitions),
                 "saved_workspaces": list((await asyncio.to_thread(self.daily.records, 'workspace_layout')).keys()),
                 "active_scene": dict(self.scenes.current),
+                "conversation_project": await self._project_scope(),
                 "privacy_mode": self.privacy.mode,
                 "component_health": dict(self.health_supervisor.components),
                 "reminders": reminders,
@@ -2291,9 +2330,11 @@ class CarlosCore:
                 )
             }
         if request_type == "conversation.list":
+            project = await self._project_scope()
             return {
+                "project": project,
                 "conversations": await asyncio.to_thread(
-                    self.memory.recent_conversation, int(payload.get("limit", 100))
+                    self.memory.recent_conversation, int(payload.get("limit", 100)), project=project
                 )
             }
         if request_type == "agent.tasks.list":

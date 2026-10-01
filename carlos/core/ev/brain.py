@@ -2,6 +2,7 @@ from __future__ import annotations
 from .action_claims import claims_computer_action
 
 import asyncio
+from contextvars import ContextVar
 import re
 import time
 import uuid
@@ -61,6 +62,8 @@ class CommandEngine:
         self.task_timeout_seconds = 120.0
         self._wait_seconds: dict[str, float] = {}
         self.context_provider = None
+        self.project_provider = None
+        self.context_project = ContextVar("command_project", default=None)
         self.provider_guard = None
         self.stream_handler = None
 
@@ -204,6 +207,17 @@ class CommandEngine:
                 self._wait_seconds.pop(correlation_id, None)
                 self._tool_history.pop(correlation_id, None)
 
+    @asynccontextmanager
+    async def _project_session(self):
+        project = self.context_project.get()
+        if project is None:
+            project = await asyncio.wait_for(self.project_provider(), timeout=0.5) if self.project_provider else ''
+        token = self.context_project.set(project)
+        try:
+            yield project
+        finally:
+            self.context_project.reset(token)
+
     async def submit(
         self, text: str, correlation_id: str | None = None, *, resume_context: str = ""
     ) -> dict[str, Any]:
@@ -214,11 +228,11 @@ class CommandEngine:
         if self._command_lock.locked():
             return {"status": "busy", "message": "Carlos is already handling another command."}
         correlation = correlation_id or uuid.uuid4().hex
-        async with self._command_lock, self._recover_failed_command(correlation):
+        async with self._command_lock, self._recover_failed_command(correlation), self._project_session() as project:
             started = time.monotonic()
             self._tool_history[correlation] = []
             clean_text = text.strip()
-            await asyncio.to_thread(self.memory.add_conversation, correlation, "user", clean_text)
+            await asyncio.to_thread(self.memory.add_conversation, correlation, "user", clean_text, project=project)
             self.bus.publish("command.received", "language", {"text": clean_text}, correlation)
             self.state.transition(CoreState.THINKING, "Interpreting command", correlation)
 
@@ -250,7 +264,7 @@ class CommandEngine:
             )
             self.state.transition(CoreState.THINKING, "Memory context assembled", correlation)
             context = await asyncio.to_thread(
-                self.memory.recent_conversation, self.context_turn_limit
+                self.memory.recent_conversation, self.context_turn_limit, project=project
             )
             while (
                 sum(len(item["content"]) for item in context) > self.context_character_limit
@@ -662,6 +676,7 @@ class CommandEngine:
             "execution_status": execution_status,
             "goal_verified": False,
             "recovered_failures": recovered,
+            "conversation_project": self.memory.conversation_project(correlation),
             "tool_receipts": [
                 {
                     "tool": call.name,

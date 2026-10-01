@@ -89,7 +89,7 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         emit connectedChanged();
         setStatus(QStringLiteral("Secure local core connected"));
         refreshSnapshot();
-        sendRequest(QStringLiteral("conversation.list"), {{QStringLiteral("limit"), 100}});
+        refreshConversation();
         // Subscribe before fetching history so no events slip through.
         // processEvent drops duplicates from the overlap.
         sendRequest(QStringLiteral("subscribe"));
@@ -122,6 +122,8 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         m_projectMemories.clear();
         m_projectMemoryRequest.clear();
         m_projectMemoryPath.clear();
+        m_conversationRequest.clear();
+        m_conversationProject.clear();
         m_insights.clear();
         m_security.clear();
         m_diagnostics.clear();
@@ -344,6 +346,9 @@ void EvClient::speak(const QString &text) {
     sendRequest(QStringLiteral("tts.speak"), {{QStringLiteral("text"), text}});
 }
 void EvClient::refreshSnapshot() { sendRequest(QStringLiteral("snapshot")); }
+void EvClient::refreshConversation() {
+    m_conversationRequest = sendRequest(QStringLiteral("conversation.list"), {{QStringLiteral("limit"), 100}});
+}
 void EvClient::refreshMemories() {
     sendRequest(QStringLiteral("memory.list"), {{QStringLiteral("limit"), 100}});
 }
@@ -463,7 +468,9 @@ void EvClient::processResponse(const QJsonObject &message) {
         const QJsonArray events = payload.value(QStringLiteral("events")).toArray();
         for (const QJsonValue &entry : events)
             processEvent(entry.toObject(), true);
-    } else if (requestType == QStringLiteral("conversation.list")) {
+    } else if (requestType == QStringLiteral("conversation.list") && id == m_conversationRequest) {
+        m_conversationRequest.clear();
+        m_conversationProject = payload.value(QStringLiteral("project")).toString();
         m_timeline.clear();
         const QJsonArray conversations = payload.value(QStringLiteral("conversations")).toArray();
         for (const QJsonValue &entry : conversations) {
@@ -540,6 +547,11 @@ void EvClient::processResponse(const QJsonObject &message) {
         }
     } else if (requestType == QStringLiteral("command.submit") ||
                requestType == QStringLiteral("agent.tasks.steer")) {
+        if (payload.value(QStringLiteral("conversation_project")).isString()
+            && payload.value(QStringLiteral("conversation_project")).toString() != m_conversationProject) {
+            setStatus(QStringLiteral("Reply saved in its original project conversation"));
+            return;
+        }
         if (payload.contains(QStringLiteral("response")))
             setStatus(payload.value(QStringLiteral("response")).toString().left(240));
         if (payload.contains(QStringLiteral("cognition"))) {
@@ -564,6 +576,11 @@ void EvClient::processResponse(const QJsonObject &message) {
         if (payload.value(QStringLiteral("tool")).toString() == QStringLiteral("memory.timeline.clear"))
             refreshActivityHistory();
         const QJsonObject command = payload.value(QStringLiteral("command")).toObject();
+        if (command.value(QStringLiteral("conversation_project")).isString()
+            && command.value(QStringLiteral("conversation_project")).toString() != m_conversationProject) {
+            setStatus(QStringLiteral("Approval result saved in its original project conversation"));
+            return;
+        }
         if (!command.isEmpty() && command.contains(QStringLiteral("response"))) {
             m_cognition = objectMap(command.value(QStringLiteral("cognition")));
             emit cognitionChanged();
@@ -616,6 +633,8 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         m_projectMemories.clear();
         m_projectMemoryRequest.clear();
         m_projectMemoryPath.clear();
+        m_conversationRequest.clear();
+        m_conversationProject.clear();
         emit voiceChanged();
         emit timelineChanged();
         emit eventsChanged();
@@ -626,6 +645,15 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         emit cognitionChanged();
         emit activityHistoryChanged();
         emit projectMemoriesChanged();
+    }
+    if (type == QStringLiteral("memory.project_changed") && !historical) {
+        m_conversationProject = payload.value(QStringLiteral("project")).toString();
+        m_timeline.clear();
+        m_cognition.clear();
+        emit timelineChanged();
+        emit cognitionChanged();
+        refreshConversation();
+        refreshDaily();
     }
     const bool audioSample =
         type == QStringLiteral("voice.audio_level") || type == QStringLiteral("tts.audio_level");

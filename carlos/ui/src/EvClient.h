@@ -99,6 +99,7 @@ class EvClient final : public QObject {
     Q_INVOKABLE void respondToConfirmation(bool approved);
     Q_INVOKABLE void refreshSnapshot();
     Q_INVOKABLE void refreshMemories();
+    Q_INVOKABLE void refreshConversation();
     Q_INVOKABLE void refreshProjectMemories(const QString &project);
     Q_INVOKABLE void refreshTools();
     Q_INVOKABLE void refreshPhase3();
@@ -184,6 +185,8 @@ class EvClient final : public QObject {
     QVariantMap m_projectMemories;
     QString m_projectMemoryPath;
     QString m_projectMemoryRequest;
+    QString m_conversationRequest;
+    QString m_conversationProject;
     QVariantList m_insights;
     QVariantMap m_security;
     QVariantMap m_latency;

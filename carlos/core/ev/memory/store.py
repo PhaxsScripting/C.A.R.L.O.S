@@ -45,6 +45,7 @@ CREATE INDEX IF NOT EXISTS project_memories_project_idx ON project_memories(proj
 CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     correlation_id TEXT NOT NULL,
+    project TEXT NOT NULL DEFAULT '',
     role TEXT NOT NULL CHECK(role IN ('user','assistant','system','tool')),
     content TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -84,6 +85,11 @@ class MemoryStore:
         self._connection = sqlite3.connect(path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.executescript(SCHEMA)
+        columns = {row['name'] for row in self._connection.execute('PRAGMA table_info(conversations)')}
+        if 'project' not in columns:
+            self._connection.execute("ALTER TABLE conversations ADD COLUMN project TEXT NOT NULL DEFAULT ''")
+        self._connection.execute('CREATE INDEX IF NOT EXISTS conversations_project_idx ON conversations(project, id)')
+        self._connection.execute('CREATE INDEX IF NOT EXISTS conversations_correlation_idx ON conversations(correlation_id, id)')
         self._connection.commit()
         self._persistent_connection = self._connection
         self.private = False
@@ -201,22 +207,39 @@ class MemoryStore:
                 (project, memory_id),
             ).fetchone() is not None
 
-    def add_conversation(self, correlation_id: str, role: str, content: str) -> None:
+    def add_conversation(self, correlation_id: str, role: str, content: str, *, project: str | None = None) -> None:
         if role not in {"user", "assistant", "system", "tool"}:
             raise ValueError("invalid conversation role")
         with self._lock:
+            existing = self._connection.execute(
+                'SELECT project FROM conversations WHERE correlation_id=? ORDER BY id LIMIT 1',
+                (correlation_id,),
+            ).fetchone()
+            if existing is not None:
+                if project is not None and project != existing['project']:
+                    raise ValueError('Conversation receipt already belongs to another project')
+                project = existing['project']
             self._connection.execute(
-                "INSERT INTO conversations(correlation_id, role, content, created_at) VALUES(?,?,?,?)",
-                (correlation_id, role, redact_credentials(content)[:32_000], now()),
+                "INSERT INTO conversations(correlation_id, project, role, content, created_at) VALUES(?,?,?,?,?)",
+                (correlation_id, project or '', role, redact_credentials(content)[:32_000], now()),
             )
             self._connection.commit()
 
-    def recent_conversation(self, limit: int = 40) -> list[dict[str, Any]]:
+    def conversation_project(self, correlation_id: str) -> str | None:
+        with self._lock:
+            row = self._connection.execute(
+                'SELECT project FROM conversations WHERE correlation_id=? ORDER BY id LIMIT 1',
+                (correlation_id,),
+            ).fetchone()
+            return row['project'] if row is not None else None
+
+    def recent_conversation(self, limit: int = 40, *, project: str | None = None) -> list[dict[str, Any]]:
         bounded = max(1, min(limit, 200))
         with self._lock:
             rows = self._connection.execute(
-                "SELECT correlation_id, role, content, created_at FROM conversations ORDER BY id DESC LIMIT ?",
-                (bounded,),
+                "SELECT correlation_id, role, content, created_at, project FROM conversations "
+                "WHERE (? IS NULL OR project=?) ORDER BY id DESC LIMIT ?",
+                (project, project, bounded),
             ).fetchall()
         return [dict(row) for row in reversed(rows)]
 

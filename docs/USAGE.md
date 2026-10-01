@@ -71,7 +71,17 @@ directory. Enter its full path, then Refresh. Saving and forgetting use the
 ordinary permission prompt; switching paths clears the previous results. Private
 sessions keep changes in RAM. General notes remain separate. Loading a project
 on this page does not select the assistant's preferred project. Set that through
-`preferences.set` with key `project` when you want its approved notes included
+`personalization.set_preference` with key `project` when you want its approved notes included
 as historical model context. These notes do not grant permission or prove live
 project state. The `memory.project.search`, `.remember` and `.forget` tools work
 offline. Search can filter content and limits responses; it does not scan files.
+
+Use this project for conversation explicitly selects its approved notes and chat
+history. Use general conversation removes that selection without deleting notes
+or past turns. The equivalent tool is `memory.project.select` with an existing
+directory, or `{"project":""}` for general conversation. The conversation page
+loads only the selected context. Old unassigned turns stay in general history.
+Changing projects clears historical window references. A reply or approval
+started earlier stays in its original context; selection does not cancel it or
+change approved arguments. Global explicit notes are still shared preferences.
+Task receipts and optional activity history remain separate workstation records.

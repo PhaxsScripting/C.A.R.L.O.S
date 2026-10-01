@@ -139,6 +139,31 @@ class EvClientTests : public QObject {
         QVERIFY(!client->activity().value("goal_verified").toBool());
     }
 
+    void conversationSwitchDiscardsLateHistoryAndOldProjectReplies() {
+        client->refreshConversation();
+        QTRY_VERIFY(peer->canReadLine());
+        const auto old = QJsonDocument::fromJson(peer->readLine()).object();
+        sendEvent("memory.project_changed",{{"project","/tmp/beta"}});
+        QTRY_VERIFY(peer->canReadLine());
+        const auto current = QJsonDocument::fromJson(peer->readLine()).object();
+        QCOMPARE(current.value("type").toString(),QString("conversation.list"));
+        send({{"type","response"},{"id",current.value("id")},{"payload",QJsonObject{
+            {"project","/tmp/beta"},{"conversations",QJsonArray{QJsonObject{{"role","user"},{"content","beta history"}}}}}}});
+        QTRY_COMPARE(client->timeline().size(),1);
+        send({{"type","response"},{"id",old.value("id")},{"payload",QJsonObject{
+            {"project","/tmp/alpha"},{"conversations",QJsonArray{QJsonObject{{"role","user"},{"content","alpha history"}}}}}}});
+        QTest::qWait(30);
+        QCOMPARE(client->timeline().first().toMap().value("body").toString(),QString("beta history"));
+        while(peer->canReadLine()) peer->readLine();
+        client->sendCommand("fixture command");
+        QTRY_VERIFY(peer->canReadLine());
+        const auto command = QJsonDocument::fromJson(peer->readLine()).object();
+        send({{"type","response"},{"id",command.value("id")},{"payload",QJsonObject{
+            {"conversation_project","/tmp/alpha"},{"response","old project reply"},{"status","completed"}}}});
+        QTRY_VERIFY(client->statusMessage().contains("original project"));
+        QCOMPARE(client->timeline().size(),2);
+    }
+
     void projectMemoryRepliesCannotReplaceANewerScope() {
         client->refreshProjectMemories("/tmp/alpha");
         QTRY_VERIFY(peer->canReadLine());

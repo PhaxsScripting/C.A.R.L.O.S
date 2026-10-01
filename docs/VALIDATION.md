@@ -305,3 +305,19 @@ tests passed in both public and development trees. Four native groups passed in
 Long notes now expand instead of overlapping a fixed-height row. Installed
 read-only project search completed with zero notes without adding host test data.
 Project notes are scoped; conversation history is still shared at this stage.
+
+Conversation context now captures the explicitly selected project once per
+request and filters model chat history and project-note hints by that scope.
+Assistant receipts inherit the initial turn's scope, including actual pending
+approval completion after a project switch. An unavailable scope read fails
+without sending general history to the provider. Selecting a project clears
+working window references; an explicit general selection keeps all saved data.
+A legacy database upgrade leaves unassigned conversations in general history.
+The native client rejects late history and older-project reply payloads.
+
+All 1,124 Python tests passed in 60.535 seconds. Eleven development isolation
+tests and ten development project/upgrade tests passed. Four native groups
+passed in 13.14 seconds. The actual installed IPC returned a consistent scoped
+conversation list without dumping or changing host content. Task journal and
+optional activity history are workstation records, not isolated chat sessions;
+no claim of complete project data segregation follows from this change.
