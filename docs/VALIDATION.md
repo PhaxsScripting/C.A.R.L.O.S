@@ -332,3 +332,11 @@ eight development tests passed. The no-route network namespace passed seven
 actual IPC checks, including scoped dated recall and its natural command. The
 installed read completed without adding fixture memories or exposing content in
 the report. History remains limited to data Carlos actually recorded.
+
+The separate local HoloHand companion received a native queued-navigation fix:
+150 ms single-use claims, trusted KWin peer checks, revocation on uncertainty or
+pose exit, and focus/clock checks in the compositor callback. Five native groups
+and standalone ASan/UBSan checks passed; the installed endpoint refused an
+ordinary client's claim. Window state and calibration-file state were preserved.
+Current host status is CALIBRATION REQUIRED, not physical acceptance. HoloHand
+source is not included in this assistant-only public repository.
