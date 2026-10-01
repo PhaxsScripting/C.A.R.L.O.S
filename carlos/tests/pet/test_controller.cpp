@@ -51,15 +51,29 @@ class PetControllerTests : public QObject {
     }
     void privacyChangeClearsBubbleImmediately() {
         PetController pet(true);
-        pet.applyCoreState({{"privacy_mode",false},{"state","THINKING"}});
+        pet.applyCoreState({{"privacy_mode",false},{"session_locked",false},{"state","THINKING"}});
         QVERIFY(pet.shown());
         QCOMPARE(pet.mood(),QString("thinking"));
-        pet.applyCoreState({{"privacy_mode",true},{"state","USING_TOOL"}});
+        pet.applyCoreState({{"privacy_mode",true},{"session_locked",false},{"state","USING_TOOL"}});
         QVERIFY(!pet.shown());
         QVERIFY(pet.bubble().isEmpty());
-        pet.applyCoreState({{"privacy_mode",false},{"state","DORMANT"}});
+        pet.applyCoreState({{"privacy_mode",false},{"session_locked",false},{"state","DORMANT"}});
         QVERIFY(pet.shown());
         QVERIFY(pet.bubble().isEmpty());
+    }
+    void lockLossAndInvalidStateStayHiddenUntilFreshUnlock() {
+        PetController pet(true);
+        pet.applyCoreState({{"privacy_mode",false},{"session_locked",false}});
+        QVERIFY(pet.shown());
+        for (const auto &data : {QJsonObject{{"privacy_mode",false},{"session_locked",true}},
+                                QJsonObject{{"privacy_mode",false}},
+                                QJsonObject{{"privacy_mode",false},{"session_locked","false"}}}) {
+            pet.applyCoreState(data);
+            QVERIFY(!pet.shown());
+            QVERIFY(pet.bubble().isEmpty());
+        }
+        pet.applyCoreState({{"privacy_mode",false},{"session_locked",false}});
+        QVERIFY(pet.shown());
     }
     void missingInvalidOrLostCorePrivacyStaysHidden() {
         PetController pet(true);
@@ -69,7 +83,7 @@ class PetControllerTests : public QObject {
             QVERIFY(!pet.shown());
             QVERIFY(pet.bubble().isEmpty());
         }
-        pet.applyCoreState({{"privacy_mode",false}});
+        pet.applyCoreState({{"privacy_mode",false},{"session_locked",false}});
         QVERIFY(pet.shown());
         pet.coreUnavailable();
         QVERIFY(!pet.shown());

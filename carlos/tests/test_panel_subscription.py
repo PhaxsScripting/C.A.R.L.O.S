@@ -14,13 +14,14 @@ class PanelSubscriptionTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp=tempfile.TemporaryDirectory()
         self.private=False
+        self.locked=False
         self.bus=PhaxEventBus()
         self.state='DORMANT'
         self.denied=False
         async def handler(request):
-            self.assertEqual(request['type'],'panel.state')
+            self.assertEqual(request['type'],'panel.summary')
             if self.denied:return {'status':'denied','error':'private_canary'}
-            return {'privacy_mode':self.private,'state':self.state,'windows':['window_canary'],
+            return {'privacy_mode':self.private,'session_locked':self.locked,'state':self.state,'windows':['window_canary'],
                     'detail':'detail_canary','waveform':[.4], 'conversation':'conversation_canary'}
         self.server=IpcServer(Path(self.temp.name)/'ev.sock',self.bus,handler,logging.getLogger('panel-test'))
         await self.server.start()
@@ -45,14 +46,14 @@ class PanelSubscriptionTests(unittest.IsolatedAsyncioTestCase):
         return next(m['payload'] for m in messages if m['type']=='panel.state')
 
     async def test_only_metadata_is_sent_and_privacy_changes_do_not_wait_for_poll(self):
-        self.assertEqual(await self.subscribe(),{'privacy_mode':False,'state':'DORMANT'})
+        self.assertEqual(await self.subscribe(),{'privacy_mode':False,'state':'DORMANT','session_locked':False})
         self.private=True
         self.bus.publish('carlos.privacy_transition','privacy',{'changing':True,'secret':'event_canary'})
         result=await self.receive()
-        self.assertEqual(result,{'type':'panel.state','payload':{'privacy_mode':True,'state':'DORMANT'}})
+        self.assertEqual(result,{'type':'panel.state','payload':{'privacy_mode':True,'state':'DORMANT','session_locked':False}})
         self.private=False;self.state='THINKING'
         self.bus.publish('core.state_changed','core',{'request':'request_canary'})
-        self.assertEqual((await self.receive())['payload'],{'privacy_mode':False,'state':'THINKING'})
+        self.assertEqual((await self.receive())['payload'],{'privacy_mode':False,'state':'THINKING','session_locked':False})
 
     async def test_arbitrary_activity_and_transcripts_are_not_forwarded(self):
         await self.subscribe()
@@ -63,7 +64,16 @@ class PanelSubscriptionTests(unittest.IsolatedAsyncioTestCase):
         self.denied=True
         self.bus.publish('voice.privacy_changed','voice',{})
         result=await self.receive()
-        self.assertEqual(result['payload'],{'privacy_mode':True,'state':'UNKNOWN'})
+        self.assertEqual(result['payload'],{'privacy_mode':True,'state':'UNKNOWN','session_locked':True})
+
+    async def test_shared_lock_loss_and_replacement_are_sent_immediately(self):
+        await self.subscribe()
+        for value, expected in ((True,True),(None,True),(False,False)):
+            self.locked=value
+            self.bus.publish('presence.session_changed','presence',{'person':'not_forwarded'})
+            result=await self.receive()
+            self.assertEqual(result['payload']['session_locked'],expected)
+            self.assertEqual(set(result['payload']),{'privacy_mode','state','session_locked'})
 
     async def test_duplicate_subscription_does_not_spawn_another_stream(self):
         await self.subscribe()
@@ -118,7 +128,7 @@ class PrivacyTransitionStreamTests(unittest.IsolatedAsyncioTestCase):
                 writer.write(encode_message({'type':'carlos.privacy.set','id':'private','payload':{'mode':'PRIVATE SESSION'}}));await writer.drain()
                 await asyncio.wait_for(entered.wait(),1)
                 changed=await receive()
-                self.assertEqual(changed,{'type':'panel.state','payload':{'privacy_mode':True,'state':'DORMANT'}})
+                self.assertEqual(changed,{'type':'panel.state','payload':{'privacy_mode':True,'state':'DORMANT','session_locked':True}})
                 self.assertEqual(core.privacy.mode,'NORMAL')
                 release.set()
                 replies=[await receive(),await receive()]

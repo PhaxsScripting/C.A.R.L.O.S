@@ -2223,15 +2223,22 @@ class CarlosCore:
                 "power": dict(self.power.pending),
                 "spotify": self.spotify.status(),
             }
-        if request_type == "panel.state":
+        if request_type in {"panel.state", "panel.summary"}:
             voice = self.voice.snapshot()
+            session = getattr(getattr(self, 'presence', None), 'state', {}).get('session')
+            panel = {
+                'privacy_mode': bool(voice.get('privacy_mode', False))
+                or self.privacy.mode != 'NORMAL' or getattr(self.privacy, 'changing', False),
+                'state': self.state.current.value,
+                'session_locked': session != 'UNLOCKED',
+            }
+            if request_type == 'panel.summary':
+                return panel
             level = voice.get("last_input_level", {})
             diagnostics = voice.get("diagnostics", {})
             return {
+                **panel,
                 "connected": True,
-                "privacy_mode": bool(voice.get("privacy_mode", False))
-                or self.privacy.mode != "NORMAL" or getattr(self.privacy, 'changing', False),
-                "state": self.state.current.value,
                 "detail": self.state.detail,
                 "rms": float(level.get("rms", 0.0)),
                 "peak": float(level.get("peak", 0.0)),

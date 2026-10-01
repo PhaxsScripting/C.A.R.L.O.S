@@ -413,3 +413,15 @@ after Normal was restored. This is status-delivery timing, not compositor frame
 latency or room-acoustic mute timing. Pet settings were unchanged, including
 fullscreen hiding and disabled auto-launch. A normal disposable window was used;
 all owned test processes were closed and previous application focus restored.
+
+The pet now uses the core's shared verified session-lock monitor, which already
+covers the freedesktop endpoints plus GNOME/Cinnamon/MATE/Xfce and owner replacement
+fixtures. Its duplicate one-path native lock check was removed. Persistent updates
+and heartbeat replies carry only privacy, generic state and a lock boolean; unknown
+lock evidence remains hidden. Fresh unlock is required after core reconnection.
+All 1,171 Python tests passed (66.940 s), seven development stream checks and three
+summary checks passed, and all five native groups passed (12.22 s). The actual
+native Qt pet also passed five policy groups in an isolated D-Bus/offscreen
+session: fresh unlock, lock/lost-owner/unlock, privacy, core disconnect and fresh
+reconnect. This does not certify physical screen locking or every compositor.
+No host desktop settings or lock state were modified by that isolated check.

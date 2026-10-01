@@ -5,8 +5,6 @@
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
 #include <QDBusInterface>
-#include <QDBusPendingCallWatcher>
-#include <QDBusPendingReply>
 #include <QDBusReply>
 #include <QDBusServiceWatcher>
 #include <QFile>
@@ -41,30 +39,6 @@ PetController::PetController(bool preview, QObject *parent)
     bus.registerObject("/Pet", this,
                        QDBusConnection::ExportScriptableSlots |
                            QDBusConnection::ExportAllProperties);
-    QString lockService = "org.freedesktop.ScreenSaver", lockPath = "/ScreenSaver";
-    const QStringList lockServices = {"org.gnome.ScreenSaver", "org.cinnamon.ScreenSaver",
-                                      "org.mate.ScreenSaver", "org.xfce.ScreenSaver"};
-    if (!bus.interface()->isServiceRegistered(lockService).value()) {
-        for (const auto &candidate : lockServices) {
-            if (bus.interface()->isServiceRegistered(candidate).value()) {
-                lockService = candidate;
-                lockPath = "/" + candidate;
-                lockPath.replace('.', '/');
-                break;
-            }
-        }
-    }
-    bus.connect(lockService, lockPath, lockService, "ActiveChanged", this, SLOT(SetLocked(bool)));
-    QDBusInterface saver(lockService, lockPath, lockService, bus);
-    auto *watcher = new QDBusPendingCallWatcher(saver.asyncCall("GetActive"), this);
-    connect(watcher, &QDBusPendingCallWatcher::finished, this,
-            [this](QDBusPendingCallWatcher *done) {
-                QDBusPendingReply<bool> reply = *done;
-                // Stay hidden if the lock service can't answer.
-                if (!reply.isError())
-                    SetLocked(reply.value());
-                done->deleteLater();
-            });
     connect(&m_timer, &QTimer::timeout, this, &PetController::tick);
     m_timer.start(1000);
     connect(&m_coreTimer, &QTimer::timeout, this, &PetController::pollCore);
@@ -363,10 +337,8 @@ void PetController::tick() {
     say(m_policy.next(m_clock.elapsed(), shown() && !quiet() && !m_dragging));
 }
 void PetController::pollCore() {
-    if (m_locked)
-        return;
     if (m_core.state() == QLocalSocket::ConnectedState) {
-        m_core.write("{\"type\":\"panel.state\",\"id\":\"pet\",\"payload\":{}}\n");
+        m_core.write("{\"type\":\"panel.summary\",\"id\":\"pet\",\"payload\":{}}\n");
         m_coreTimeout.start(1200);
         return;
     }
@@ -384,6 +356,9 @@ void PetController::pollCore() {
 void PetController::applyCoreState(const QJsonObject &data) {
     const auto privacy = data.value("privacy_mode");
     m_corePrivate = !privacy.isBool() || privacy.toBool() || data.value("status") == "denied";
+    const auto locked = data.value("session_locked");
+    const bool lockState = !locked.isBool() || locked.toBool();
+    if (m_locked != lockState) SetLocked(lockState);
     const auto state = data.value("state").toString();
     m_mood = !m_corePrivate && (state == "THINKING" || state == "USING_TOOL") ? "thinking" : "happy";
     if (m_corePrivate) clearContext();
@@ -391,6 +366,7 @@ void PetController::applyCoreState(const QJsonObject &data) {
 }
 void PetController::coreUnavailable() {
     m_corePrivate = true;
+    if (!m_locked) SetLocked(true);
     m_mood = "happy";
     m_buffer.clear();
     clearContext();

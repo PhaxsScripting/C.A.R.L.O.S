@@ -32,3 +32,13 @@ class PetPanelTests(unittest.IsolatedAsyncioTestCase):
         core.privacy = SimpleNamespace(mode='NORMAL', changing=True)
         core.state = SimpleNamespace(current=SimpleNamespace(value='DORMANT'), detail='idle')
         self.assertTrue((await core.handle_request({'type':'panel.state','payload':{}}))['privacy_mode'])
+
+    async def test_summary_contains_only_privacy_activity_and_verified_session_lock(self):
+        core = CarlosCore.__new__(CarlosCore)
+        core.voice = SimpleNamespace(snapshot=Mock(return_value={'waveform':[.4], 'microphone':'device_canary'}))
+        core.privacy = SimpleNamespace(mode='NORMAL', changing=False)
+        core.state = SimpleNamespace(current=SimpleNamespace(value='DORMANT'), detail='request_canary')
+        for session, locked in [('UNLOCKED',False),('LOCKED',True),('UNKNOWN',True),(None,True)]:
+            core.presence = SimpleNamespace(state={'session':session})
+            result = await core.handle_request({'type':'panel.summary','payload':{}})
+            self.assertEqual(result,{'privacy_mode':False,'state':'DORMANT','session_locked':locked})

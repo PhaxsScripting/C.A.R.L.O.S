@@ -24,6 +24,7 @@ RESPONSIVE_REQUESTS = frozenset(
         "health",
         "snapshot",
         "panel.state",
+        "panel.summary",
         "voice.diagnostics",
         "events.history",
         "latency.report",
@@ -173,18 +174,21 @@ class IpcServer:
 
     async def _send_panel(self, writer: asyncio.StreamWriter, queue: asyncio.Queue[Event]) -> None:
         async def send():
-            result = await self.handler({'type': 'panel.state', 'payload': {}})
+            result = await self.handler({'type': 'panel.summary', 'payload': {}})
             private = result.get('privacy_mode')
+            locked = result.get('session_locked')
             await self._write(writer, {'type': 'panel.state', 'payload': {
                 'privacy_mode': private if type(private) is bool else True,
                 'state': str(result.get('state', 'UNKNOWN')),
+                'session_locked': locked if type(locked) is bool else True,
             }})
         await send()
         while True:
             event = await queue.get()
             try:
                 if event.type in {'carlos.privacy_changed', 'carlos.privacy_transition',
-                                  'voice.privacy_changed', 'core.state_changed'}:
+                                  'voice.privacy_changed', 'core.state_changed',
+                                  'presence.session_changed', 'system.resume_observed'}:
                     await send()
             finally:
                 queue.task_done()
