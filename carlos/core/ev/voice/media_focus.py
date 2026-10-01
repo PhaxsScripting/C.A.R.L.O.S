@@ -5,6 +5,8 @@ from __future__ import annotations
 from ev.platform import executable as _platform_executable
 
 import asyncio
+import math
+import re
 from typing import Any, Awaitable, Callable
 
 
@@ -188,3 +190,71 @@ class MediaFocus:
                         continue
                 self.players.pop(service, None)
             self.active = bool(self.players or self.streams)
+
+
+class MediaDucking:
+    """Temporarily lower supported players, keeping the user's output route."""
+
+    def __init__(self, focus: MediaFocus):
+        self.focus = focus
+        self.saved: dict[str, tuple[str, float, float]] = {}
+        self.lock = asyncio.Lock()
+
+    async def _volume(self, owner, value):
+        await self.focus._run(
+            _platform_executable('/usr/bin/dbus-send'), '--session', '--print-reply',
+            '--reply-timeout=700', f'--dest={owner}', '/org/mpris/MediaPlayer2',
+            'org.freedesktop.DBus.Properties.Set',
+            'string:org.mpris.MediaPlayer2.Player', 'string:Volume', f'variant:double:{value}')
+
+    async def begin(self):
+        async with self.lock:
+            if self.saved:
+                return
+            try:
+                names = [line.strip() for line in
+                         (await self.focus._run(_platform_executable('/usr/bin/qdbus6'))).splitlines()]
+            except (OSError, asyncio.TimeoutError):
+                return
+            players = sorted({name for name in names if re.fullmatch(
+                r'org\.mpris\.MediaPlayer2\.[A-Za-z0-9_.-]+', name)})
+            for service in players[:16]:
+                try:
+                    owner = await self.focus._owner(service)
+                    if (not re.fullmatch(r':[0-9]+\.[0-9]+', owner)
+                            or await self.focus._property(owner, 'PlaybackStatus') != 'Playing'):
+                        continue
+                    original = float(await self.focus._property(owner, 'Volume'))
+                    if not math.isfinite(original) or not 0 < original <= 1:
+                        continue
+                    if await self.focus._owner(service) != owner:
+                        continue
+                    lowered = original * .35
+                    # Keep this before the write: cancellation can land after the player accepts it.
+                    self.saved[service] = (owner, original, lowered)
+                    await self._volume(owner, lowered)
+                except (OSError, ValueError, asyncio.TimeoutError):
+                    continue
+
+    async def restore(self):
+        async with self.lock:
+            if not self.saved:
+                return True
+            try:
+                names = {line.strip() for line in
+                         (await self.focus._run(_platform_executable('/usr/bin/qdbus6'))).splitlines()}
+            except (OSError, asyncio.TimeoutError):
+                return False
+            for service, (owner, original, lowered) in list(self.saved.items()):
+                if service not in names:
+                    self.saved.pop(service, None)
+                    continue
+                try:
+                    if await self.focus._owner(service) == owner:
+                        current = float(await self.focus._property(owner, 'Volume'))
+                        if math.isfinite(current) and math.isclose(current, lowered, abs_tol=1e-6):
+                            await self._volume(owner, original)
+                    self.saved.pop(service, None)
+                except (OSError, ValueError, asyncio.TimeoutError):
+                    continue
+        return not self.saved

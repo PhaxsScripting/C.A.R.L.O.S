@@ -244,6 +244,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "tts_provider": "espeak_visualized",
         "tts_command": _platform_executable("/usr/bin/spd-say"),
         "tts": {
+            "duck_media": False,
             "provider": "piper",
             "python": str(Path.home() / ".local/share/ev/runtime/speech-venv/bin/python"),
             "model": str(

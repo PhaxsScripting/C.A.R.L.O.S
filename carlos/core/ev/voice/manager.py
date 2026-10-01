@@ -27,7 +27,7 @@ from .tts import TtsRouter
 from .vad import EnergyVad
 from .neural_vad import NeuralVadWorker
 from .wake import WakeWordWorker
-from .media_focus import MediaFocus
+from .media_focus import MediaFocus, MediaDucking
 from .speech_wake import SpeechWakeFallback
 from .echo import EchoCancel
 from .streaming import speech_chunks, PartialTranscript
@@ -68,6 +68,7 @@ class VoiceManager:
         self._media_check_at = 0.0
         self._media_playing = False
         self.media_focus = MediaFocus(self._audio_listing, self._audio_env)
+        self.media_ducking = MediaDucking(self.media_focus)
         self.media_focus_task: asyncio.Task[None] | None = None
         self.wake_chime_task: asyncio.Task[None] | None = None
         self.speech_wake = SpeechWakeFallback(
@@ -2181,6 +2182,17 @@ class VoiceManager:
             self.speech_pending = False
             self.generating_speech = False
             await self._stop_process(player)
+            await self._restore_media_ducking()
+
+    async def _restore_media_ducking(self):
+        try:
+            restored = await asyncio.wait_for(self.media_ducking.restore(), 2)
+        except asyncio.TimeoutError:
+            restored = False
+        self.diagnostics['media_ducking'] = 'RELEASED' if restored else 'RESTORE_PENDING'
+        if not restored:
+            self.bus.publish('system.warning', 'voice', {
+                'message': 'Media volume restoration is pending; the player is unavailable.'})
 
     async def speak(
         self, text: str, correlation_id: str, allow_follow_up: bool = False, continuation=None
@@ -2225,6 +2237,13 @@ class VoiceManager:
             pcm = synthesized.pcm
             if width != 2 or rate <= 0 or channels <= 0 or not pcm:
                 raise RuntimeError("Synthesized audio has an unsupported or empty PCM format")
+            if self.config.get('tts', {}).get('duck_media', False):
+                await self._restore_media_ducking()
+                try:
+                    await asyncio.wait_for(self.media_ducking.begin(), 1)
+                except asyncio.TimeoutError:
+                    pass
+                self.diagnostics['media_ducking'] = 'HELD' if self.media_ducking.saved else 'UNAVAILABLE'
             output_device = str(
                 self.config.get("tts", {}).get("output_device", "@DEFAULT_SINK@")
             ).strip()
@@ -2512,6 +2531,7 @@ class VoiceManager:
 
     async def close(self) -> None:
         self.wake_desired = False
+        await self._restore_media_ducking()
         await self.release_media_focus()
         if self.wake_test_task is not None:
             task = self.wake_test_task

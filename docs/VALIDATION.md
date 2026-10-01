@@ -162,3 +162,20 @@ fail before effects. Negated, quoted and discussion text cannot become scene
 requests. Three more tests check real executor dry-run results, unchanged scene
 policy and grammar rejection. 1,062 Python tests and all four native Qt/QML/pet
 groups passed. This is a plan preview, not proof of live restoration.
+
+Optional media ducking is available in Settings under Voice, off by default.
+While speech plays, Carlos lowers existing Playing MPRIS players with writable
+volume to 35% of their observed volume, then restores the original. It never
+changes the sink, microphone, output device, mute or playback state. Paused,
+zero-volume, unsupported and amplified players are skipped. Restoration checks
+the unique player owner and current volume; user changes and replacement
+players are preserved. Failed restoration retains its record, reports
+RESTORE_PENDING and retries on the next speech/close. Startup ducking has a
+one-second deadline; restoration has a two-second deadline.
+
+Nine new tests include actual typed D-Bus volume writes on an isolated session
+bus, user override, player replacement/disappearance, cancellation after a
+write, speech cleanup failures and setting persistence. 1,071 Python tests
+passed. Existing native settings render this new boolean field dynamically;
+no native/UI files changed. Unsupported players do not duck. The isolated bus
+fixture emits no audio and does not alter the user's players.

@@ -12,6 +12,7 @@ from .tools.base import ToolSpec, ValidationError
 from .tools.builtin import object_schema
 
 FIELDS = {
+    'media_ducking': ('voice.tts', 'duck_media', False, 'Voice', 'Lower media volume while speaking'),
     "spoken_replies": ("assistant", "speak_responses", True, "Voice", "Speak replies"),
     "wake_enabled": ("voice.wake", "enabled", False, "Wake", "Listen for Carlos"),
     "echo_cancel": (

@@ -32,6 +32,16 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         self.temp.cleanup()
 
+    async def test_ducking_is_opt_in_and_persists_without_output_changes(self):
+        fields = {field['key']: field for field in self.settings.snapshot()['fields']}
+        self.assertFalse(fields['media_ducking']['value'])
+        result = await self.settings.update({'key': 'media_ducking', 'value': True}, None)
+        self.assertTrue(result['verified'])
+        saved = json.loads(self.core.paths.config_file.read_text())
+        self.assertTrue(saved['voice']['tts']['duck_media'])
+        self.assertNotIn('output_device', saved['voice']['tts'])
+        self.core.voice.set_wake_paused.assert_not_awaited()
+
     async def test_wake_enable_updates_desired_and_persists_without_unrelated_changes(self):
         result = await self.settings.update({"key": "wake_enabled", "value": True}, None)
         self.assertTrue(result["verified"])
