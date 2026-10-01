@@ -19,6 +19,13 @@ from .tools.results import OBSERVATION_TOOLS, evaluate_result
 ToolRequester = Callable[[dict[str, Any], str | None], Awaitable[dict[str, Any]]]
 
 
+def preview_requested(text):
+    masked = mask_desktop_literals(text)
+    return bool(re.search(
+        r"\b(?:dry[- ]run|don't actually|do not actually|what would you do|just show me)\b",
+        masked, re.I) or re.match(r'\s*(?:please\s+)?preview\s+', masked, re.I))
+
+
 class StepStatus(StrEnum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
@@ -227,17 +234,16 @@ class TaskPlanner:
         ):
             return None
         lowered = mask_desktop_literals(original).casefold()
-        dry_run = bool(
-            re.search(
-                r"\b(?:dry run|don't actually|do not actually|what would you do|just show me)\b",
-                lowered,
-            )
-        )
+        dry_run = preview_requested(original)
         request = original
+        prefix = re.match(r'\s*(?:please\s+)?preview\s+', lowered)
+        if prefix:
+            request = request[prefix.end():]
+            lowered = lowered[prefix.end():]
         for marker in reversed(
             list(
                 re.finditer(
-                    r"\b(?:dry run|don't actually do it|do not actually do it|just show me)\b",
+                    r"\b(?:dry[- ]run|don't actually do it|do not actually do it|just show me)\b",
                     lowered,
                 )
             )

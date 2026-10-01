@@ -34,7 +34,7 @@ from .lifecycle import shutdown_step, shutdown_tasks
 from .memory import MemoryStore
 from .paths import Paths, get_paths
 from .permissions import Permission, PermissionBroker
-from .planner import TaskPlan, TaskPlanner
+from .planner import TaskPlan, TaskPlanner, preview_requested
 from .security_center import SecurityCenter
 from .state import CoreState, StateMachine
 from .telemetry import TelemetrySampler
@@ -1851,6 +1851,10 @@ class CarlosCore:
                     self.memory.add_conversation, correlation, "assistant", response
                 )
             return result
+        if preview_requested(text):
+            return {'status': 'preview_unavailable', 'correlation_id': correlation,
+                    'preview': True, 'actions_executed': 0,
+                    'response': 'I cannot safely plan that preview yet. Nothing ran; try a more specific action.'}
         explicit = direct_action(text)
         if explicit and explicit.tool == "routines.run":
             return {

@@ -241,3 +241,10 @@ interaction test covers those combinations, and all four Qt/QML/pet groups
 passed after rebuilding. No OS appearance or microphone policy changed.
 The Python suite remains the last 1,081-test result; no Python source changed
 in this status-label pass.
+
+Explicit preview requests now stop before ordinary reasoning when the planner
+cannot safely construct a plan. They return preview_unavailable with zero
+actions and are not resumable tasks. Prefixes preview, please preview and
+dry-run use the dry executor; quoted text to type is not treated as policy.
+Three new boundary tests and all 1,084 Python tests passed. General previews
+of model-generated actions remain unavailable rather than running those actions.
