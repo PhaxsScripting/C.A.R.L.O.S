@@ -114,3 +114,31 @@ class SceneWorkspaceTests(unittest.IsolatedAsyncioTestCase):
         result = await self.core._submit_action_clauses_impl('activate homecoming scene', 'fixture')
         self.assertEqual(result['status'], 'denied')
         self.core._request_model_tool.assert_not_awaited()
+
+    async def test_preview_uses_real_dry_run_executor_and_sends_no_window_actions(self):
+        self.save_scene(commands=['open Firefox'])
+        self.core.scenes.activate('gaming')
+        previous = dict(self.core.scenes.current)
+        result = await self.core._submit_action_clauses_impl('preview homecoming scene', 'fixture')
+        self.assertTrue(result['preview'])
+        self.assertEqual(result['plan']['status'], 'DRY_RUN')
+        self.assertTrue(result['plan']['dry_run'])
+        self.assertTrue(all(step['attempts'] == 0 for step in result['plan']['steps']))
+        self.assertEqual(self.core._request_model_tool.await_count, 1)
+        self.assertEqual(self.core._request_model_tool.await_args.args[0]['name'], 'workspaces.restore_plan')
+        self.assertEqual(self.core.scenes.current, previous)
+
+    async def test_empty_scene_preview_keeps_previous_hud_and_quiet_policy(self):
+        self.core.scenes.activate('coding')
+        previous = dict(self.core.scenes.current)
+        result = await self.core._submit_action_clauses_impl('dry-run activate gaming scene', 'fixture')
+        self.assertTrue(result['preview'])
+        self.assertTrue(result['scene_preview']['quiet'])
+        self.assertEqual(self.core.scenes.current, previous)
+        self.core._request_model_tool.assert_not_awaited()
+
+    def test_preview_grammar_rejects_negations_discussion_and_quoted_requests(self):
+        for text in ["don't preview coding scene", 'explain preview coding scene',
+                     'preview "activate coding scene"', 'preview do not activate coding scene']:
+            self.assertIsNone(self.core.scenes.parse_request(text), text)
+        self.assertEqual(self.core.scenes.parse_request('preview activate coding scene'), ('coding', True))

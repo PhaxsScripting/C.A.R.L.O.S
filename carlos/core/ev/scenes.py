@@ -98,19 +98,28 @@ class SceneEngine:
         return plan, layout
 
     def resolve(self, text):
-        clean = request_text(text)
-        if not clean:
+        request = self.parse_request(text)
+        return request[0] if request else None
+
+    def parse_request(self, text):
+        preview = re.fullmatch(r'\s*(?:please\s+)?(?:preview|dry[- ]run|just show me)\s+(.+)', text, re.I)
+        candidate = request_text(preview[1] if preview else text)
+        if not candidate:
             return None
+        if (preview and not re.match(r'^(?:activate|start|switch to|enter)\b', candidate, re.I)
+                and re.fullmatch(r'[\w -]{1,50}\s+(?:scene|mode)[.!?]*', candidate, re.I)):
+            candidate = 'activate ' + candidate
+        clean = candidate
         match = re.fullmatch(
             r"(?:activate|start|switch to|enter)\s+(?:the\s+)?([\w -]{1,50})\s+(?:scene|mode)[.!?]*",
             clean,
             re.I,
         )
         if match:
-            return match[1].strip().casefold()
+            return match[1].strip().casefold(), bool(preview)
         # This grammar sees only explicit user commands after the wake/attention gate.
         if re.fullmatch(r"wake up[, ]+daddy's home[.!?]*", clean, re.I):
-            return "homecoming"
+            return "homecoming", bool(preview)
         return None
 
     def activate(self, name, *, running=False):

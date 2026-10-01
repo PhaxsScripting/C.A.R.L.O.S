@@ -1746,8 +1746,9 @@ class CarlosCore:
                     + " Some saved items could not be restored; see workspace gaps."
                 )
             return result
-        scene_name = self.scenes.resolve(text) if hasattr(self, "scenes") else None
-        if scene_name:
+        scene_request = self.scenes.parse_request(text) if hasattr(self, "scenes") else None
+        if scene_request:
+            scene_name, scene_preview = scene_request
             if self.privacy.mode == "GUEST":
                 return {
                     "status": "denied",
@@ -1762,7 +1763,14 @@ class CarlosCore:
                     "response": "Unknown scene.",
                 }
             commands = definition.get("commands", [])
+            preview_details = {'name': scene_name, 'hud': definition['hud'],
+                               'quiet': definition['quiet'], 'commands': commands,
+                               'workspace': definition.get('workspace', ''), 'state': 'PREVIEW'}
             if not commands and not definition.get('workspace'):
+                if scene_preview:
+                    return {'status': 'completed', 'correlation_id': correlation,
+                            'response': 'Preview only: assistant HUD and notification policy would change.',
+                            'scene_preview': preview_details, 'preview': True}
                 self.scenes.activate(scene_name)
                 return {
                     "status": "completed",
@@ -1782,6 +1790,12 @@ class CarlosCore:
             if generation != self._action_generation:
                 return {'status': 'cancelled', 'correlation_id': correlation,
                         'response': 'Scene cancelled before execution.'}
+            if scene_preview:
+                plan.dry_run = True
+                result = await self.planner.execute(plan)
+                return {**result, 'preview': True, 'scene_preview': preview_details,
+                        'workspace_gaps': layout.get('gaps', []),
+                        'context_checks': layout.get('context_checks', [])}
             self.scenes.activate(scene_name, running=True)
             activation = self.scenes.current
             try:

@@ -154,3 +154,11 @@ missing/deleted workspaces, invalid commands, cancellation and failed/partial
 execution. 1,059 Python tests and all four Qt/QML/pet groups passed on Gentoo.
 Display wake, exact unsaved-buffer recovery and physical homecoming acceptance
 remain separate.
+
+Scenes have a Preview button and explicit `preview activate <name> scene`
+commands. Preview prepares the same workspace/command plan and uses the dry-run
+executor; it never applies scene HUD or quiet policy. Missing workspaces still
+fail before effects. Negated, quoted and discussion text cannot become scene
+requests. Three more tests check real executor dry-run results, unchanged scene
+policy and grammar rejection. 1,062 Python tests and all four native Qt/QML/pet
+groups passed. This is a plan preview, not proof of live restoration.

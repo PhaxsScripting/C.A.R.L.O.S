@@ -199,6 +199,8 @@ TestCase {
         compare(workspace.currentText, "coding")
         compare(mock.calls.length, 0)
         compare(mock.commands.length, 0)
+        item("preview-assistant-scene").clicked()
+        compare(mock.commands[0], "preview activate homecoming scene")
         item("save-assistant-scene").clicked()
         compare(mock.calls.length, 1)
         compare(mock.calls[0].name, "carlos.scenes.save")

@@ -80,6 +80,7 @@ Item {
                                 assistantSceneWorkspace.currentIndex = Math.max(0, assistantSceneWorkspace.model.indexOf(scene.workspace || ""));
                             }
                         }
+                        ActionButton { objectName: "preview-assistant-scene"; text: "PREVIEW"; enabled: assistantScene.currentText.length > 0; onClicked: root.client.sendCommand("preview activate " + assistantScene.currentText + " scene") }
                         ActionButton { text: "RUN SCENE"; enabled: assistantScene.currentText.length > 0; onClicked: root.client.sendCommand("activate " + assistantScene.currentText + " scene") }
                     }
                     RowLayout {
