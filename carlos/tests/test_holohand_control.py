@@ -15,6 +15,7 @@ class HoloHandControlTests(unittest.IsolatedAsyncioTestCase):
         self.commands = []
         self.state = "READY"
         self.oversize = False
+        self.extra = ""
         self.writers = []
 
         async def respond(reader, writer):
@@ -25,7 +26,7 @@ class HoloHandControlTests(unittest.IsolatedAsyncioTestCase):
                 self.state = "PAUSED"
             if cmd == "--resume":
                 self.state = "READY"
-            reply = "x" * 8193 if self.oversize else self.state + " | input ready | idle\n"
+            reply = "x" * 8193 if self.oversize else self.state + " | input ready | idle\n" + self.extra
             writer.write(reply.encode())
             await writer.drain()
             writer.close()
@@ -42,6 +43,20 @@ class HoloHandControlTests(unittest.IsolatedAsyncioTestCase):
         for writer in self.writers:
             writer.close()
         self.temp.cleanup()
+
+    async def test_counters_and_peer_identity_are_metadata_only(self):
+        self.extra = "Inference counters: inferred 80; skipped 20\nCapture counter: 100\n"
+        result = await exchange("--status")
+        self.assertEqual(result['counters'],{'captured':100,'inferred':80,'skipped':20})
+        self.assertEqual(result['peer_pid'],os.getpid())
+        self.assertIsInstance(result['peer_start_ticks'],int)
+        self.assertFalse(result['camera_started'])
+        self.assertEqual(self.commands,['--status'])
+
+    async def test_old_or_invalid_counter_protocol_has_no_fabricated_rates(self):
+        self.assertEqual((await exchange("--status"))['counters'],{})
+        self.extra = "Inference counters: inferred 10; skipped 0\nCapture counter: 9999999999999999999999999999\n"
+        self.assertEqual((await exchange("--status"))['counters'],{})
 
     async def test_pause_and_resume_have_fresh_status_readback(self):
         result = await set_paused({"paused": True}, None)

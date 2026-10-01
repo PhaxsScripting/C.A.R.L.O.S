@@ -36,12 +36,20 @@ async def exchange(command):
     reader, writer = await asyncio.wait_for(asyncio.open_unix_connection(path), 1)
     try:
         peer = writer.get_extra_info("socket")
+        peer_pid = None
         if hasattr(socket, "SO_PEERCRED"):
-            _, uid, _ = struct.unpack(
+            peer_pid, uid, _ = struct.unpack(
                 "3i", peer.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12)
             )
             if uid != os.getuid():
                 raise ValidationError("HoloHand peer belongs to another user")
+        peer_start_ticks = None
+        if peer_pid is not None:
+            try:
+                raw = Path(f'/proc/{peer_pid}/stat').read_text()
+                peer_start_ticks = int(raw[raw.rfind(')') + 2:].split()[19])
+            except (OSError, ValueError, IndexError):
+                pass
         writer.write(command.encode())
         await writer.drain()
 
@@ -77,8 +85,18 @@ async def exchange(command):
                     }
             except ValueError:
                 pass
+        counters = {}
+        capture = re.search(r"Capture counter: ([0-9]+)", text)
+        inference = re.search(r"Inference counters: inferred ([0-9]+); skipped ([0-9]+)", text)
+        if capture and inference:
+            values = tuple(int(value) for value in (capture[1], inference[1], inference[2]))
+            if all(0 <= value <= 2**63 - 1 for value in values):
+                counters = dict(zip(('captured', 'inferred', 'skipped'), values))
         return {
             "available": True,
+            "peer_pid": peer_pid,
+            "peer_start_ticks": peer_start_ticks,
+            "counters": counters,
             "state": state,
             "details": text,
             "tracking": tracking,
@@ -109,7 +127,18 @@ async def set_paused(arguments, context):
     return observed
 
 
+async def measure(arguments, context):
+    from ..hand_metrics import sample
+    return await sample(arguments.get('seconds', 5))
+
+
 def register_holohand_tools(registry):
+    registry.register(ToolSpec(
+        'holohand.measure', 'HOLOHAND',
+        'Sample metadata from an already-running HoloHand instance. Reports observed pipeline rates and sampled timing readings, not physical gesture accuracy or input latency. Never launches the app, starts a camera, enables input or records frames.',
+        Permission.SAFE, object_schema({'seconds': {'type':'number','minimum':1,'maximum':30}}),
+        measure, read_only=True, offline_available=True, timeout_seconds=65,
+    ))
     registry.register(
         ToolSpec(
             "holohand.status",

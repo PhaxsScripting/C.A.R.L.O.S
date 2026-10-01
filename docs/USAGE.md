@@ -96,3 +96,11 @@ Replies show a short preview; the tool returns bounded entries and has_more.
 Matching explicit notes are separately labelled undated context. Empty history
 cannot establish what happened outside saved conversations, and old text is
 never proof of current files, windows or completed actions.
+
+`evctl tool holohand.measure --arguments '{"seconds":5}'` samples metadata from
+an existing hand controller. It never starts the app/camera, enables input or
+saves frames. Use `carlos/scripts/measure-holohand.py --seconds 10` for a standalone
+report. Capture/inference FPS need counters and verified process continuity;
+older instances, resets and missing identity return unavailable rates. Timing
+percentiles are sampled readings that may repeat or miss model results. Physical
+gesture accuracy and desktop-action latency are separate, unmeasured fields.

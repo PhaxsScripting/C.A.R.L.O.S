@@ -340,3 +340,18 @@ and standalone ASan/UBSan checks passed; the installed endpoint refused an
 ordinary client's claim. Window state and calibration-file state were preserved.
 Current host status is CALIBRATION REQUIRED, not physical acceptance. HoloHand
 source is not included in this assistant-only public repository.
+
+Hand-controller diagnostics now read optional pipeline counters and verified
+peer PID/start ticks over the existing private socket. Eight rate/sampling tests
+and six control tests cover counter resets, PID reuse, missing protocols, pause
+zeros, failed observations, cancellation, invalid duration and no-launch behavior.
+All 1,142 Python tests passed in 61.302 s; both development groups passed.
+
+The actual existing Gentoo instance was sampled for 10.001 seconds after build
+workers finished: capture 30.00 FPS, inference 18.80 FPS, 49 available observations
+and no failed reads. Sampled inference duration was 12.94 ms mean / 25.70 ms p95;
+result age was 54.92 ms mean / 82.00 ms p95. No hand was detected in those samples,
+and input remained CALIBRATION REQUIRED. No physical gesture/action latency or
+accuracy follows from these figures. Five companion native groups passed (0.52 s);
+installed `holohand.measure` IPC returned a verified continuous metadata sample.
+The companion source/counter addition remains outside this public repository.
