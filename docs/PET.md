@@ -37,9 +37,12 @@ assistant and login startup alone.
   fullscreen behavior depends on that desktop. Screen locking
   and Carlos privacy modes still hide him. You can enable fullscreen hiding
   from the pet menu.
-- Uses the running Carlos core's small panel status reply to show a thinking
-  light and respect privacy mode. Older cores without the privacy field won't
-  provide that signal; quiet mode and screen-lock hiding still work.
+- Uses a persistent local status stream containing only privacy and a generic
+  activity state. Privacy transitions clear the bubble and hide him immediately;
+  a failed transition restores the current policy. No transcripts, window names,
+  tool results or audio samples are sent over this stream. Missing/invalid privacy
+  data, connection loss and timeouts keep him hidden until the core confirms its
+  current policy. Older cores need updating for this behavior.
 
 The pet starts on the screen under your mouse. Opening Carlos Pet again or
 choosing **Show Carlos Pet** from the tray brings him to that screen. There is

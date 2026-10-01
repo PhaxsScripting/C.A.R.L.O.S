@@ -1,5 +1,6 @@
 #include "PetController.h"
 #include <QTemporaryDir>
+#include <QJsonObject>
 #include <QtTest>
 class PetControllerTests : public QObject {
     Q_OBJECT
@@ -46,6 +47,32 @@ class PetControllerTests : public QObject {
         pet.SetLocked(true);
         pet.SetLocked(false);
         pet.pet();
+        QVERIFY(pet.bubble().isEmpty());
+    }
+    void privacyChangeClearsBubbleImmediately() {
+        PetController pet(true);
+        pet.applyCoreState({{"privacy_mode",false},{"state","THINKING"}});
+        QVERIFY(pet.shown());
+        QCOMPARE(pet.mood(),QString("thinking"));
+        pet.applyCoreState({{"privacy_mode",true},{"state","USING_TOOL"}});
+        QVERIFY(!pet.shown());
+        QVERIFY(pet.bubble().isEmpty());
+        pet.applyCoreState({{"privacy_mode",false},{"state","DORMANT"}});
+        QVERIFY(pet.shown());
+        QVERIFY(pet.bubble().isEmpty());
+    }
+    void missingInvalidOrLostCorePrivacyStaysHidden() {
+        PetController pet(true);
+        for (const auto &data : {QJsonObject{}, QJsonObject{{"privacy_mode","false"}},
+                                QJsonObject{{"privacy_mode",false},{"status","denied"}}}) {
+            pet.applyCoreState(data);
+            QVERIFY(!pet.shown());
+            QVERIFY(pet.bubble().isEmpty());
+        }
+        pet.applyCoreState({{"privacy_mode",false}});
+        QVERIFY(pet.shown());
+        pet.coreUnavailable();
+        QVERIFY(!pet.shown());
         QVERIFY(pet.bubble().isEmpty());
     }
 };

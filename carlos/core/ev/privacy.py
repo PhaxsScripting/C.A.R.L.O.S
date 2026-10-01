@@ -78,6 +78,7 @@ class PrivacyPolicy:
             raise ValueError("A privacy transition is already in progress")
         c = self.core
         self.changing = True
+        c.bus.publish('carlos.privacy_transition', 'privacy', {'changing': True})
         try:
             # Stop generation and revoke outstanding approvals before changing
             # context or provider policy. Never migrate a pending approval.
@@ -107,3 +108,4 @@ class PrivacyPolicy:
             }
         finally:
             self.changing = False
+            c.bus.publish('carlos.privacy_transition', 'privacy', {'changing': False})

@@ -394,3 +394,22 @@ in 68.106 s. Actual installed IPC passed maximize → minimize → restore, repe
 restore, area-sized ordinary placement and unchanged unrelated focus on an owned
 disposable GTK window; native modes were 3 then 0 and the test window was closed.
 No existing application content or desktop layout was changed by that test.
+
+The pet uses a persistent metadata-only panel subscription, not a 15-second
+privacy poll. It hides and clears contextual comments at the start of a privacy
+transition, and remains hidden for unknown/missing/invalid policy or core loss.
+The stream sends only privacy plus a generic state. Six IPC tests cover immediate
+updates, failed slow transitions, transcript/activity exclusion, guest denial,
+duplicate subscriptions, subscription-kind isolation and disconnect cleanup.
+Native policy tests cover clearing, invalid state and loss. All five native
+groups passed (12.51 s); all 1,168 Python tests passed (65.925 s), followed by the
+added real-transition fixture and six passing subscription checks. Development
+subscription/panel checks passed and the installed development core's missing
+privacy flag was corrected without changing unrelated checkout behavior.
+
+An actual temporary installed pet reported its visibility property hidden 4.2 ms
+after a DO NOT LISTEN request began, its bubble was empty, and it reported visible
+after Normal was restored. This is status-delivery timing, not compositor frame
+latency or room-acoustic mute timing. Pet settings were unchanged, including
+fullscreen hiding and disabled auto-launch. A normal disposable window was used;
+all owned test processes were closed and previous application focus restored.

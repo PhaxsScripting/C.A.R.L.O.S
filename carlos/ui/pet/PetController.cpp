@@ -32,6 +32,7 @@ PetController::PetController(bool preview, QObject *parent)
     m_right = qMax(0, m_settings.value("right", 24).toInt());
     m_bottom = qMax(0, m_settings.value("bottom", 64).toInt());
     if (preview) {
+        m_corePrivate = false;
         m_locked = false;
         m_bubble = "tiny rubber duck reporting for duty";
         return;
@@ -69,13 +70,16 @@ PetController::PetController(bool preview, QObject *parent)
     connect(&m_coreTimer, &QTimer::timeout, this, &PetController::pollCore);
     m_coreTimer.start(15000);
     m_coreTimeout.setSingleShot(true);
-    connect(&m_coreTimeout, &QTimer::timeout, this, [this] { m_core.abort(); });
+    connect(&m_coreTimeout, &QTimer::timeout, this, [this] { coreUnavailable(); m_core.abort(); });
+    connect(&m_core, &QLocalSocket::disconnected, this, &PetController::coreUnavailable);
+    connect(&m_core, &QLocalSocket::errorOccurred, this, [this] { coreUnavailable(); });
     connect(&m_core, &QLocalSocket::connected, this,
-            [this] { m_core.write("{\"type\":\"panel.state\",\"id\":\"pet\",\"payload\":{}}\n"); });
+            [this] { m_core.write("{\"type\":\"panel.subscribe\",\"id\":\"pet-watch\",\"payload\":{}}\n"); });
     connect(&m_core, &QLocalSocket::readyRead, this, [this] {
         m_buffer += m_core.readAll();
         if (m_buffer.size() > 1048576) {
             m_buffer.clear();
+            coreUnavailable();
             m_core.abort();
             return;
         }
@@ -83,19 +87,17 @@ PetController::PetController(bool preview, QObject *parent)
             const auto end = m_buffer.indexOf('\n');
             const auto message = QJsonDocument::fromJson(m_buffer.left(end)).object();
             m_buffer.remove(0, end + 1);
-            if (message.value("id") != "pet" || message.value("type") != "response")
+            if (message.value("type") == "error") {
+                coreUnavailable();
+                m_core.abort();
+                return;
+            }
+            if (message.value("type") != "panel.state" &&
+                (message.value("id") != "pet" || message.value("type") != "response"))
                 continue;
             const auto data = message.value("payload").toObject();
-            m_corePrivate = data.value("privacy_mode").toBool() || data.value("status") == "denied";
-            const auto state = data.value("state").toString();
-            m_mood = state == "THINKING" || state == "USING_TOOL" ? "thinking" : "happy";
-            if (m_corePrivate)
-                clearContext();
-            // Nothing else from the panel reply is retained or put in a bubble.
-            m_buffer.clear();
+            applyCoreState(data);
             m_coreTimeout.stop();
-            m_core.disconnectFromServer();
-            emit changed();
         }
     });
     auto *kwin = new QDBusServiceWatcher("org.kde.KWin", bus,
@@ -361,19 +363,38 @@ void PetController::tick() {
     say(m_policy.next(m_clock.elapsed(), shown() && !quiet() && !m_dragging));
 }
 void PetController::pollCore() {
-    if (m_locked || m_core.state() != QLocalSocket::UnconnectedState)
+    if (m_locked)
         return;
+    if (m_core.state() == QLocalSocket::ConnectedState) {
+        m_core.write("{\"type\":\"panel.state\",\"id\":\"pet\",\"payload\":{}}\n");
+        m_coreTimeout.start(1200);
+        return;
+    }
+    if (m_core.state() != QLocalSocket::UnconnectedState) return;
     const auto path =
         QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation) + "/ev/ev.sock";
     if (!QFile::exists(path)) {
-        m_corePrivate = false;
-        m_mood = "happy";
-        emit changed();
+        coreUnavailable();
         return;
     }
     m_buffer.clear();
     m_core.connectToServer(path);
     m_coreTimeout.start(1200);
+}
+void PetController::applyCoreState(const QJsonObject &data) {
+    const auto privacy = data.value("privacy_mode");
+    m_corePrivate = !privacy.isBool() || privacy.toBool() || data.value("status") == "denied";
+    const auto state = data.value("state").toString();
+    m_mood = !m_corePrivate && (state == "THINKING" || state == "USING_TOOL") ? "thinking" : "happy";
+    if (m_corePrivate) clearContext();
+    emit changed();
+}
+void PetController::coreUnavailable() {
+    m_corePrivate = true;
+    m_mood = "happy";
+    m_buffer.clear();
+    clearContext();
+    emit changed();
 }
 void PetController::startTracking() {
     auto bus = QDBusConnection::sessionBus();

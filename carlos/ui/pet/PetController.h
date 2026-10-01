@@ -10,6 +10,7 @@
 #include <memory>
 
 class QTemporaryFile;
+class QJsonObject;
 
 class PetController : public QObject, protected QDBusContext {
     Q_OBJECT
@@ -50,11 +51,14 @@ class PetController : public QObject, protected QDBusContext {
     void dragChanged();
 
   private:
+    friend class PetControllerTests;
     void tick();
     void position();
     void moveToScreen(QScreen *screen);
     void startTracking();
     void pollCore();
+    void applyCoreState(const QJsonObject &);
+    void coreUnavailable();
     void say(const QString &line);
     void clearContext();
     QSettings m_settings;
@@ -67,7 +71,7 @@ class PetController : public QObject, protected QDBusContext {
     QString m_bubble, m_mood = "happy", m_kwinOwner;
     bool m_preview, m_locked = true, m_fullscreen = false, m_hidden = false;
     bool m_needsScreen = true;
-    bool m_tracking = false, m_loaded = false, m_corePrivate = false, m_dragging = false;
+    bool m_tracking = false, m_loaded = false, m_corePrivate = true, m_dragging = false;
     bool m_dragMoved = false, m_hasDragPointer = false;
     bool m_nativeOverlay = false;
     std::unique_ptr<QTemporaryFile> m_trackingSource, m_dragSource;

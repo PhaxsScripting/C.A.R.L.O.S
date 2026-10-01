@@ -171,6 +171,24 @@ class IpcServer:
             finally:
                 queue.task_done()
 
+    async def _send_panel(self, writer: asyncio.StreamWriter, queue: asyncio.Queue[Event]) -> None:
+        async def send():
+            result = await self.handler({'type': 'panel.state', 'payload': {}})
+            private = result.get('privacy_mode')
+            await self._write(writer, {'type': 'panel.state', 'payload': {
+                'privacy_mode': private if type(private) is bool else True,
+                'state': str(result.get('state', 'UNKNOWN')),
+            }})
+        await send()
+        while True:
+            event = await queue.get()
+            try:
+                if event.type in {'carlos.privacy_changed', 'carlos.privacy_transition',
+                                  'voice.privacy_changed', 'core.state_changed'}:
+                    await send()
+            finally:
+                queue.task_done()
+
     async def _client_connected(
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
@@ -185,6 +203,7 @@ class IpcServer:
         assert client_task is not None
         self._client_tasks.add(client_task)
         subscriber_id: str | None = None
+        subscription_type: str | None = None
         event_task: asyncio.Task[None] | None = None
         request_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=32)
         request_task = asyncio.create_task(self._serve_requests(writer, request_queue))
@@ -222,10 +241,14 @@ class IpcServer:
             while line := await reader.readline():
                 try:
                     request = decode_message(line, self.max_message_bytes)
-                    if request["type"] == "subscribe":
+                    if request["type"] in {"subscribe", "panel.subscribe"}:
+                        if subscriber_id is not None and subscription_type != request['type']:
+                            raise ProtocolError('This connection already has a different subscription')
                         if subscriber_id is None:
                             subscriber_id, queue = self.bus.subscribe()
-                            event_task = asyncio.create_task(self._send_events(writer, queue))
+                            subscription_type = request['type']
+                            send = self._send_panel if subscription_type == 'panel.subscribe' else self._send_events
+                            event_task = asyncio.create_task(send(writer, queue))
                             event_task.add_done_callback(writer_done)
                         result = {"subscribed": True, "sequence": self.bus.sequence}
                         await self._write(

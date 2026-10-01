@@ -2230,7 +2230,7 @@ class CarlosCore:
             return {
                 "connected": True,
                 "privacy_mode": bool(voice.get("privacy_mode", False))
-                or self.privacy.mode != "NORMAL",
+                or self.privacy.mode != "NORMAL" or getattr(self.privacy, 'changing', False),
                 "state": self.state.current.value,
                 "detail": self.state.detail,
                 "rms": float(level.get("rms", 0.0)),
