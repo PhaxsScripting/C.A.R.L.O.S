@@ -17,6 +17,7 @@ os.environ['PYTHONPATH'] = sys.path[0]
 
 from ev.config import DEFAULT_CONFIG, _merge
 from ev.ai.local_llama import LocalLlamaProvider
+from ev.ai.local_vision import LocalVisualReasoner
 from ev.voice.neural_vad import NeuralVadWorker
 from ev.voice.speech_wake import SpeechWakeFallback
 from ev.voice.stt import WhisperCppAdapter
@@ -109,7 +110,30 @@ async def model_check(config_path):
             await model.close()
 
 
-async def main(config_path, keywords, samples, include_model):
+async def vision_check(config_path):
+    from PIL import Image, ImageDraw
+
+    local = json.loads(config_path.read_text()).get('vision', {}).get('local_model', {})
+    config = _merge(DEFAULT_CONFIG['vision']['local_model'], local)
+    with tempfile.TemporaryDirectory(prefix='carlos-offline-vision-') as temp:
+        path = Path(temp) / 'shapes.png'
+        image = Image.new('RGB', (512, 256), 'white')
+        draw = ImageDraw.Draw(image)
+        draw.ellipse((40, 50, 190, 200), fill='red')
+        draw.rectangle((300, 50, 450, 200), fill='blue')
+        image.save(path)
+        path.chmod(0o600)
+        reasoner = LocalVisualReasoner(config, Path(temp) / 'owner.json')
+        result = await reasoner.describe(path, 'Describe the shapes and their colors in one short sentence.')
+        assert result['local_only'] and not result['uploaded']
+        assert result['actions_executed'] == 0 and not result['coordinate_actions_allowed']
+        print(json.dumps({'local_vision': result['description'],
+                          'duration_ms': result['duration_ms'],
+                          'synthetic_image_only': True, 'actions_executed': 0,
+                          'scene_accuracy_verified': result['scene_accuracy_verified']}), flush=True)
+
+
+async def main(config_path, keywords, samples, include_model, include_vision):
     parent = os.environ.get('CARLOS_TEST_PARENT_NETNS')
     if not parent or os.readlink('/proc/self/ns/net') == parent:
         raise RuntimeError('Run inside a new network namespace; see --help')
@@ -181,6 +205,8 @@ async def main(config_path, keywords, samples, include_model):
             await preview.close()
     if include_model:
         await model_check(config_path)
+    if include_vision:
+        await vision_check(config_path)
 
 
 if __name__ == '__main__':
@@ -197,5 +223,7 @@ if __name__ == '__main__':
                         help='Cache synthetic PCM for comparisons with identical audio')
     parser.add_argument('--include-model', action='store_true',
                         help='Also load an owned local conversation model and request a short reply')
+    parser.add_argument('--include-vision', action='store_true',
+                        help='Also describe a temporary synthetic image with the local vision model')
     args = parser.parse_args()
-    asyncio.run(main(args.config, args.keywords, args.samples, args.include_model))
+    asyncio.run(main(args.config, args.keywords, args.samples, args.include_model, args.include_vision))

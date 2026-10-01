@@ -200,3 +200,11 @@ us. This is synthetic offline acceptance, not normal-distance or media/AEC
 acceptance. Earlier freshly synthesized short-name samples occasionally missed
 both recognizers, so this does not establish a physical wake success rate.
 No microphone, playback, desktop changes or cloud request is involved.
+
+The optional offline fixture flags also exercised real inference: `--include-model`
+loaded the owned conversation model in 1.636 seconds and returned a short reply
+in 1.122 seconds. `--include-vision` described a temporary synthetic image of a
+red circle and blue square correctly in 22.814 seconds, with no external route,
+no tools or coordinate actions. Each model child was closed afterward. This is
+a single synthetic image, not general scene accuracy or desktop interaction
+acceptance; the visual result remains explicitly unverified inference.
