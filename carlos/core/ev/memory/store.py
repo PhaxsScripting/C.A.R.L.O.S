@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..logging_utils import redact_credentials
+
 import json
 import os
 import sqlite3
@@ -151,7 +153,7 @@ class MemoryStore:
         with self._lock:
             self._connection.execute(
                 "INSERT INTO conversations(correlation_id, role, content, created_at) VALUES(?,?,?,?)",
-                (correlation_id, role, content[:32_000], now()),
+                (correlation_id, role, redact_credentials(content)[:32_000], now()),
             )
             self._connection.commit()
 

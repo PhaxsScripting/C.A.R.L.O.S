@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from .logging_utils import redact
+from .logging_utils import redact, redact_credentials
 
 
 def private_summary(value: Any) -> Any:
@@ -37,6 +37,7 @@ def private_summary(value: Any) -> Any:
     if isinstance(value, list):
         return [private_summary(item) for item in value[:50]]
     if isinstance(value, str):
+        value = redact_credentials(value)
         value = re.sub(r"\b(?:nvapi-|sk-)[A-Za-z0-9_-]{8,}", "[REDACTED_KEY]", value)
         value = re.sub(r"(https?://[^\s?#]+)[?#][^\s]*", r"\1[QUERY_REDACTED]", value)
         value = re.sub(

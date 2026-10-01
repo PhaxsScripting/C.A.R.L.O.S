@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,15 @@ SENSITIVE_KEYS = {
 }
 
 
+def redact_credentials(value: str) -> str:
+    value = re.sub(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----",
+                   "[REDACTED_PRIVATE_KEY]", value, flags=re.S)
+    value = re.sub(r"\b(?:nvapi-|sk-|gh[pousr]_|github_pat_)[A-Za-z0-9_-]{8,}", "[REDACTED_KEY]", value)
+    value = re.sub(r"(?i)\b(?:password|passwd|api[_ -]?key|authorization|cookie|token|secret)[\"']?\s*(?::|=|\bis\b)\s*(?:(?:Bearer|Basic)\s+[^\s,;]+|\"[^\"\n]*\"|'[^'\n]*'|[^\s,;]+)",
+                   "[REDACTED_CREDENTIAL]", value)
+    return value
+
+
 def redact(value: Any) -> Any:
     if isinstance(value, dict):
         return {
@@ -32,6 +42,8 @@ def redact(value: Any) -> Any:
         }
     if isinstance(value, list):
         return [redact(item) for item in value]
+    if isinstance(value, str):
+        value = redact_credentials(value)
     if isinstance(value, str) and len(value) > 4096:
         return value[:4096] + "...[TRUNCATED]"
     return value
