@@ -48,6 +48,16 @@ class HandMetricsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('repeat or miss',result['scope'])
         self.assertIsNone(result['desktop_action_latency_ms'])
 
+    def test_idle_timings_are_excluded_but_zero_rates_remain_measured(self):
+        rows = [row(1,100,50), row(3,100,50)]
+        for item in rows:
+            item['status']['pipeline_demand'] = 'IDLE'
+        result = summarize(rows)
+        self.assertEqual(result['pipeline_demands'], ['IDLE'])
+        self.assertEqual(result['capture_fps'], 0)
+        self.assertIsNone(result['sampled_inference_ms'])
+        self.assertIsNone(result['sampled_age_ms'])
+
     async def test_missing_app_is_not_launched_and_returns_no_rates(self):
         status=AsyncMock(return_value={'available':False,'camera_started':False})
         with patch('ev.tools.holohand.status',status):

@@ -73,6 +73,8 @@ async def exchange(command):
             text,
         )
         tracking = {}
+        demand = re.search(r"^Pipeline demand: (ACTIVE|IDLE)$", text, re.MULTILINE)
+        pipeline_demand = demand[1] if demand else None
         if match:
             try:
                 confidence, inference, age = map(float, match.groups()[1:])
@@ -85,6 +87,8 @@ async def exchange(command):
                     }
             except ValueError:
                 pass
+        if pipeline_demand == 'IDLE':
+            tracking = {'hand_visible': False}
         counters = {}
         capture = re.search(r"Capture counter: ([0-9]+)", text)
         inference = re.search(r"Inference counters: inferred ([0-9]+); skipped ([0-9]+)", text)
@@ -100,6 +104,7 @@ async def exchange(command):
             "state": state,
             "details": text,
             "tracking": tracking,
+            "pipeline_demand": pipeline_demand,
             "tracking_quality": "UNVERIFIED",
             "camera_started": False,
         }

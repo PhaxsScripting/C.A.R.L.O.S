@@ -26,10 +26,13 @@ def summarize(samples):
               'physical_gesture_latency_ms':None, 'desktop_action_latency_ms':None,
               'scope':'Metadata from an already-running instance; sampled timings may repeat or miss inference results.'}
     for key in ('inference_ms','age_ms'):
-        values=[row['status'].get('tracking',{}).get(key) for row in good]
+        values=[row['status'].get('tracking',{}).get(key) for row in good
+                if row['status'].get('pipeline_demand') != 'IDLE']
         values=[v for v in values if isinstance(v,(int,float)) and not isinstance(v,bool) and math.isfinite(v) and v>=0]
         report['sampled_'+key]=distribution(values)
     report['states']=sorted({row['status'].get('state','UNVERIFIED') for row in good})
+    report['pipeline_demands']=sorted({row['status']['pipeline_demand'] for row in good
+                                       if row['status'].get('pipeline_demand') in {'ACTIVE','IDLE'}})
     report['hand_visible_observations']=sum(row['status'].get('tracking',{}).get('hand_visible') is True for row in good)
     if len(good)<2:
         report['rate_unavailable_reason']='Not enough available observations'

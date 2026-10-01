@@ -355,3 +355,17 @@ and input remained CALIBRATION REQUIRED. No physical gesture/action latency or
 accuracy follows from these figures. Five companion native groups passed (0.52 s);
 installed `holohand.measure` IPC returned a verified continuous metadata sample.
 The companion source/counter addition remains outside this public repository.
+
+Uncalibrated HoloHand now stops its camera/inference/alignment pipeline while
+hidden or minimized; calibrated control remains active in the background and
+pause always stops capture. Wayland minimization comes from the trusted KWin
+peer watching only the app's exact PID, since Qt does not report that state on
+this host. Ordinary clients were refused by both new metadata endpoints.
+Six companion native groups passed in 0.50 s. Actual minimized sampling showed
+1.0% of one CPU core over five seconds (earlier active sample: 69%), no camera
+FD and zero counter increments. Activating the preview reopened /dev/video0
+and captured 30 frames in a one-second interval; reminimizing closed it again.
+Calibration-file state and window state were preserved; input stayed disabled.
+Carlos reports pipeline demand and excludes idle timing readings rather than
+presenting stale model results as live latency. All 1,144 Python tests passed
+in 64.575 s. This is pipeline verification, not physical gesture acceptance.

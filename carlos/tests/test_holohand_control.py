@@ -55,6 +55,18 @@ class HoloHandControlTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_old_or_invalid_counter_protocol_has_no_fabricated_rates(self):
         self.assertEqual((await exchange("--status"))['counters'],{})
+
+    async def test_idle_pipeline_does_not_present_old_tracking_as_live(self):
+        self.extra = 'Pipeline demand: IDLE\nHand: visible; confidence 0.98; inference 12 ms; age 90000 ms;\n'
+        result = await exchange('--status')
+        self.assertEqual(result['pipeline_demand'], 'IDLE')
+        self.assertEqual(result['tracking'], {'hand_visible': False})
+        self.extra = 'Pipeline demand: ACTIVE\nHand: not detected; confidence 0.00; inference 12 ms; age 30 ms;\n'
+        result = await exchange('--status')
+        self.assertEqual(result['pipeline_demand'], 'ACTIVE')
+        self.assertEqual(result['tracking']['inference_ms'], 12)
+        self.extra = ''
+        self.assertIsNone((await exchange('--status'))['pipeline_demand'])
         self.extra = "Inference counters: inferred 10; skipped 0\nCapture counter: 9999999999999999999999999999\n"
         self.assertEqual((await exchange("--status"))['counters'],{})
 
