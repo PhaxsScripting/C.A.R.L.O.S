@@ -119,6 +119,9 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         m_activePlan.clear();
         m_activity.clear();
         m_activityHistory.clear();
+        m_projectMemories.clear();
+        m_projectMemoryRequest.clear();
+        m_projectMemoryPath.clear();
         m_insights.clear();
         m_security.clear();
         m_diagnostics.clear();
@@ -130,6 +133,7 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         emit confirmationChanged();
         emit activityChanged();
         emit activityHistoryChanged();
+        emit projectMemoriesChanged();
         emit insightsChanged();
         emit phase3Changed();
         emit dailyChanged();
@@ -343,6 +347,19 @@ void EvClient::refreshSnapshot() { sendRequest(QStringLiteral("snapshot")); }
 void EvClient::refreshMemories() {
     sendRequest(QStringLiteral("memory.list"), {{QStringLiteral("limit"), 100}});
 }
+void EvClient::refreshProjectMemories(const QString &project) {
+    m_projectMemoryPath = project.trimmed();
+    m_projectMemoryRequest.clear();
+    m_projectMemories.clear();
+    if (!m_projectMemoryPath.isEmpty() && connected()) {
+        m_projectMemoryRequest = sendRequest(QStringLiteral("tool.call"),
+            {{QStringLiteral("name"), QStringLiteral("memory.project.search")},
+             {QStringLiteral("arguments"), QJsonObject{{QStringLiteral("project"), m_projectMemoryPath},
+                                                       {QStringLiteral("limit"), 100}}}});
+        m_projectMemories.insert(QStringLiteral("loading"), !m_projectMemoryRequest.isEmpty());
+    }
+    emit projectMemoriesChanged();
+}
 void EvClient::refreshTools() { sendRequest(QStringLiteral("tool.catalog")); }
 void EvClient::refreshDaily() { sendRequest(QStringLiteral("daily.snapshot")); }
 void EvClient::refreshActivityHistory() {
@@ -407,6 +424,11 @@ void EvClient::processLine(const QByteArray &line) {
         processResponse(message);
     else if (type == QStringLiteral("error")) {
         m_pendingRequests.remove(valueString(message, "id"));
+        if (valueString(message, "id") == m_projectMemoryRequest && !m_projectMemoryRequest.isEmpty()) {
+            m_projectMemoryRequest.clear();
+            m_projectMemories = {{QStringLiteral("error"), QStringLiteral("Could not load project notes")}};
+            emit projectMemoriesChanged();
+        }
         setStatus(QStringLiteral("Core error: %1")
                       .arg(message.value(QStringLiteral("payload"))
                                .toObject()
@@ -426,6 +448,15 @@ void EvClient::processResponse(const QJsonObject &message) {
         return;
     }
     const QJsonObject payload = message.value(QStringLiteral("payload")).toObject();
+    if (id == m_projectMemoryRequest && !id.isEmpty()) {
+        m_projectMemoryRequest.clear();
+        if (payload.value(QStringLiteral("status")).toString() == QStringLiteral("completed"))
+            m_projectMemories = objectMap(payload.value(QStringLiteral("result")));
+        else
+            m_projectMemories = {{QStringLiteral("error"), payload.value(QStringLiteral("error"))
+                .toString(QStringLiteral("Could not load project notes"))}};
+        emit projectMemoriesChanged();
+    }
     if (requestType == QStringLiteral("snapshot")) {
         applySnapshot(payload);
     } else if (requestType == QStringLiteral("events.history")) {
@@ -527,6 +558,9 @@ void EvClient::processResponse(const QJsonObject &message) {
         }
     } else if (requestType == QStringLiteral("confirmation.respond")) {
         refreshMemories();
+        if (payload.value(QStringLiteral("tool")).toString().startsWith(QStringLiteral("memory.project."))
+            && !m_projectMemoryPath.isEmpty())
+            refreshProjectMemories(m_projectMemoryPath);
         if (payload.value(QStringLiteral("tool")).toString() == QStringLiteral("memory.timeline.clear"))
             refreshActivityHistory();
         const QJsonObject command = payload.value(QStringLiteral("command")).toObject();
@@ -579,6 +613,9 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         m_confirmation.clear();
         m_cognition.clear();
         m_activityHistory.clear();
+        m_projectMemories.clear();
+        m_projectMemoryRequest.clear();
+        m_projectMemoryPath.clear();
         emit voiceChanged();
         emit timelineChanged();
         emit eventsChanged();
@@ -588,6 +625,7 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         emit confirmationChanged();
         emit cognitionChanged();
         emit activityHistoryChanged();
+        emit projectMemoriesChanged();
     }
     const bool audioSample =
         type == QStringLiteral("voice.audio_level") || type == QStringLiteral("tts.audio_level");

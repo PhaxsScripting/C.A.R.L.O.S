@@ -28,6 +28,7 @@ class EvClient final : public QObject {
     Q_PROPERTY(QVariantList plans READ plans NOTIFY phase3Changed)
     Q_PROPERTY(QVariantMap activePlan READ activePlan NOTIFY phase3Changed)
     Q_PROPERTY(QVariantMap activity READ activity NOTIFY activityChanged)
+    Q_PROPERTY(QVariantMap projectMemories READ projectMemories NOTIFY projectMemoriesChanged)
     Q_PROPERTY(QVariantMap activityHistory READ activityHistory NOTIFY activityHistoryChanged)
     Q_PROPERTY(QVariantList insights READ insights NOTIFY insightsChanged)
     Q_PROPERTY(QVariantMap security READ security NOTIFY phase3Changed)
@@ -59,6 +60,7 @@ class EvClient final : public QObject {
     QVariantList plans() const { return m_plans; }
     QVariantMap activePlan() const { return m_activePlan; }
     QVariantMap activity() const { return m_activity; }
+    QVariantMap projectMemories() const { return m_projectMemories; }
     QVariantMap activityHistory() const { return m_activityHistory; }
     Q_INVOKABLE void refreshActivityHistory();
     QVariantList insights() const { return m_insights; }
@@ -97,6 +99,7 @@ class EvClient final : public QObject {
     Q_INVOKABLE void respondToConfirmation(bool approved);
     Q_INVOKABLE void refreshSnapshot();
     Q_INVOKABLE void refreshMemories();
+    Q_INVOKABLE void refreshProjectMemories(const QString &project);
     Q_INVOKABLE void refreshTools();
     Q_INVOKABLE void refreshPhase3();
     Q_INVOKABLE void updatePersonality(const QString &key, const QVariant &value);
@@ -108,6 +111,7 @@ class EvClient final : public QObject {
     void sceneActivated(const QString &hud);
     void activityChanged();
     void activityHistoryChanged();
+    void projectMemoriesChanged();
     void insightsChanged();
     void dailyChanged();
     void toolResultChanged();
@@ -177,6 +181,9 @@ class EvClient final : public QObject {
     QVariantMap m_activePlan;
     QVariantMap m_activity;
     QVariantMap m_activityHistory;
+    QVariantMap m_projectMemories;
+    QString m_projectMemoryPath;
+    QString m_projectMemoryRequest;
     QVariantList m_insights;
     QVariantMap m_security;
     QVariantMap m_latency;

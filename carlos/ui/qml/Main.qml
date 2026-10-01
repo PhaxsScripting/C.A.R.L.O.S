@@ -581,51 +581,7 @@ ApplicationWindow {
                     }
                 }
 
-                // MEMORY
-                Item {
-                    ColumnLayout {
-                        anchors.fill: parent; anchors.margins: 18; spacing: 12
-                        RowLayout {
-                            Layout.fillWidth: true
-                            SciField {
-                                id: memoryInput
-                                objectName: "memory-input"
-                                Layout.fillWidth: true
-                                placeholderText: "Create an explicit memory…"
-                                color: "#e5f9ff"
-                                placeholderTextColor: "#829fb2"
-                                function submit() {
-                                    if (!evClient.connected || text.trim().length === 0) return;
-                                    evClient.remember(text);
-                                    text = "";
-                                }
-                                onAccepted: submit()
-                            }
-                            HudButton { objectName: "save-memory"; text: "Remember"; enabled: evClient.connected && memoryInput.text.trim().length > 0; onClicked: memoryInput.submit() }
-                            HudButton { text: "REFRESH"; onClicked: evClient.refreshMemories() }
-                        }
-                        SectionPanel {
-                            Layout.fillWidth: true; Layout.fillHeight: true
-                            ListView {
-                                ScrollBar.vertical: ListScrollBar {}
-                                anchors.fill: parent; anchors.margins: 16; spacing: 9; clip: true; model: evClient.memories
-                                delegate: HudPanel {
-                                    required property var modelData
-                                    width: ListView.view.width; height: 84; color: "#0b1c2b"; lineColor: "#30526a"; cut: 10
-                                    RowLayout { anchors.fill: parent; anchors.margins: 12
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            Text { Layout.fillWidth: true; text: modelData.content; color: "#d9edf2"; font.pixelSize: 12; wrapMode: Text.WordWrap }
-                                            Text { text: "EXPLICIT  //  " + modelData.id.slice(0, 8); color: appWindow.dim; font.pixelSize: 9; font.letterSpacing: 1 }
-                                        }
-                                        HudButton { text: "FORGET"; accent: "#ff6478"; onClicked: evClient.forget(modelData.id) }
-                                    }
-                                }
-                                Text { anchors.centerIn: parent; width: Math.min(420, parent.width - 32); visible: parent.count === 0; text: evClient.connected ? "No saved memories yet. Add something you want Carlos to remember above." : "Connect to Carlos to load your saved memories."; color: appWindow.dim; font.pixelSize: 13; wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter }
-                            }
-                        }
-                    }
-                }
+                MemoryView { client: evClient }
 
                 // SYSTEM
                 Item {

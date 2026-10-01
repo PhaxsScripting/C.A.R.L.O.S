@@ -65,3 +65,13 @@ existing history. Clear history asks for approval and leaves explicit memories,
 conversations and permission receipts alone. Leave Private Session before
 clearing saved history. CLI access: `evctl tool memory.timeline --arguments
 '{"limit":50}'`. This is workstation activity; mobile login history is separate.
+
+Memory → Project notes stores approved notes separately for an exact existing
+directory. Enter its full path, then Refresh. Saving and forgetting use the
+ordinary permission prompt; switching paths clears the previous results. Private
+sessions keep changes in RAM. General notes remain separate. Loading a project
+on this page does not select the assistant's preferred project. Set that through
+`preferences.set` with key `project` when you want its approved notes included
+as historical model context. These notes do not grant permission or prove live
+project state. The `memory.project.search`, `.remember` and `.forget` tools work
+offline. Search can filter content and limits responses; it does not scan files.

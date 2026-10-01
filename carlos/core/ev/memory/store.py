@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS project_memories (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS project_memories_project_idx ON project_memories(project_id, updated_at);
 CREATE TABLE IF NOT EXISTS conversations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     correlation_id TEXT NOT NULL,
@@ -146,6 +155,51 @@ class MemoryStore:
             cursor = self._connection.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
             self._connection.commit()
             return cursor.rowcount == 1
+
+    def remember_project(self, project: str, content: str, tags: list[str] | None = None) -> dict[str, Any]:
+        memory_id, timestamp = uuid.uuid4().hex, now()
+        clean_tags = sorted({tag.strip().lower() for tag in (tags or []) if tag.strip()})[:20]
+        with self._lock:
+            row = self._connection.execute('SELECT id FROM projects WHERE path=?', (project,)).fetchone()
+            project_id = row['id'] if row else uuid.uuid4().hex
+            if row is None:
+                self._connection.execute(
+                    'INSERT INTO projects(id,name,path,created_at,updated_at) VALUES(?,?,?,?,?)',
+                    (project_id, Path(project).name, project, timestamp, timestamp),
+                )
+            self._connection.execute(
+                'INSERT INTO project_memories(id,project_id,content,tags_json,created_at,updated_at) VALUES(?,?,?,?,?,?)',
+                (memory_id, project_id, content.strip(), json.dumps(clean_tags), timestamp, timestamp),
+            )
+            self._connection.commit()
+        return {'id': memory_id, 'project': project, 'content': content.strip(),
+                'tags': clean_tags, 'created_at': timestamp}
+
+    def list_project_memories(self, project: str, query: str = '', limit: int = 50) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._connection.execute(
+                'SELECT m.* FROM project_memories m JOIN projects p ON m.project_id=p.id '
+                'WHERE p.path=? AND (?=\'\' OR m.content LIKE ?) ORDER BY m.updated_at DESC LIMIT ?',
+                (project, query, '%' + query + '%', max(1, min(limit, 200))),
+            ).fetchall()
+        return [{'id': row['id'], 'project': project, 'content': row['content'],
+                 'tags': json.loads(row['tags_json']), 'created_at': row['created_at']} for row in rows]
+
+    def forget_project(self, project: str, memory_id: str) -> bool:
+        with self._lock:
+            cursor = self._connection.execute(
+                'DELETE FROM project_memories WHERE id=? AND project_id IN (SELECT id FROM projects WHERE path=?)',
+                (memory_id, project),
+            )
+            self._connection.commit()
+            return cursor.rowcount == 1
+
+    def project_memory_exists(self, project: str, memory_id: str) -> bool:
+        with self._lock:
+            return self._connection.execute(
+                'SELECT 1 FROM project_memories m JOIN projects p ON m.project_id=p.id WHERE p.path=? AND m.id=?',
+                (project, memory_id),
+            ).fetchone() is not None
 
     def add_conversation(self, correlation_id: str, role: str, content: str) -> None:
         if role not in {"user", "assistant", "system", "tool"}:

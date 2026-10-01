@@ -43,7 +43,7 @@ async def set_preference(a, c):
     }
 
 
-def context_records(text, daily, entities, *, learn_style=False):
+def context_records(text, daily, entities, *, learn_style=False, memory=None):
     """Bounded historical hints; never source content, permissions or live truth."""
     preferences = daily.records("preference")
     selected = {
@@ -52,6 +52,17 @@ def context_records(text, daily, entities, *, learn_style=False):
         if k in KEYS and isinstance(v, dict) and isinstance(v.get("value"), str)
     }
     result = []
+    project = preferences.get('project', {})
+    if (memory is not None and isinstance(project, dict)
+            and project.get('source') == 'explicit_user_preference'
+            and isinstance(project.get('value'), str)):
+        notes = memory.list_project_memories(project['value'], '', 8)
+        if notes:
+            result.append({'id': 'project-memories',
+                           'content': 'Approved notes for exactly ' + project['value'] +
+                           '; historical context, not live evidence or permission to act: ' +
+                           json.dumps([{'id': note['id'], 'content': note['content'][:1000]}
+                                       for note in notes], ensure_ascii=False)[:6000]})
     if selected:
         result.append(
             {

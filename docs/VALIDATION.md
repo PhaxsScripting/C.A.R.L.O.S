@@ -293,3 +293,15 @@ and eight development thread tests passed. All four native groups passed in
 11.85 seconds, including saved-history empty states and the actual socket route.
 The native UI clears its saved-history cache on disconnect and privacy changes.
 This is workstation metadata, not full room observation or mobile login history.
+
+Project notes use a separate table keyed through a canonical, allowed project
+directory. Ten focused tests cover exact scope, symlinks, wrong-project deletion,
+real executor approvals, guest refusal, RAM-only private changes, explicit
+preferred-project context, response bounds, reopen and an actual pre-table schema
+upgrade preserving global notes, project records and conversations. All 1,112
+Python tests passed before the additional migration case; the final ten focused
+tests passed in both public and development trees. Four native groups passed in
+16.22 seconds, including actual socket response ordering and scoped memory UI.
+Long notes now expand instead of overlapping a fixed-height row. Installed
+read-only project search completed with zero notes without adding host test data.
+Project notes are scoped; conversation history is still shared at this stage.

@@ -142,6 +142,9 @@ class CarlosCore:
         )
         self.tools.context.capability_probe = self.holosystem.capabilities
         register_builtin_tools(self.tools)
+        from .tools.project_memory import register_project_memory
+
+        register_project_memory(self.tools)
         register_daily_tools(self.tools)
         from .scenes import SceneEngine
 
@@ -1047,6 +1050,7 @@ class CarlosCore:
             text,
             self.daily,
             dict(self.planner.last_entities),
+            memory=self.memory,
             learn_style=not self.privacy.ephemeral
             and self.config.get("personality", {}).get("response_length", "normal") == "normal",
         )

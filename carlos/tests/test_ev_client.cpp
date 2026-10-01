@@ -139,6 +139,25 @@ class EvClientTests : public QObject {
         QVERIFY(!client->activity().value("goal_verified").toBool());
     }
 
+    void projectMemoryRepliesCannotReplaceANewerScope() {
+        client->refreshProjectMemories("/tmp/alpha");
+        QTRY_VERIFY(peer->canReadLine());
+        const auto alpha = QJsonDocument::fromJson(peer->readLine()).object();
+        client->refreshProjectMemories("/tmp/beta");
+        QTRY_VERIFY(peer->canReadLine());
+        const auto beta = QJsonDocument::fromJson(peer->readLine()).object();
+        QCOMPARE(beta.value("payload").toObject().value("arguments").toObject().value("project").toString(), QString("/tmp/beta"));
+        send({{"type","response"},{"id",beta.value("id")},{"payload",QJsonObject{
+            {"status","completed"},{"tool","memory.project.search"},{"result",QJsonObject{{"project","/tmp/beta"},{"memories",QJsonArray{QJsonObject{{"content","beta"}}}}}}}}});
+        QTRY_COMPARE(client->projectMemories().value("project").toString(),QString("/tmp/beta"));
+        send({{"type","response"},{"id",alpha.value("id")},{"payload",QJsonObject{
+            {"status","completed"},{"tool","memory.project.search"},{"result",QJsonObject{{"project","/tmp/alpha"}}}}}});
+        QTest::qWait(30);
+        QCOMPARE(client->projectMemories().value("project").toString(),QString("/tmp/beta"));
+        sendEvent("carlos.privacy_changed",{{"mode","PRIVATE"}});
+        QTRY_VERIFY(client->projectMemories().isEmpty());
+    }
+
     void savedActivityComesFromItsReadOnlyToolAndExpiresOnDisconnect() {
         client->refreshActivityHistory();
         QTRY_VERIFY(peer->canReadLine());

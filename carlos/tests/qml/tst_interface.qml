@@ -27,6 +27,7 @@ TestCase {
         property var events: []
         property var timeline: [{kind:"USER",title:"ME",body:"Fixture request"},{kind:"ASSISTANT",title:"E.V.",body:"Fixture response, never executed."}]
         property var memories: []
+        property var projectMemories: ({})
         property var tools: []
         property var plans: []
         property var activePlan: ({})
@@ -49,6 +50,8 @@ TestCase {
         function retryCore() {}
         function rememberFailureCard(id) {}
         function refreshMemories() {}
+        function refreshProjectMemories(project) { projectMemories={}; if(project.length) calls=calls.concat([{name:"memory.project.search",args:{project:project}}]) }
+        function forget(id) {}
         function refreshPhase3() {}
         function refreshTools() {}
         function refreshSnapshot() {}
@@ -65,7 +68,7 @@ TestCase {
         mock.connected=true; mock.confirmation={}; mock.state="DORMANT"
         mock.timeline=[{kind:"USER",title:"ME",body:"Fixture request"}]
         mock.voice={wake_active:true}
-        mock.activityHistory={}
+        mock.activityHistory={}; mock.projectMemories={}
         mock.daily={reminders:[],aliases:{},routines:{},scenes:[{id:"test-scene",name:"Fixture scene",live:false,preview:Qt.resolvedUrl("../../ui/assets/ev-neural-brain.png"),accent:"#70e6ff",background:"#061320",secondary:"#b1baff"}],spotify:{}}
         ui=createTemporaryObject(appComponent,null)
         verify(ui !== null)
@@ -317,6 +320,28 @@ TestCase {
         send.clicked()
         input.accepted()
         compare(mock.commands, ["keep this draft"])
+    }
+    function test_project_memory_requires_a_scope_and_keeps_general_notes_separate() {
+        click("nav-3")
+        click("memory-project")
+        item("memory-input").text="project fixture"
+        verify(!item("save-memory").enabled)
+        verify(!item("refresh-memory").enabled)
+        item("memory-project-path").text="/tmp/fixture-project"
+        item("refresh-memory").clicked()
+        compare(mock.calls[0].name,"memory.project.search")
+        compare(mock.calls[0].args.project,"/tmp/fixture-project")
+        item("save-memory").clicked()
+        compare(mock.calls[1].name,"memory.project.remember")
+        compare(mock.calls[1].args.content,"project fixture")
+        mock.memories=[{id:"a".repeat(32),content:"general fixture"}]
+        compare(item("memory-list").count,0)
+        mock.projectMemories={memories:[{id:"b".repeat(32),content:"project fixture"}],project:"/tmp/fixture-project",storage:"PERSISTENT"}
+        tryCompare(item("memory-list"),"count",1)
+        item("memory-project-path").text="/tmp/another-project"
+        tryCompare(item("memory-list"),"count",0)
+        click("memory-global")
+        tryCompare(item("memory-list"),"count",1)
     }
     function test_memory_requires_content_and_connection() {
         click("nav-3")
