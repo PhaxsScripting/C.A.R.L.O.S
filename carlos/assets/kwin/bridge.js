@@ -13,7 +13,14 @@ function rectangle(value) {
     };
 }
 
+function maximizeMode(window) {
+    const mode = window.maximizeMode;
+    return typeof mode === "number" && [0, 1, 2, 3].indexOf(mode) !== -1 ? mode : null;
+}
+
 function isMaximized(window) {
+    const mode = maximizeMode(window);
+    if (mode !== null) return mode === 3;
     try {
         const area = workspace.clientArea(KWin.MaximizeArea, window);
         const geometry = window.frameGeometry;
@@ -59,6 +66,7 @@ function serializeWindow(window) {
         minimized: Boolean(window.minimized),
         fullscreen: Boolean(window.fullScreen),
         maximized: isMaximized(window),
+        maximize_mode: maximizeMode(window),
         tiled: Boolean(window.tile),
         normal: Boolean(window.normalWindow),
         dialog: Boolean(window.dialog),
@@ -155,16 +163,8 @@ function execute(command) {
     } else if (action === "restore") {
         window.minimized = false;
         window.fullScreen = false;
-        if (isMaximized(window)) {
-            workspace.activeWindow = window;
-            workspace.raiseWindow(window);
-            workspace.slotWindowMaximize();
-        } else {
-            window.setMaximize(false, false);
-        }
-        // KWin 6 represents quick/custom tiled placement with Window.tile.
-        // A tiled window ignores arbitrary frameGeometry until detached.
         window.tile = null;
+        window.setMaximize(false, false);
     } else if (action === "fullscreen") {
         window.minimized = false;
         window.fullScreen = Boolean(args.enabled);

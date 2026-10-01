@@ -1894,11 +1894,13 @@ async def desktop_set_window_state(
     if expected_key:
         verified = bool(actual and actual.get(expected_key))
     elif state == "restore":
+        mode = actual.get('maximize_mode') if actual else None
+        unmaximized = (type(mode) is int and mode == 0) if mode is not None else bool(actual and not actual.get('maximized'))
         verified = bool(
             actual
             and not actual.get("minimized")
             and not actual.get("fullscreen")
-            and not actual.get("maximized")
+            and unmaximized
         )
     return {"verified": verified, "requested_state": state, "window": actual}
 

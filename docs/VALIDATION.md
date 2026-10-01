@@ -382,3 +382,15 @@ checks passed. The actual no-route namespace passed eight IPC checks, including
 cross-project list/detail filtering and refusal to continue unrelated work.
 All 1,159 Python tests passed in 67.483 s. Activity metadata is still workstation
 history; this change does not claim every Carlos record is a private project silo.
+
+The KWin bridge now reads the native maximize mode when available, instead of
+classifying an ordinary area-sized window as maximized. Restore clears tile,
+fullscreen, minimization and native maximize state directly; it never toggles
+or deliberately focuses another window. Older APIs retain the area fallback.
+The actual bridge JavaScript runs under QJSEngine tests for native/partial/legacy
+state, idempotence, focus preservation and expiry. Five native groups passed in
+12.59 s, three development state checks passed, and all 1,162 Python tests passed
+in 68.106 s. Actual installed IPC passed maximize → minimize → restore, repeated
+restore, area-sized ordinary placement and unchanged unrelated focus on an owned
+disposable GTK window; native modes were 3 then 0 and the test window was closed.
+No existing application content or desktop layout was changed by that test.
