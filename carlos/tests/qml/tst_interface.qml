@@ -332,4 +332,13 @@ TestCase {
         mock.daily = {readiness:{timing:{startup_to_all_ready_seconds:3.2,last_resume:{resume_to_all_ready_range_seconds:[2,7.5]}}}}
         tryCompare(item("resume-readiness-time"), "text", "Resume readiness: 2.0 to 7.5 s (observed range)")
     }
+    function test_battery_power_source_is_separate_from_charging() {
+        ui.testPage = 4
+        mock.telemetry = {battery:null}
+        tryCompare(item("battery-status-card"), "detail", "UNAVAILABLE")
+        mock.telemetry = {battery:{percent:0,plugged:true,status:"Not charging"}}
+        tryCompare(item("battery-status-card"), "detail", "AC POWER / NOT CHARGING")
+        mock.telemetry = {battery:{percent:30,plugged:true,status:"Charging"}}
+        tryCompare(item("battery-status-card"), "detail", "AC POWER / CHARGING")
+    }
 }

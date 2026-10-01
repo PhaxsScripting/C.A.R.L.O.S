@@ -89,7 +89,8 @@ class TelemetrySampler:
         }
         self._last_network = net
         self._last_network_time = now
-        battery = psutil.sensors_battery()
+        from .battery import read_battery
+        battery = read_battery()
         with self.process.oneshot():
             own = {
                 "pid": self.process.pid,
@@ -115,15 +116,7 @@ class TelemetrySampler:
                 "percent": root.percent,
             },
             "network": network,
-            "battery": (
-                None
-                if battery is None
-                else {
-                    "percent": battery.percent,
-                    "plugged": battery.power_plugged,
-                    "seconds_left": battery.secsleft,
-                }
-            ),
+            "battery": battery,
             "uptime_seconds": round(time.time() - psutil.boot_time()),
             "ev_core": own,
         }

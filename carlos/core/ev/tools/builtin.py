@@ -341,15 +341,9 @@ def get_network_status(_arguments: dict[str, Any], _context: ToolContext) -> dic
 
 
 def get_battery(_arguments: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
-    battery = psutil.sensors_battery()
-    if battery is None:
-        return {"present": False}
-    return {
-        "present": True,
-        "percent": battery.percent,
-        "plugged": battery.power_plugged,
-        "seconds_left": battery.secsleft,
-    }
+    from ..battery import read_battery
+    battery = read_battery()
+    return {"present": False} if battery is None else {"present": True, **battery}
 
 
 def _application_key(value: str) -> str:
