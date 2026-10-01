@@ -112,6 +112,22 @@ TestCase {
         compare(ui.voiceStatus(), "CHECK MIC / LOUD INPUT WITHOUT CLEAR SPEECH")
         mock.voice = {wake_active:true,diagnostics:{}}
     }
+    function test_busy_status_survives_paused_microphone_and_approval_wait() {
+        mock.voice = {privacy_mode:true,wake_paused:true,resource_suspended:true}
+        mock.state = "THINKING"
+        compare(ui.voiceStatus(), "WORKING ON YOUR REQUEST")
+        mock.state = "USING_TOOL"
+        compare(ui.voiceStatus(), "EXECUTING / VERIFYING")
+        mock.state = "WAITING_FOR_CONFIRMATION"
+        compare(ui.voiceStatus(), "WAITING FOR YOUR APPROVAL")
+        mock.state = "DORMANT"
+        compare(ui.voiceStatus(), "MICROPHONE OFF / PRIVACY")
+        mock.voice = {resource_suspended:true,wake_paused:true}
+        compare(ui.voiceStatus(), "VOICE PAUSED / RESOURCE LIMIT")
+        mock.voice = {speaking:true,diagnostics:{tts_state:"LOADING"}}
+        compare(ui.voiceStatus(), "PREPARING YOUR REPLY")
+        mock.voice = {wake_active:true,diagnostics:{}}
+    }
     function test_orb_shows_real_wait_state_and_expands_input() {
         mock.activity = {phase:"WAITING",task_id:"exact-task",wait_reason:"Observing declared conditions"}
         const orb = item("agent-orb")

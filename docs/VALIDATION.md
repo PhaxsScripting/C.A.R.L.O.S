@@ -232,3 +232,12 @@ fresh ready server. End-to-end fixture times were 11.667 seconds for llama and
 Private ports/storage and pidfds constrained cleanup to fixture children; the
 running Carlos core and its models were unchanged. This tests model ownership
 recovery, not the entire Core/HUD failure or physical chaos matrix.
+
+Native voice status now shows active thinking, execution, speech and approval
+waits before an idle microphone policy label. A paused/muted microphone no
+longer hides a typed request's progress. Speech synthesis says Preparing your
+reply; resource suspension says Voice paused / resource limit. The native
+interaction test covers those combinations, and all four Qt/QML/pet groups
+passed after rebuilding. No OS appearance or microphone policy changed.
+The Python suite remains the last 1,081-test result; no Python source changed
+in this status-label pass.

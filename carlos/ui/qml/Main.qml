@@ -102,13 +102,16 @@ ApplicationWindow {
     function voiceDiag(key, fallback) { return get(get(evClient.voice, "diagnostics", {}), key, fallback) }
     function voiceStatus() {
         if (!evClient.connected) return "CORE DISCONNECTED"
-        if (get(evClient.voice, "privacy_mode", false)) return "MICROPHONE OFF / PRIVACY"
-        if (get(evClient.voice, "wake_paused", false)) return "WAKE LISTENING PAUSED"
         if (evClient.state === "LISTENING") return voiceDiag("follow_up_state", "") === "ACTIVE" ? "YOUR TURN / KEEP TALKING" : "LISTENING TO YOU"
         if (evClient.state === "TRANSCRIBING") return "TRANSCRIBING YOUR WORDS"
         if (["THINKING", "RETRIEVING_MEMORY"].indexOf(evClient.state) >= 0) return "WORKING ON YOUR REQUEST"
         if (evClient.state === "USING_TOOL") return "EXECUTING / VERIFYING"
         if (evClient.state === "SPEAKING") return "SPEAKING / SAY STOP TO END"
+        if (evClient.state === "WAITING_FOR_CONFIRMATION") return "WAITING FOR YOUR APPROVAL"
+        if (get(evClient.voice, "speaking", false) && voiceDiag("tts_state", "") === "LOADING") return "PREPARING YOUR REPLY"
+        if (get(evClient.voice, "privacy_mode", false)) return "MICROPHONE OFF / PRIVACY"
+        if (get(evClient.voice, "resource_suspended", false)) return "VOICE PAUSED / RESOURCE LIMIT"
+        if (get(evClient.voice, "wake_paused", false)) return "WAKE LISTENING PAUSED"
         if (voiceDiag("wake_input_quality", "") === "LOUD_NON_SPEECH") return "CHECK MIC / LOUD INPUT WITHOUT CLEAR SPEECH"
         if (get(voiceDiag("wake_speech_backup", {}), "state", "") === "CHECKING") return "CHECKING YOUR NAME / LOCAL"
         return get(evClient.voice, "wake_active", false) ? "LISTENING FOR Carlos" : "VOICE NEEDS ATTENTION"
