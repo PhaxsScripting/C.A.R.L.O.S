@@ -1498,12 +1498,18 @@ class CarlosCore:
         if not isinstance(text, str) or not text.strip() or len(text) > 8000:
             raise ValueError("command text must be 1-8000 characters")
         steering = previous is not None
+        project = await self._captured_project_scope()
+        if previous is not None and previous.get('project', '') != project:
+            return {
+                'status': 'blocked', 'correlation_id': correlation,
+                'response': 'That task belongs to another project. Select its project before revising it.',
+            }
         if previous is None and re.fullmatch(
             r"\s*(?:continue|keep going|finish that|do the rest|resume (?:that|the task))\s*[.!?]*\s*",
             text,
             re.I,
         ):
-            previous = await asyncio.to_thread(journal.latest_resumable)
+            previous = await asyncio.to_thread(journal.latest_resumable, project=project)
             if previous is None:
                 return {
                     "status": "failed",
@@ -1515,11 +1521,13 @@ class CarlosCore:
             correlation,
             text if previous is None or steering else previous["request"],
             None if previous is None else previous["id"],
+            project=project,
         )
         self.bus.publish(
             "task.started",
             "executor",
-            {"task_id": correlation, "parent_id": None if previous is None else previous["id"]},
+            {"task_id": correlation, "parent_id": None if previous is None else previous["id"],
+             "project": project},
             correlation,
         )
         try:
@@ -1609,14 +1617,17 @@ class CarlosCore:
         if self._steering_lock.locked():
             return {"status": "busy", "response": "Another task revision is being handled."}
         async with self._steering_lock:
-            previous = await asyncio.to_thread(self.task_journal.get, task_id)
+            project = await self._project_scope()
+            previous = await asyncio.to_thread(self.task_journal.get, task_id, project=project)
             if previous is None:
-                return {"status": "failed", "response": "That task ID does not exist."}
+                return {"status": "failed", "response": "That task ID does not exist in the selected project."}
             if previous["detail"].get("request_incomplete"):
                 return {
                     "status": "blocked",
                     "response": "The saved request is incomplete or redacted. Submit the complete revised request as a new command.",
                 }
+            if await self._project_scope() != project:
+                return {'status': 'blocked', 'response': 'The selected project changed. No task was interrupted.'}
             task = self._interactive_task
             if task and not task.done():
                 if self._interactive_correlation != task_id:
@@ -1642,7 +1653,9 @@ class CarlosCore:
                     "status": "blocked",
                     "response": "Cancel or deny the pending approval first, then revise this task. No approval has been reused.",
                 }
-            previous = await asyncio.to_thread(self.task_journal.get, task_id)
+            previous = await asyncio.to_thread(self.task_journal.get, task_id, project=project)
+            if previous is None or await self._project_scope() != project:
+                return {'status': 'blocked', 'response': 'The task or selected project changed. No revised actions were started.'}
             await self._prepare_interactive_request(correlation)
             self.bus.publish(
                 "task.steered",
@@ -2357,13 +2370,16 @@ class CarlosCore:
                 )
             }
         if request_type == "agent.tasks.list":
+            project = await self._project_scope()
             return {
+                'project': project,
                 "tasks": await asyncio.to_thread(
-                    self.task_journal.recent, int(payload.get("limit", 20))
+                    self.task_journal.recent, int(payload.get("limit", 20)), project=project
                 )
             }
         if request_type == "agent.tasks.get":
-            task = await asyncio.to_thread(self.task_journal.get, str(payload.get("id", "")))
+            project = await self._project_scope()
+            task = await asyncio.to_thread(self.task_journal.get, str(payload.get("id", "")), project=project)
             if task is None:
                 raise ValueError("task not found")
             return {"task": task}

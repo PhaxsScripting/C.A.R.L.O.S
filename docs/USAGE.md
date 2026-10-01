@@ -84,7 +84,14 @@ loads only the selected context. Old unassigned turns stay in general history.
 Changing projects clears historical window references. A reply or approval
 started earlier stays in its original context; selection does not cancel it or
 change approved arguments. Global explicit notes are still shared preferences.
-Task receipts and optional activity history remain separate workstation records.
+Task receipts and resumption use the selected project too. `agent-tasks`,
+`agent.history` and `agent.task_status` show only that scope; old unassigned
+tasks stay in General. Select the original project before inspecting or revising
+one of its tasks. “Continue” considers the latest attempt in that project and
+observes current state before doing more work. A later successful request in the
+same project prevents resurrection of an older failure. Changing the selection
+does not cancel active work or reuse approval. Optional activity history remains
+workstation metadata.
 
 Ask “What was I working on last night?”, “What was I doing yesterday?” or “What
 happened with HoloHand?” to read saved receipts locally without a provider call.

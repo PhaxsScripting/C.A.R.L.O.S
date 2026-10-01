@@ -76,6 +76,27 @@ async def main():
             result=await call('tool.call',{'name':'memory.project.select','arguments':{'project':''}})
             assert result['status']=='completed',result
             results.append({'operation':'scoped dated history and natural request','status':'actual offline IPC; no mutations'})
+            alpha = root/'alpha'; alpha.mkdir()
+            beta = root/'beta'; beta.mkdir()
+            core.task_journal.begin('alpha-task','alpha_task_canary',project=str(alpha))
+            core.task_journal.finish('alpha-task',{'status':'failed'})
+            for project in (beta, alpha):
+                result=await call('tool.call',{'name':'memory.project.select','arguments':{'project':str(project)}})
+                assert result['status']=='completed',result
+                listed=await call('agent.tasks.list')
+                assert listed['project']==str(project)
+                assert [row['id'] for row in listed['tasks']]==([] if project==beta else ['alpha-task'])
+                result=await call('tool.call',{'name':'agent.task_status','arguments':{'id':'alpha-task'}})
+                if project==beta:
+                    assert 'alpha_task_canary' not in json.dumps(result),result
+                    continued=await call('command.submit',{'text':'continue','speak':False})
+                    assert continued['status']=='failed',continued
+                    assert core.task_journal.get('alpha-task')['status']=='FAILED'
+                else:
+                    assert result['status']=='completed' and result['result']['task']['project']==str(alpha),result
+            result=await call('tool.call',{'name':'memory.project.select','arguments':{'project':''}})
+            assert result['status']=='completed',result
+            results.append({'operation':'scoped task receipts and cross-project continuation refusal','status':'actual offline IPC; no task replay'})
             result=await call('carlos.privacy.set',{'mode':'LOCAL ONLY'})
             assert result['mode']=='LOCAL ONLY'
             result=await call('command.submit',{'text':'use cloud: Describe a comet'})

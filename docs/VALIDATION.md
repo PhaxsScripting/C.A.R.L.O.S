@@ -369,3 +369,16 @@ Calibration-file state and window state were preserved; input stayed disabled.
 Carlos reports pipeline demand and excludes idle timing readings rather than
 presenting stale model results as live latency. All 1,144 Python tests passed
 in 64.575 s. This is pipeline verification, not physical gesture acceptance.
+
+Task journal lookup and explicit continuation are now pinned to the selected
+project, including model receipt pages and CLI/IPC list/get. Existing unassigned
+tasks stay in General through an additive schema upgrade. Parent scope is checked
+inside the database transaction; wrong-project revisions do not cancel active
+work. Captured request scope survives mid-request selection changes. Pending
+approvals stay blocked until explicitly resolved; restart marks uncertain steps
+without replay. Private scope changes stay in RAM and guest cannot inspect saved
+project receipts. Fifteen focused scope tests passed, and 58 development task
+checks passed. The actual no-route namespace passed eight IPC checks, including
+cross-project list/detail filtering and refusal to continue unrelated work.
+All 1,159 Python tests passed in 67.483 s. Activity metadata is still workstation
+history; this change does not claim every Carlos record is a private project silo.

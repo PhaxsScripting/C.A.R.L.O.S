@@ -299,16 +299,16 @@ class TaskJournalIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.service.task_journal.begin("task", "test")
         spec, args = self.service.tools.validate("agent.task_status", {"id": "task"})
         self.assertTrue(spec.read_only)
-        result = spec.executor(args, self.service.tools.context)
+        result = await spec.executor(args, self.service.tools.context)
         self.assertEqual(result["task"]["id"], "task")
         self.assertFalse(result["saved_approvals_reusable"])
-        self.assertFalse(spec.executor({"id": "missing"}, self.service.tools.context)["ok"])
+        self.assertFalse((await spec.executor({"id": "missing"}, self.service.tools.context))["ok"])
 
     async def test_stop_during_journal_creation_prevents_execution(self):
         begin = self.service.task_journal.begin
 
-        def stop_at_begin(*args):
-            begin(*args)
+        def stop_at_begin(*args, **kwargs):
+            begin(*args, **kwargs)
             self.service._action_generation += 1
 
         self.service.task_journal.begin = stop_at_begin

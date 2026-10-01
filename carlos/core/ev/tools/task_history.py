@@ -1,29 +1,35 @@
 """Read-only inspection of execution receipts, not executable saved plans."""
 
+import asyncio
 from ..permissions import Permission
 from .base import ToolRegistry, ToolSpec
 from .builtin import object_schema
 
 
 def register_task_history_tools(registry: ToolRegistry) -> None:
-    def recent(arguments, context):
+    async def recent(arguments, context):
+        project = await context.project_scope() if context.project_scope else ''
         return {
-            "tasks": context.task_journal.recent(arguments.get("limit", 10)),
+            "tasks": await asyncio.to_thread(context.task_journal.recent, arguments.get("limit", 10), project=project),
+            "project": project,
             "historical": True,
             "requires_fresh_observation_before_actions": True,
         }
 
-    def detail(arguments, context):
-        task = context.task_journal.get_page(
+    async def detail(arguments, context):
+        project = await context.project_scope() if context.project_scope else ''
+        task = await asyncio.to_thread(context.task_journal.get_page,
             arguments["id"],
             arguments.get("offset", 0),
             arguments.get("limit", 5),
             arguments.get("through_step_id"),
+            project=project,
         )
         if task is None:
-            return {"ok": False, "error": "No task has that exact ID"}
+            return {"ok": False, "error": "No task has that exact ID in this project"}
         return {
             "task": task,
+            "project": project,
             "historical": True,
             "saved_approvals_reusable": False,
             "requires_fresh_observation_before_actions": True,

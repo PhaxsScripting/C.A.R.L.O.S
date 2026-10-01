@@ -63,7 +63,7 @@ class TaskJournal:
                 CREATE TABLE IF NOT EXISTS agent_tasks (
                     id TEXT PRIMARY KEY, request TEXT NOT NULL, parent_id TEXT,
                     status TEXT NOT NULL, created REAL NOT NULL, updated REAL NOT NULL,
-                    detail TEXT NOT NULL DEFAULT '{}'
+                    detail TEXT NOT NULL DEFAULT '{}', project TEXT NOT NULL DEFAULT ''
                 );
                 CREATE TABLE IF NOT EXISTS agent_steps (
                     id INTEGER PRIMARY KEY, task_id TEXT NOT NULL,
@@ -73,6 +73,10 @@ class TaskJournal:
                 );
                 CREATE INDEX IF NOT EXISTS agent_steps_task ON agent_steps(task_id, id);
             """)
+            columns = {row[1] for row in db.execute('PRAGMA table_info(agent_tasks)')}
+            if 'project' not in columns:
+                db.execute("ALTER TABLE agent_tasks ADD COLUMN project TEXT NOT NULL DEFAULT ''")
+            db.execute('CREATE INDEX IF NOT EXISTS agent_tasks_project ON agent_tasks(project,updated DESC)')
 
     @contextmanager
     def _db(self):
@@ -114,12 +118,18 @@ class TaskJournal:
         finally:
             db.close()
 
-    def begin(self, task_id: str, request: str, parent_id: str | None = None) -> None:
+    def begin(self, task_id: str, request: str, parent_id: str | None = None, *, project: str = '') -> None:
+        if not isinstance(project, str):
+            raise ValueError('Task project must be an exact scope string')
         now = time.time()
         stored_request = private_summary(request)
         with self._db() as db:
+            if parent_id is not None:
+                parent = db.execute('SELECT project FROM agent_tasks WHERE id=?', (parent_id,)).fetchone()
+                if parent is None or parent['project'] != project:
+                    raise ValueError('Parent task belongs to another scope or no longer exists')
             db.execute(
-                "INSERT INTO agent_tasks(id,request,parent_id,status,created,updated,detail) VALUES(?,?,?,'RUNNING',?,?,?)",
+                "INSERT INTO agent_tasks(id,request,parent_id,status,created,updated,detail,project) VALUES(?,?,?,'RUNNING',?,?,?,?)",
                 (
                     task_id,
                     stored_request,
@@ -127,6 +137,7 @@ class TaskJournal:
                     now,
                     now,
                     json.dumps({"request_incomplete": stored_request != request}),
+                    project,
                 ),
             )
             # Keep 200 recent non-running attempts and their receipts.
@@ -234,19 +245,23 @@ class TaskJournal:
             )
             return result.rowcount
 
-    def recent(self, limit: int = 20) -> list[dict[str, Any]]:
+    def recent(self, limit: int = 20, *, project: str | None = None) -> list[dict[str, Any]]:
         with self._db() as db:
             return [
                 dict(row)
                 for row in db.execute(
-                    "SELECT id,request,parent_id,status,created,updated FROM agent_tasks ORDER BY updated DESC LIMIT ?",
-                    (max(1, min(limit, 100)),),
+                    "SELECT id,request,parent_id,status,created,updated,project FROM agent_tasks"
+                    + (" WHERE project=?" if project is not None else "")
+                    + " ORDER BY updated DESC,id DESC LIMIT ?",
+                    ((project,) if project is not None else ()) + (max(1, min(limit, 100)),),
                 )
             ]
 
-    def get(self, task_id: str) -> dict[str, Any] | None:
+    def get(self, task_id: str, *, project: str | None = None) -> dict[str, Any] | None:
         with self._db() as db:
-            row = db.execute("SELECT * FROM agent_tasks WHERE id=?", (task_id,)).fetchone()
+            row = db.execute("SELECT * FROM agent_tasks WHERE id=?"
+                             + (" AND project=?" if project is not None else ""),
+                             (task_id,) + ((project,) if project is not None else ())).fetchone()
             if row is None:
                 return None
             task = dict(row)
@@ -261,10 +276,10 @@ class TaskJournal:
                 task["steps"].append(step)
             return task
 
-    def latest_resumable(self) -> dict[str, Any] | None:
+    def latest_resumable(self, *, project: str | None = None) -> dict[str, Any] | None:
         # A new ordinary request is a context boundary; do not resurrect an
         # unrelated older failure after a successful conversation/action.
-        recent = self.recent(1)
+        recent = self.recent(1, project=project)
         if not recent or recent[0]["status"] not in {
             "FAILED",
             "OFFLINE",
@@ -273,13 +288,14 @@ class TaskJournal:
             "BLOCKED",
         }:
             return None
-        task = self.get(recent[0]["id"])
+        task = self.get(recent[0]["id"], project=project)
         if task and task["detail"].get("request_incomplete"):
             return None  # Never reinterpret a truncated/redacted goal as complete.
         return task
 
     def get_page(
-        self, task_id: str, offset: int = 0, limit: int = 5, through_step_id: int | None = None
+        self, task_id: str, offset: int = 0, limit: int = 5, through_step_id: int | None = None,
+        *, project: str | None = None
     ) -> dict[str, Any] | None:
         """Bounded receipt access; steps append in stable ID order.
 
@@ -299,7 +315,9 @@ class TaskJournal:
             raise ValueError("Invalid history snapshot step boundary")
         with self._db() as db:
             db.execute("BEGIN")
-            row = db.execute("SELECT * FROM agent_tasks WHERE id=?", (task_id,)).fetchone()
+            row = db.execute("SELECT * FROM agent_tasks WHERE id=?"
+                             + (" AND project=?" if project is not None else ""),
+                             (task_id,) + ((project,) if project is not None else ())).fetchone()
             if row is None:
                 return None
             task = dict(row)
