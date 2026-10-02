@@ -262,3 +262,9 @@ synchronous or OS actions may finish: cancellation is not rollback. Their
 changed-state evidence remains unknown unless execution actually finished and
 returned its postcondition before cancellation. Permission persistence cannot
 start an old operation after a stop.
+
+Short stop phrases bypass the normal IPC action queue on the same connection.
+A stop also removes accepted, undispatched action requests from other connected
+clients, returning a cancelled reply for each request ID. Read-only status
+requests retain their order, and ordinary application commands remain serialized.
+Two cancellation slots are reserved separately from eight status slots.

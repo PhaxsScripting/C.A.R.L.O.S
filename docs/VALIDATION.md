@@ -592,3 +592,17 @@ queue preemption is being audited separately.
 The installed three source files match the tested development tree and import
 with the host Python. The session Core was stopped; installation preserved that
 stopped state and did not launch microphone/model workers or the UI.
+
+## October 2: IPC stop preemption
+
+1,302 Python tests passed in 79.321 seconds. All seventeen cancellation checks
+passed in both trees, and the nine existing IPC responsiveness checks passed.
+Actual isolated sockets exercise all four short stop phrases on the same busy
+connection, discard queued tool/command actions without invoking their executors,
+and cancel accepted queued work on another client. Eight blocked status requests
+do not consume the two reserved cancellation slots. Ordinary commands retain
+FIFO ordering; application-specific commands cannot become accidental stops.
+
+The installed IPC source matches the tested tree and imports with host Python.
+Core was stopped and remains stopped; no UI/model/microphone workers were launched.
+Physical acoustic interruption timing remains unmeasured.

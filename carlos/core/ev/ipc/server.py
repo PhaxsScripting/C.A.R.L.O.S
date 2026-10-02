@@ -43,20 +43,35 @@ RESPONSIVE_REQUESTS = frozenset(
 )
 
 
-def _is_responsive_request(request: dict[str, Any]) -> bool:
-    if request.get("type") in RESPONSIVE_REQUESTS:
-        return True
+QUEUED_ACTIONS = frozenset({
+    "command.submit", "tool.call", "confirmation.respond", "coding.propose",
+    "tts.speak", "voice.capture.start", "voice.capture.stop",
+    "voice.microphone_test.start", "voice.transcription_test.start",
+    "voice.full_test.start", "wake.test.start", "carlos.voice.synthesize",
+    "carlos.voice.transcribe",
+})
+
+
+def _is_action_stop_request(request: dict[str, Any]) -> bool:
     payload = request.get("payload", {})
     if request.get("type") == "command.submit" and isinstance(payload, dict):
-        # Safety interrupts must not queue behind the command they must stop.
-        # Exact stop grammar only: ordinary commands remain serialized.
         text = payload.get("text")
-        if isinstance(text, str) and re.fullmatch(
+        if not isinstance(text, str):
+            return False
+        from ..voice.normalization import is_conversation_stop
+
+        return is_conversation_stop(text) or bool(re.fullmatch(
             r"\s*(?:please\s+)?(?:stop|cancel|abort)\s+(?:everything|all(?:\s+(?:tasks|actions|commands))?)[.!?]*\s*",
             text,
             re.I,
-        ):
-            return True
+        ))
+    return False
+
+
+def _is_responsive_request(request: dict[str, Any]) -> bool:
+    if request.get("type") in RESPONSIVE_REQUESTS or _is_action_stop_request(request):
+        return True
+    payload = request.get("payload", {})
     return (
         request.get("type") == "tool.call"
         and isinstance(payload, dict)
@@ -83,6 +98,7 @@ class IpcServer:
         self._writers: set[asyncio.StreamWriter] = set()
         self._write_locks: dict[asyncio.StreamWriter, asyncio.Lock] = {}
         self._client_tasks: set[asyncio.Task[Any]] = set()
+        self._request_queues: dict[asyncio.StreamWriter, asyncio.Queue] = {}
 
     async def start(self) -> None:
         if self.socket_path.exists():
@@ -152,6 +168,35 @@ class IpcServer:
             }
         await self._write(writer, message)
 
+    def _cancel_queued_actions(self):
+        cancelled = []
+        for writer, queue in tuple(self._request_queues.items()):
+            retained = []
+            while not queue.empty():
+                request = queue.get_nowait()
+                queue.task_done()
+                if request["type"] in QUEUED_ACTIONS:
+                    cancelled.append((writer, request))
+                else:
+                    retained.append(request)
+            for request in retained:
+                queue.put_nowait(request)
+        return cancelled
+
+    async def _respond_action_stop(self, writer, request, cancelled):
+        await self._respond(writer, request)
+        for destination, queued in cancelled:
+            if destination.is_closing():
+                continue
+            try:
+                await self._write(destination, {
+                    "type": "response", "id": queued["id"],
+                    "payload": {"status": "cancelled", "queued": True,
+                                "dispatched": False, "reason": "user_stop"},
+                })
+            except (ConnectionError, BrokenPipeError, TimeoutError):
+                destination.close()
+
     async def _serve_requests(
         self,
         writer: asyncio.StreamWriter,
@@ -210,11 +255,14 @@ class IpcServer:
         subscription_type: str | None = None
         event_task: asyncio.Task[None] | None = None
         request_queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=32)
+        self._request_queues[writer] = request_queue
         request_task = asyncio.create_task(self._serve_requests(writer, request_queue))
         responsive_tasks: set[asyncio.Task[None]] = set()
+        interrupt_tasks: set[asyncio.Task[None]] = set()
 
         def response_done(task: asyncio.Task[None]) -> None:
             responsive_tasks.discard(task)
+            interrupt_tasks.discard(task)
             if not task.cancelled() and task.exception() is not None:
                 writer.close()
 
@@ -258,7 +306,17 @@ class IpcServer:
                         await self._write(
                             writer, {"type": "response", "id": request["id"], "payload": result}
                         )
-                    elif _is_responsive_request(request) and len(responsive_tasks) < 8:
+                    elif _is_action_stop_request(request):
+                        if len(interrupt_tasks) >= 2:
+                            await self._write(writer, {"type": "error", "id": request["id"],
+                                "payload": {"code": "busy", "message": "Cancellation is already in progress."}})
+                            continue
+                        cancelled = self._cancel_queued_actions()
+                        task = asyncio.create_task(self._respond_action_stop(writer, request, cancelled))
+                        responsive_tasks.add(task)
+                        interrupt_tasks.add(task)
+                        task.add_done_callback(response_done)
+                    elif _is_responsive_request(request) and len(responsive_tasks) - len(interrupt_tasks) < 8:
                         task = asyncio.create_task(self._respond(writer, request))
                         responsive_tasks.add(task)
                         task.add_done_callback(response_done)
@@ -310,6 +368,7 @@ class IpcServer:
             self.clients -= 1
             self._client_tasks.discard(client_task)
             self._writers.discard(writer)
+            self._request_queues.pop(writer, None)
             self._write_locks.pop(writer, None)
             if not writer.is_closing():
                 writer.close()

@@ -17,6 +17,7 @@ from ev.state import CoreState
 from ev.tools import ToolSpec
 from ev.voice.stt import Transcript
 from ev.voice.normalization import is_conversation_stop
+from ev.ipc.server import _is_responsive_request
 
 
 class ToolCancellationTests(unittest.IsolatedAsyncioTestCase):
@@ -396,3 +397,111 @@ class ToolCancellationTests(unittest.IsolatedAsyncioTestCase):
         second_release.set()
         await second
         self.assertFalse(self.core._stopping_tools)
+
+    async def receive_ids(self, reader, ids):
+        replies = {}
+        async with asyncio.timeout(3):
+            while set(replies) != set(ids):
+                line = await reader.readline()
+                self.assertTrue(line)
+                reply = json.loads(line)
+                if reply.get('id') in ids:
+                    self.assertEqual(reply['type'], 'response', reply)
+                    replies[reply['id']] = reply['payload']
+        return replies
+
+    async def test_same_connection_short_stop_discards_queued_actions_before_dispatch(self):
+        entered = asyncio.Event()
+
+        async def execute(args, context):
+            entered.set()
+            await asyncio.sleep(60)
+
+        blocked = self.spec(execute)
+        effect = AsyncMock(return_value={'verified': True})
+        queued = self.spec(effect, read_only=False, name='fixture.effect')
+        await self.core.ipc.start()
+        reader, writer = await self.connection()
+        for phrase in ('stop', 'wait', "actually don't", 'cancel that'):
+            with self.subTest(phrase=phrase):
+                entered.clear()
+                await self.send(writer, 'tool.call', 'blocking', {'name': blocked.name, 'arguments': {}})
+                await entered.wait()
+                await self.send(writer, 'tool.call', 'queued-tool', {'name': queued.name, 'arguments': {}})
+                await self.send(writer, 'command.submit', 'queued-command', {'text': 'open Firefox', 'speak': False})
+                await self.send(writer, 'command.submit', 'stop', {'text': phrase, 'speak': False})
+                replies = await self.receive_ids(reader, {'blocking', 'queued-tool', 'queued-command', 'stop'})
+                self.assertEqual(replies['blocking']['status'], 'cancelled')
+                for ident in ('queued-tool', 'queued-command'):
+                    self.assertEqual(replies[ident], {'status': 'cancelled', 'queued': True,
+                                                     'dispatched': False, 'reason': 'user_stop'})
+                await self.send(writer, 'health', 'healthy', {})
+                self.assertTrue((await self.reply(reader, 'healthy'))['ok'])
+        effect.assert_not_awaited()
+
+    async def test_stop_also_cancels_queued_actions_on_another_client(self):
+        entered = asyncio.Event()
+
+        async def execute(args, context):
+            entered.set()
+            await asyncio.sleep(60)
+
+        blocked = self.spec(execute)
+        effect = AsyncMock(return_value={'verified': True})
+        queued = self.spec(effect, read_only=False, name='fixture.effect')
+        await self.core.ipc.start()
+        reader, writer = await self.connection()
+        stop_reader, stop_writer = await self.connection()
+        await self.send(writer, 'tool.call', 'blocking', {'name': blocked.name, 'arguments': {}})
+        await entered.wait()
+        await self.send(writer, 'tool.call', 'queued', {'name': queued.name, 'arguments': {}})
+        async with asyncio.timeout(2):
+            while not any(queue.qsize() for queue in self.core.ipc._request_queues.values()):
+                await asyncio.sleep(.005)
+        await self.send(stop_writer, 'command.submit', 'stop', {'text': 'stop everything', 'speak': False})
+        self.assertEqual((await self.reply(stop_reader, 'stop'))['tools']['cancel_requested'], 1)
+        replies = await self.receive_ids(reader, {'blocking', 'queued'})
+        self.assertEqual(replies['queued']['status'], 'cancelled')
+        self.assertFalse(replies['queued']['dispatched'])
+        effect.assert_not_awaited()
+
+    async def test_stop_has_reserved_capacity_when_status_slots_are_busy(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+        status_count = 0
+        handle = self.core.handle_request
+
+        async def handler(request):
+            nonlocal status_count
+            if request['type'] == 'health' and request['id'].startswith('busy'):
+                status_count += 1
+                await release.wait()
+            return await handle(request)
+
+        async def execute(args, context):
+            entered.set()
+            await asyncio.sleep(60)
+
+        blocked = self.spec(execute)
+        self.core.ipc.handler = handler
+        await self.core.ipc.start()
+        reader, writer = await self.connection()
+        await self.send(writer, 'tool.call', 'blocking', {'name': blocked.name, 'arguments': {}})
+        await entered.wait()
+        try:
+            for index in range(8):
+                await self.send(writer, 'health', 'busy' + str(index), {})
+            async with asyncio.timeout(2):
+                while status_count != 8:
+                    await asyncio.sleep(.005)
+            await self.send(writer, 'command.submit', 'stop', {'text': 'cancel that', 'speak': False})
+            replies = await self.receive_ids(reader, {'blocking', 'stop'})
+            self.assertEqual(replies['blocking']['status'], 'cancelled')
+            self.assertFalse(release.is_set())
+        finally:
+            release.set()
+
+    def test_only_exact_action_stop_grammar_preempts_the_queue(self):
+        for text in ('stop', 'Wait.', "Actually don't!", 'cancel that', 'stop everything'):
+            self.assertTrue(_is_responsive_request({'type': 'command.submit', 'payload': {'text': text}}))
+        for text in ('stop Spotify', 'wait for Firefox', "actually don't open Firefox", 'tell me about stop'):
+            self.assertFalse(_is_responsive_request({'type': 'command.submit', 'payload': {'text': text}}))
