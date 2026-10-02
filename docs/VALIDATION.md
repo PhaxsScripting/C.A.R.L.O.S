@@ -546,3 +546,12 @@ external HDMI display with verified identity, then to the laptop connector.
 Both placement readbacks passed and the unrelated foreground window stayed
 unchanged. The laptop lacks a usable unique serial and therefore has explicit
 connector-only coverage. No other windows or saved nickname preferences changed.
+
+## October 1: capability probe evidence
+
+1,276 Python tests passed in 74.366 seconds. Four new status checks preserve
+the existing four execution-evidence tests. Tailscale Connected requires exit
+zero, valid bounded JSON, Running state and local node identity/address evidence.
+Failed commands, invalid JSON and missing node data remain UNVERIFIED. These
+observations do not establish Internet, school-network or cellular reachability.
+Returned capability/status dictionaries cannot mutate the internal probe cache.

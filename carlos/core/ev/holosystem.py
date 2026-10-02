@@ -1,9 +1,11 @@
 """Carlos's versioned integration surface; observations never imply tested actions."""
 
 from pathlib import Path
+from copy import deepcopy
 import asyncio, json, os, time, shutil, sys
 from importlib.metadata import version, PackageNotFoundError
 from .identity import identity, STATE_NAMES
+from .process_runner import command
 
 
 class HoloSystem:
@@ -18,7 +20,7 @@ class HoloSystem:
 
     async def capabilities(self):
         async with self._probe_lock:
-            return await self._probe_capabilities()
+            return deepcopy(await self._probe_capabilities())
 
     async def _probe_capabilities(self):
         if time.monotonic() - self._checked < 5:
@@ -137,28 +139,29 @@ class HoloSystem:
             "Requires configured NIC/firmware and an independent always-on wake sender",
         )
         try:
-            p = await asyncio.create_subprocess_exec(
-                "tailscale",
-                "status",
-                "--json",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
-            try:
-                out, _ = await asyncio.wait_for(p.communicate(), 3)
-            except BaseException:
-                if p.returncode is None:
-                    p.kill()
-                    await p.wait()
-                raise
-            t = json.loads(out)
+            result = await command(['tailscale', 'status', '--json'], timeout=3, maximum=1048576)
+            if result['code'] != 0:
+                raise ValueError('Tailscale did not return a successful status observation')
+            t = json.loads(result['out'])
+            if not isinstance(t, dict) or not isinstance(t.get('BackendState'), str):
+                raise ValueError('Invalid daemon state')
+            if t['BackendState'] == 'Running':
+                import ipaddress
+                node = t.get('Self')
+                ips = node.get('TailscaleIPs') if isinstance(node, dict) else None
+                if not isinstance(node.get('ID') if isinstance(node, dict) else None, str) or not node['ID'] or not isinstance(ips, list) or not 1 <= len(ips) <= 16:
+                    raise ValueError('Running daemon lacks local node identity/address evidence')
+                for address in ips:
+                    if not isinstance(address, str):
+                        raise ValueError('Invalid local node address')
+                    ipaddress.ip_address(address)
             add(
                 "Tailscale",
                 "CONNECTED" if t.get("BackendState") == "Running" else "UNAVAILABLE",
-                "Local Tailscale daemon status",
+                "Successful bounded local daemon status and node identity; remote reachability is unverified",
             )
         except (OSError, ValueError, TimeoutError):
-            add("Tailscale", "UNVERIFIED", "Status probe unavailable or timed out")
+            add("Tailscale", "UNVERIFIED", "Status probe failed, timed out, exceeded its output limit or lacked valid local node evidence")
         self._cache = {"api_version": 1, "capabilities": rows}
         self._checked = time.monotonic()
         return self._cache
@@ -187,7 +190,7 @@ class HoloSystem:
             "privacy": c.config.get("carlos", {}).get("privacy_mode", "NORMAL"),
             "mode": c.config.get("carlos", {}).get("mode", "DAILY"),
             "plugins": getattr(c, "plugins", []),
-            "capabilities": self._cache.get("capabilities", {}),
+            "capabilities": deepcopy(self._cache.get("capabilities", {})),
             "readiness": readiness,
         }
 
