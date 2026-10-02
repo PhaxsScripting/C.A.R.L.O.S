@@ -366,3 +366,6 @@ power manager. `settings.power_profile.set` accepts an optional
 `expected_current` guard. The daemon's unique owner and system-bus identity must
 match the observation before dispatch; readback stays on that backend. Failed or
 missing readback does not trigger another write. There is no automatic undo.
+
+
+HoloHand has an optional **Three-finger horizontal swipe** control. Enable it in the companion only after calibration; extend index, middle and ring with the pinky curled and move horizontally. One recognized swipe sends four horizontal wheel steps. Release the pose before repeating. It is off by default and does not enable other system gestures. Save calibration to persist the choice. Carlos reports `swipe_enabled` when the companion supports it; older companions report null. Pause/resume checks process identity before reporting success.

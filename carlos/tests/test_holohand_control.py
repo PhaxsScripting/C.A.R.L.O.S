@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 from ev.tools.holohand import exchange, status, set_paused
 from ev.tools.base import ValidationError
 
@@ -96,3 +96,37 @@ class HoloHandControlTests(unittest.IsolatedAsyncioTestCase):
         self.oversize = True
         with self.assertRaises(ValidationError):
             await exchange("--status")
+
+
+    async def test_swipe_setting_is_exact_optional_metadata_without_enabling_input(self):
+        for text, expected in [("", None), ("Swipe: enabled\n", True), ("Swipe: disabled\n", False), ("Swipe: maybe\n", None)]:
+            self.extra = text
+            self.assertIs((await exchange("--status"))["swipe_enabled"], expected)
+        self.assertEqual(self.commands, ["--status"] * 4)
+
+    async def test_pause_readback_never_verifies_a_replacement_or_unknown_instance(self):
+        first = dict(available=True, state="READY", peer_pid=123, peer_start_ticks=456, camera_started=False)
+        for changed in ({"peer_pid": 124}, {"peer_start_ticks": 457}, {"peer_pid": None}, {"peer_start_ticks": None}):
+            after = dict(first, state="PAUSED", **changed)
+            with patch("ev.tools.holohand.exchange", new=AsyncMock(side_effect=[first, after])) as ipc:
+                result = await set_paused({"paused": True}, None)
+                self.assertFalse(result["verified"])
+                self.assertFalse(result["instance_identity_verified"])
+                self.assertEqual([call.args[0] for call in ipc.await_args_list], ["--pause", "--status"])
+
+    async def test_status_and_pause_contracts_validate_actual_owned_socket_results(self):
+        import logging
+        from ev.events import PhaxEventBus
+        from ev.tools.base import ToolContext, ToolRegistry, validate_schema
+        from ev.tools.holohand import register_holohand_tools
+        registry = ToolRegistry(ToolContext({}, PhaxEventBus(), logging.getLogger("holo-contract")))
+        register_holohand_tools(registry)
+        for name in ("holohand.status", "holohand.set_paused"):
+            self.assertFalse(registry.get(name).public()["contract_gaps"])
+        self.extra = "Swipe: disabled\n"
+        validate_schema(await status({}, None), registry.get("holohand.status").output_schema)
+        result = await set_paused({"paused": True}, None)
+        self.assertTrue(result["instance_identity_verified"])
+        validate_schema(result, registry.get("holohand.set_paused").output_schema)
+        with patch("ev.tools.holohand.socket_path", return_value=self.path.with_name("missing")):
+            validate_schema(await status({}, None), registry.get("holohand.status").output_schema)

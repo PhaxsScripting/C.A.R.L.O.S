@@ -75,6 +75,7 @@ async def exchange(command):
         tracking = {}
         demand = re.search(r"^Pipeline demand: (ACTIVE|IDLE)$", text, re.MULTILINE)
         pipeline_demand = demand[1] if demand else None
+        swipe = re.search(r"^Swipe: (enabled|disabled)$", text, re.MULTILINE)
         if match:
             try:
                 confidence, inference, age = map(float, match.groups()[1:])
@@ -105,6 +106,7 @@ async def exchange(command):
             "details": text,
             "tracking": tracking,
             "pipeline_demand": pipeline_demand,
+            "swipe_enabled": swipe[1] == "enabled" if swipe else None,
             "tracking_quality": "UNVERIFIED",
             "camera_started": False,
         }
@@ -123,11 +125,17 @@ async def status(arguments, context):
 async def set_paused(arguments, context):
     desired = arguments["paused"]
     # No launch fallback: resuming here only controls an existing instance.
-    await exchange("--pause" if desired else "--resume")
+    delivered = await exchange("--pause" if desired else "--resume")
     observed = await exchange("--status")
-    observed["verified"] = (
+    identity = (delivered.get("peer_pid"), delivered.get("peer_start_ticks"))
+    known = all(type(value) is int and value > 0 for value in identity)
+    same = known and identity == (observed.get("peer_pid"), observed.get("peer_start_ticks"))
+    observed["instance_identity_verified"] = same
+    observed["verified"] = same and (
         observed["state"] == "PAUSED" if desired else observed["state"] == "READY"
     )
+    if not same:
+        observed["reason"] = "Command delivered; controller identity changed or could not be verified. No retry was sent."
     observed["requested_paused"] = desired
     return observed
 
@@ -138,6 +146,17 @@ async def measure(arguments, context):
 
 
 def register_holohand_tools(registry):
+    control_output = object_schema({
+        "available": {"type": "boolean"},
+        "state": {"type": "string", "enum": ["READY", "PAUSED", "CALIBRATION REQUIRED", "UNAVAILABLE"]},
+        "camera_started": {"type": "boolean"}, "peer_pid": {"type": ["integer", "null"]},
+        "peer_start_ticks": {"type": ["integer", "null"]}, "counters": {"type": "object"},
+        "details": {"type": "string", "maxLength": 8192}, "tracking": {"type": "object"},
+        "pipeline_demand": {"type": ["string", "null"], "enum": ["ACTIVE", "IDLE", None]},
+        "swipe_enabled": {"type": ["boolean", "null"]}, "tracking_quality": {"type": "string"},
+        "verified": {"type": "boolean"}, "requested_paused": {"type": "boolean"},
+        "instance_identity_verified": {"type": "boolean"}, "reason": {"type": "string"},
+    }, ["available", "state", "camera_started"])
     registry.register(ToolSpec(
         'holohand.measure', 'HOLOHAND',
         'Sample metadata from an already-running HoloHand instance. Reports observed pipeline rates and sampled timing readings, not physical gesture accuracy or input latency. Never launches the app, starts a camera, enables input or records frames.',
@@ -154,7 +173,8 @@ def register_holohand_tools(registry):
             status,
             read_only=True,
             offline_available=True,
-            reversible=True,
+            reversible=False,
+            output_schema=control_output,
             timeout_seconds=4,
         )
     )
@@ -168,6 +188,8 @@ def register_holohand_tools(registry):
             set_paused,
             offline_available=True,
             reversible=True,
+            output_schema=control_output,
+            verification="Same process identity and fresh pause/resume state; missing calibration cannot verify resume",
             timeout_seconds=7,
             side_effects=("Changes gesture input state on the running HoloHand instance",),
         )
