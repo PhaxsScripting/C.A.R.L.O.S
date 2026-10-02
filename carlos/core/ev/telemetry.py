@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import time
 from pathlib import Path
@@ -9,31 +10,34 @@ from typing import Any
 import psutil
 
 from .events import PhaxEventBus
+from .hardware_metrics import HardwareMetrics, entries, read_int, read_text
 
 
-def read_temperature() -> dict[str, Any]:
+def read_temperature(hwmon_root: Path | None = None) -> dict[str, Any]:
     from .platform import IS_FREEBSD
 
-    if IS_FREEBSD:
+    if IS_FREEBSD and hwmon_root is None:
         from .platform.system import temperature
 
         return temperature()
     candidates: list[tuple[str, float]] = []
-    for hwmon in Path("/sys/class/hwmon").glob("hwmon*"):
-        try:
-            name = (hwmon / "name").read_text().strip()
-        except OSError:
+    for hwmon in entries(hwmon_root or Path("/sys/class/hwmon"), "hwmon[0-9]*", 64):
+        name = read_text(hwmon / "name")
+        if name is None:
             continue
-        for input_file in hwmon.glob("temp*_input"):
+        for input_file in entries(hwmon, "temp[0-9]*_input", 32):
+            channel = input_file.name.removesuffix("_input")
+            if (read_int(hwmon / (channel + "_fault"), 1) == 1
+                    or read_int(hwmon / (channel + "_enable"), 1) == 0):
+                continue
             try:
-                value = float(input_file.read_text().strip()) / 1000.0
-            except (OSError, ValueError):
+                value = float(read_text(input_file)) / 1000.0
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(value) or value < -273.15:
                 continue
             label_file = input_file.with_name(input_file.name.replace("_input", "_label"))
-            try:
-                label = label_file.read_text().strip()
-            except OSError:
-                label = input_file.stem
+            label = read_text(label_file) or input_file.stem
             candidates.append((f"{name}:{label}", value))
     preferred = [item for item in candidates if item[0].startswith("coretemp:Package")]
     if preferred:
@@ -46,11 +50,13 @@ def read_temperature() -> dict[str, Any]:
 
 class TelemetrySampler:
     def __init__(
-        self, bus: PhaxEventBus, interval: float = 3.0, config: dict[str, Any] | None = None
+        self, bus: PhaxEventBus, interval: float = 3.0, config: dict[str, Any] | None = None,
+        hardware: HardwareMetrics | None = None,
     ) -> None:
         self.bus = bus
         self.interval = max(1.0, interval)
         self.config = config or {}
+        self.hardware = hardware or HardwareMetrics()
         self.process = psutil.Process(os.getpid())
         self._last_network = psutil.net_io_counters()
         self._last_network_time = time.monotonic()
@@ -101,6 +107,7 @@ class TelemetrySampler:
         return {
             "cpu_percent": round(psutil.cpu_percent(interval=None), 1),
             "cpu_temperature": read_temperature(),
+            "hardware": self.hardware.sample(),
             "memory": {
                 "used_bytes": memory.used,
                 "available_bytes": memory.available,

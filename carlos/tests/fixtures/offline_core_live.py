@@ -52,6 +52,10 @@ async def main():
                 assert result['status']=='completed',result
                 results.append({'operation':text,'status':result['status'],'elapsed_ms':round((time.monotonic()-start)*1000,1)})
             file=root/'offline.txt'
+            result=await call('command.submit',{'text':'What is my fan speed?', 'speak':False})
+            assert result['status']=='completed',result
+            assert 'Fan readings:' in result['response'] or 'Fan speed readings are unavailable.' in result['response'],result
+            results.append({'operation':'hardware metrics','status':'actual offline IPC; read-only sensors'})
             result=await call('tool.call',{'name':'files.text.create','arguments':{'path':str(file),'content':'offline file fixture\n'}})
             assert result['status']=='completed',result
             assert file.read_text()=='offline file fixture\n'

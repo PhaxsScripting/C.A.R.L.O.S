@@ -111,3 +111,20 @@ report. Capture/inference FPS need counters and verified process continuity;
 older instances, resets and missing identity return unavailable rates. Timing
 percentiles are sampled readings that may repeat or miss model results. Physical
 gesture accuracy and desktop-action latency are separate, unmeasured fields.
+
+## Hardware readings
+
+Ask "What is my fan speed?", "Check CPU clocks", "Show GPU usage", or
+"Is my CPU throttling?". These use local read-only sensors without a model
+request. `system.get_hardware_metrics` also returns them through the tool API.
+
+CPU clocks include their sysfs source: a scaling reading can reflect a
+requested frequency. Thermal counters are lifetime event counts and per-sample
+deltas; the first reading, a reset, or a missing baseline leaves the delta
+unknown. Package counters repeat per CPU and are not added together. They do
+not establish whether throttling is happening at this instant. Faulted or
+disabled fan sensors have no trusted RPM. Zero RPM is a valid reading.
+
+GPU load is available when the driver provides `gpu_busy_percent`; otherwise
+it is unavailable. Carlos does not install drivers, request elevated access,
+or change CPU, fan, GPU or charging settings to obtain these readings.

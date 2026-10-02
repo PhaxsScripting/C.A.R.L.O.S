@@ -550,6 +550,13 @@ class OfflineProvider(Provider):
             plan = ["Query the local explicit-memory store", "Summarize matching records"]
             calls = [call("memory.search", {"query": query, "limit": 20})]
         elif re.search(
+            r"\b(?:fan\s+(?:speed|rpm)|cpu\s+(?:clocks?|frequency)|"
+            r"gpu\s+(?:usage|load|utilization|busy)|throttl\w*|hardware\s+metrics)\b", lowered
+        ):
+            interpreted = "Inspect live hardware readings without changing power or fan settings."
+            plan = ["Read available clock, fan, GPU and thermal event sensors", "Report missing readings as unavailable"]
+            calls = [call("system.get_hardware_metrics")]
+        elif re.search(
             r"\b(process|processes|what.?s using|what is using)\b", lowered
         ) and re.search(r"\b(cpu|ram|memory)\b", lowered):
             sort = "cpu" if "cpu" in lowered else "memory"
@@ -897,6 +904,23 @@ class OfflineProvider(Provider):
                 if temperature is None
                 else f"The CPU package is currently {temperature:.0f} degrees Celsius."
             )
+        elif name == "system.get_hardware_metrics":
+            clocks = [p['current_mhz'] for p in result['cpu_frequency']['policies']
+                      if p.get('current_mhz') is not None]
+            fans = [r for r in result['fans']['readings'] if r.get('rpm') is not None]
+            gpus = [d for d in result['gpu_usage']['devices'] if d.get('busy_percent') is not None]
+            observed = result['cpu_throttling']['events_observed']
+            parts = [f"Reported CPU clocks range from {min(clocks):.0f} to {max(clocks):.0f} MHz."
+                     if clocks else "CPU clock readings are unavailable."]
+            parts.append("Fan readings: " + ', '.join(f"{r['sensor']} {r['channel']} {r['rpm']} RPM" for r in fans[:4]) + '.'
+                         if fans else "Fan speed readings are unavailable.")
+            parts.append("GPU load: " + ', '.join(f"{d['card']} {d['busy_percent']}%" for d in gpus[:4]) + '.'
+                         if gpus else "GPU load readings are unavailable.")
+            parts.append("New thermal throttle events were observed between readings." if observed is True else
+                         "No new thermal throttle events were observed between readings." if observed is False else
+                         "There is no valid comparison for new thermal throttle events yet.")
+            parts.append("These counters do not establish whether throttling is happening right now.")
+            text = ' '.join(parts)
         elif name == "system.get_cpu_usage":
             text = f"CPU usage is currently {result['percent']:.1f}%, with a one-minute load average of {result['load_average'][0]:.2f}."
         elif name == "system.get_processes":

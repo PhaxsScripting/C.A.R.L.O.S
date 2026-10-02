@@ -425,3 +425,21 @@ native Qt pet also passed five policy groups in an isolated D-Bus/offscreen
 session: fresh unlock, lock/lost-owner/unlock, privacy, core disconnect and fresh
 reconnect. This does not certify physical screen locking or every compositor.
 No host desktop settings or lock state were modified by that isolated check.
+
+## October 1: hardware telemetry
+
+1,188 Python tests passed in 66.969 seconds. Seventeen hardware checks cover
+shared frequency policies, reported units and sources, throttle baselines,
+counter overflow/replacement, disappearing sensors, faulted fans, invalid
+temperatures, read-only tool classification and offline routing. The final
+bounded-reader changes passed those seventeen checks again. The actual
+no-route IPC fixture now also runs a natural fan-speed request.
+
+Ten live sysfs samples on Gentoo took a median 5.43 ms and a maximum 7.51 ms.
+Eight clock policies, sixteen thermal counters and a Dell fan reading were
+available. The installed core exposed the same readings through telemetry and
+a read-only tool; GPU load was unavailable on this Intel driver.
+
+Counters do not prove instantaneous throttling. AMD GPU paths were exercised
+with a disposable sysfs fixture, not AMD hardware. Thermal load/overheating
+acceptance, other machines and remote stream adaptation remain unverified.

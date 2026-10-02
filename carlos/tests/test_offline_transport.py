@@ -43,6 +43,7 @@ class OfflineTransportTests(unittest.TestCase):
         report = json.loads(result.stdout)
         self.assertEqual(report['network_namespace'], 'isolated; no route')
         operations = {check['operation']:check['status'] for check in report['checks']}
-        self.assertEqual(len(operations), 8)
+        self.assertEqual(len(operations), 9)
+        self.assertEqual(operations['hardware metrics'], 'actual offline IPC; read-only sensors')
         self.assertEqual(operations['scoped dated history and natural request'], 'actual offline IPC; no mutations')
         self.assertEqual(operations['scoped task receipts and cross-project continuation refusal'], 'actual offline IPC; no task replay')

@@ -191,6 +191,11 @@ class CarlosCore:
         from .tools.holohand import register_holohand_tools
 
         register_holohand_tools(self.tools)
+        from .hardware_metrics import HardwareMetrics
+        from .tools.hardware import register_hardware_tools
+
+        self.hardware_metrics = HardwareMetrics()
+        register_hardware_tools(self.tools, self.hardware_metrics)
         from .tools.projects import register_project_tools
 
         register_project_tools(self.tools, self.paths.state_dir / "project-runs")
@@ -268,6 +273,7 @@ class CarlosCore:
             self.bus,
             float(self.config["telemetry"]["idle_interval_seconds"]),
             self.config["telemetry"],
+            hardware=self.hardware_metrics,
         )
         self.voice = VoiceManager(
             self.config["voice"], self.bus, self.state, self.paths.runtime_dir
