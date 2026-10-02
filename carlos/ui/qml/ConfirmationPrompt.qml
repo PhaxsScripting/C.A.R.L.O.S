@@ -7,6 +7,8 @@ Popup {
     required property var client
     readonly property string requestId: String(client.confirmation.id || "")
     property bool submitted: false
+    readonly property bool visualClick: client.confirmation.tool === "vision.candidate.click"
+    readonly property var review: client.confirmation.review || ({})
     onRequestIdChanged: submitted = false
     objectName: "confirmation-prompt"
     visible: requestId.length > 0
@@ -14,13 +16,14 @@ Popup {
     focus: true
     closePolicy: Popup.NoAutoClose
     width: Math.min(600, parent.width - 48)
-    height: Math.min(400, parent.height - 48)
+    height: Math.min(visualClick ? 650 : 400, parent.height - 48)
     anchors.centerIn: parent
     padding: 24
     onOpened: deny.forceActiveFocus()
 
     function respond(approved) {
         if (submitted || !client.connected) return;
+        if (approved && visualClick && preview.status !== Image.Ready) return;
         submitted = true;
         client.respondToConfirmation(approved);
     }
@@ -36,6 +39,26 @@ Popup {
             text: String(prompt.client.confirmation.tool || "Requested action")
             textFormat: Text.PlainText
             color: "#70e6ff"; font.pixelSize: 14; wrapMode: Text.Wrap
+        }
+        Image {
+            id: preview
+            objectName: "confirmation-preview"
+            visible: prompt.visualClick
+            Layout.fillWidth: true
+            Layout.preferredHeight: prompt.visualClick ? Math.min(220, prompt.height * .38) : 0
+            fillMode: Image.PreserveAspectFit
+            source: prompt.visualClick ? String(prompt.review.preview_url || "") : ""
+            asynchronous: true
+            cache: false
+        }
+        Text {
+            visible: prompt.visualClick
+            Layout.fillWidth: true
+            text: preview.status === Image.Error || preview.status === Image.Null
+                  ? "Preview unavailable. Deny and inspect the window again."
+                  : String(prompt.review.caption || "Review the highlighted label.")
+            textFormat: Text.PlainText
+            color: "#c2d3de"; font.pixelSize: 12; wrapMode: Text.Wrap
         }
         ScrollView {
             Layout.fillWidth: true; Layout.fillHeight: true
@@ -68,6 +91,7 @@ Popup {
                 objectName: "confirmation-approve"
                 text: "Allow once"
                 enabled: prompt.client.connected && !prompt.submitted
+                         && (!prompt.visualClick || preview.status === Image.Ready)
                 onClicked: prompt.respond(true)
             }
         }

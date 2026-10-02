@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import tempfile
+import threading
 import time
 import unittest
 from copy import deepcopy
@@ -21,6 +22,10 @@ from ev.tools.local_vision import register_local_vision_tools
 from ev.tools.results import evaluate_result
 from ev.vision import ScreenPerception
 from ev.vision_geometry import private_png, validate_element
+from ev.desktop.input import DesktopInput
+from ev.permissions import Permission, PermissionBroker
+from ev.tools.base import ToolSpec
+from ev.tools.builtin import object_schema
 
 
 def label(x=10, y=10, text="Retry"):
@@ -43,8 +48,13 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
         self.output = {"name": "fixture-screen", "scale": 1, "transform": 0,
                        "geometry": {"x": 0, "y": 0, "width": 300, "height": 200}}
         self.world = {"windows": [self.window], "outputs": [self.output],
-                      "current_desktop": "desk", "active_window_id": "exact"}
+                      "current_desktop": "desk", "active_window_id": "exact", "cursor": {"x": 40, "y": 37.5}}
+        self.window["fullscreen"] = False
         self.desktop = SimpleNamespace(snapshot=AsyncMock(side_effect=self.snapshot))
+        self.desktop.bridge = SimpleNamespace(request=AsyncMock(side_effect=self.bridge_request))
+        self.input_events = []
+        self.portal = SimpleNamespace(notify=self.notify, _cancelled=threading.Event())
+        self.desktop.input = DesktopInput(self.desktop, portal=self.portal)
         self.perception = ScreenPerception(self.root / "captures", self.desktop)
         self.targets = self.perception.visual_targets
         self.labels = [label()]
@@ -55,6 +65,37 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
                                    logging.getLogger("visual-fixture"), vision=self.perception)
         self.registry = ToolRegistry(self.context)
         register_local_vision_tools(self.registry)
+        async def native_world(arguments, context):
+            return await self.snapshot()
+        self.registry.register(ToolSpec("desktop.world", "DESKTOP", "Fixture native observation",
+                                      Permission.SAFE, object_schema({}, []),
+                                      native_world, read_only=True))
+
+    async def bridge_request(self, action, arguments, **kwargs):
+        if action == "activate":
+            self.world["active_window_id"] = arguments["window_id"]
+            return {"requested": True}
+        if action == "snapshot":
+            return await self.snapshot()
+        raise ValueError("Unsupported fixture bridge request")
+
+    def notify(self, method, *arguments):
+        self.input_events.append((method, arguments))
+        if method == "NotifyPointerMotion":
+            self.world["cursor"]["x"] += arguments[0]
+            self.world["cursor"]["y"] += arguments[1]
+        elif method == "NotifyPointerButton" and arguments[-1] == 1:
+            self.window["fullscreen"] = True
+
+    async def observe(self, payload, correlation):
+        self.assertEqual(payload, {"name": "desktop.world", "arguments": {}})
+        return {"status": "completed", "result": await self.snapshot()}
+
+    async def click_arguments(self):
+        candidate = (await self.prepare())["candidates"][0]
+        return {"candidate_id": candidate["candidate_id"], "expected": [
+            {"kind": "window_state", "window_id": "exact", "property": "fullscreen", "expected": True}
+        ]}
 
     async def snapshot(self, **kwargs):
         return deepcopy({**self.world, "captured_at_monotonic": time.monotonic()})
@@ -238,3 +279,243 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(score=score), self.assertRaises(ValueError):
                 await self.targets.prepare("exact", "Retry", score)
         self.perception.capture.assert_not_awaited()
+
+    async def test_click_has_mandatory_confirmation_and_checks_native_transition_once(self):
+        arguments = await self.click_arguments()
+        spec, validated = self.registry.validate("vision.candidate.click", arguments)
+        self.assertTrue(spec.requires_confirmation)
+        self.assertFalse(spec.public()["contract_gaps"])
+        review = await self.targets.confirmation_review(arguments)
+        self.assertTrue(review["preview_url"].startswith(self.perception.capture_root.as_uri()))
+        self.assertIn("Retry", review["caption"])
+        result = await self.registry.execute(spec, validated)
+        self.assertTrue(result["verified"], result)
+        self.assertFalse(result["before"]["verified"])
+        self.assertTrue(result["after"]["verified"])
+        self.assertEqual(self.input_events, [("NotifyPointerButton", (272, 1)),
+                                           ("NotifyPointerButton", (272, 0))])
+        self.assertTrue(evaluate_result(spec.name, result).verified)
+        with self.assertRaises(ValueError):
+            await self.targets.click(arguments, self.observe)
+        self.assertEqual(len(self.input_events), 2)
+        self.assertFalse(self.targets._records)
+        self.assertEqual(list(self.perception.capture_root.glob("*.png")), [])
+
+    async def test_changed_current_image_refuses_without_input_and_consumes_candidate(self):
+        arguments = await self.click_arguments()
+        original = self.capture
+
+        async def changed(**kwargs):
+            capture = await original(**kwargs)
+            path = self.targets._path(capture["capture_id"])
+            Image.new("RGB", (120, 80), "blue").save(path)
+            return capture
+
+        self.perception.capture = AsyncMock(side_effect=changed)
+        with self.assertRaisesRegex(ValueError, "image changed"):
+            await self.targets.click(arguments, self.observe)
+        self.assertFalse(self.input_events)
+        self.assertFalse(self.targets._records)
+        self.assertEqual(list(self.perception.capture_root.glob("*.png")), [])
+
+    async def test_png_metadata_change_does_not_hide_identical_pixels(self):
+        from PIL.PngImagePlugin import PngInfo
+        arguments = await self.click_arguments()
+        original = self.capture
+
+        async def metadata(**kwargs):
+            capture = await original(**kwargs)
+            path = self.targets._path(capture["capture_id"])
+            info = PngInfo()
+            info.add_text("fixture", "different PNG metadata")
+            Image.new("RGB", (120, 80), "white").save(path, pnginfo=info)
+            return capture
+
+        self.perception.capture = AsyncMock(side_effect=metadata)
+        self.assertTrue((await self.targets.click(arguments, self.observe))["verified"])
+
+    async def test_unrelated_already_satisfied_and_unobservable_results_refuse_input(self):
+        for mode in ("other_window", "already_true", "missing_state", "stale", "unsupported", "too_many"):
+            arguments = await self.click_arguments()
+            if mode == "other_window":
+                arguments["expected"][0]["window_id"] = "elsewhere"
+            elif mode == "already_true":
+                arguments["expected"][0]["expected"] = False
+            elif mode == "missing_state":
+                del self.window["fullscreen"]
+            elif mode == "unsupported":
+                arguments["expected"] = [{"kind": "window_active", "window_id": "exact"}]
+            elif mode == "too_many":
+                arguments["expected"] *= 4
+            observer = self.observe if mode != "stale" else AsyncMock(return_value={
+                "status": "completed", "result": {**self.world, "captured_at_monotonic": 0}})
+            with self.subTest(mode=mode), self.assertRaises(ValueError):
+                await self.targets.click(arguments, observer)
+            self.window["fullscreen"] = False
+            self.targets.clear()
+        self.assertFalse(self.input_events)
+
+    async def test_no_native_result_never_replays_delivered_click(self):
+        arguments = await self.click_arguments()
+        self.portal.notify = lambda method, *args: self.input_events.append((method, args))
+        result = await self.targets.click(arguments, self.observe)
+        self.assertTrue(result["input_sent"])
+        self.assertFalse(result["verified"])
+        self.assertFalse(result["replay_allowed"])
+        receipt = evaluate_result("vision.candidate.click", result)
+        self.assertEqual(receipt.status, "EXECUTED_UNVERIFIED")
+        self.assertFalse(receipt.retryable)
+        self.assertEqual(len(self.input_events), 2)
+        with self.assertRaises(ValueError):
+            await self.targets.click(arguments, self.observe)
+
+    async def test_failed_delivery_remains_unknown_consumed_and_not_retryable(self):
+        arguments = await self.click_arguments()
+        self.desktop.input.click = AsyncMock(side_effect=RuntimeError("Fixture disconnected"))
+        result = await self.targets.click(arguments, self.observe)
+        self.assertTrue(result["delivery_unknown"])
+        self.assertFalse(result["verified"])
+        self.assertFalse(evaluate_result("vision.candidate.click", result).retryable)
+        self.assertEqual(list(self.perception.capture_root.glob("*.png")), [])
+        with self.assertRaises(ValueError):
+            await self.targets.click(arguments, self.observe)
+        self.desktop.input.click.assert_awaited_once()
+
+    async def test_geometry_changes_during_pointer_move_block_button_press(self):
+        arguments = await self.click_arguments()
+        self.world["cursor"] = {"x": 30, "y": 30}
+        original = self.notify
+
+        def moved(method, *args):
+            original(method, *args)
+            if method == "NotifyPointerMotion":
+                self.window["geometry"]["x"] += 1
+
+        self.portal.notify = moved
+        result = await self.targets.click(arguments, self.observe)
+        self.assertFalse(result["verified"])
+        self.assertEqual([event[0] for event in self.input_events], ["NotifyPointerMotion"])
+
+    async def test_cancellation_after_press_releases_button_and_consumes_candidate(self):
+        arguments = await self.click_arguments()
+        entered, release = threading.Event(), threading.Event()
+        original = self.notify
+
+        def blocked(method, *args):
+            original(method, *args)
+            if method == "NotifyPointerButton" and args[-1] == 1:
+                entered.set()
+                release.wait(3)
+
+        self.portal.notify = blocked
+        task = asyncio.create_task(self.targets.click(arguments, self.observe))
+        self.assertTrue(await asyncio.to_thread(entered.wait, 2))
+        task.cancel()
+        release.set()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        self.assertEqual(self.input_events[-1], ("NotifyPointerButton", (272, 0)))
+        self.assertEqual(list(self.perception.capture_root.glob("*.png")), [])
+        with self.assertRaises(ValueError):
+            await self.targets.click(arguments, self.observe)
+
+    async def test_thread_clear_during_preview_generation_prevents_partial_publication(self):
+        thumbnail = Image.Image.thumbnail
+
+        def revoke(image, *args, **kwargs):
+            result = thumbnail(image, *args, **kwargs)
+            thread = threading.Thread(target=self.targets.clear)
+            thread.start()
+            thread.join(2)
+            self.assertFalse(thread.is_alive())
+            self.assertFalse(self.targets._records)
+            return result
+
+        with patch.object(Image.Image, "thumbnail", revoke), self.assertRaisesRegex(ValueError, "cleared"):
+            await self.prepare()
+        self.assertEqual(list(self.perception.capture_root.glob("*.png")), [])
+
+    async def test_clear_during_fresh_capture_prevents_late_click(self):
+        arguments = await self.click_arguments()
+        original = self.capture
+
+        async def revoked(**kwargs):
+            self.targets.clear()
+            return await original(**kwargs)
+
+        self.perception.capture = AsyncMock(side_effect=revoked)
+        with self.assertRaisesRegex(ValueError, "revoked"):
+            await self.targets.click(arguments, self.observe)
+        self.assertFalse(self.input_events)
+        self.assertEqual(list(self.perception.capture_root.glob("*.png")), [])
+
+    async def test_duplicate_labels_consumed_together_after_one_click(self):
+        self.labels.append(label(60, 40))
+        candidates = (await self.prepare())["candidates"]
+        arguments = {"candidate_id": candidates[0]["candidate_id"], "expected": [
+            {"kind": "window_state", "window_id": "exact", "property": "fullscreen", "expected": True}]}
+        self.assertTrue((await self.targets.click(arguments, self.observe))["verified"])
+        with self.assertRaises(ValueError):
+            await self.targets.review(candidates[1]["candidate_id"])
+        self.assertEqual(list(self.perception.capture_root.glob("*.png")), [])
+
+    async def test_local_permission_preview_is_private_and_copied(self):
+        arguments = await self.click_arguments()
+        review = await self.targets.confirmation_review(arguments)
+        broker = PermissionBroker()
+        pending = broker.create("vision.candidate.click", arguments, Permission.HIGH,
+                                review.pop("reason"), "fixture", review=review)
+        review["preview_url"] = "changed"
+        self.assertNotIn("review", pending.public(include_token=False))
+        self.assertNotIn("review", broker.list_public()[0])
+        client_review = broker.list_for_local_client()[0]["review"]
+        self.assertNotEqual(client_review["preview_url"], "changed")
+        client_review["preview_url"] = "changed again"
+        self.assertNotEqual(pending.public()["review"]["preview_url"], "changed again")
+
+    async def test_core_socket_confirmation_carries_preview_and_token_cannot_replay(self):
+        from ev.paths import Paths
+        from ev.service import CarlosCore
+
+        core = CarlosCore(paths=Paths(*(self.root / name for name in
+                                      ("config", "data", "state", "cache", "runtime"))))
+        core.config["providers"]["active"] = "offline"
+        core.config["carlos"]["strict_permissions"] = False
+        core.vision, core.desktop = self.perception, self.desktop
+        core.tools.context.vision, core.tools.context.desktop = self.perception, self.desktop
+        await core.ipc.start()
+        reader, writer = await asyncio.open_unix_connection(core.paths.socket)
+        request_id = 0
+
+        async def ipc(kind, payload):
+            nonlocal request_id
+            request_id += 1
+            writer.write((json.dumps({"id": str(request_id), "type": kind, "payload": payload}) + "\n").encode())
+            await writer.drain()
+            while True:
+                message = json.loads(await asyncio.wait_for(reader.readline(), 5))
+                if message.get("id") == str(request_id):
+                    return message
+
+        try:
+            arguments = await self.click_arguments()
+            response = await ipc("tool.call", {"name": "vision.candidate.click", "arguments": arguments})
+            pending = response["payload"]["confirmation"]
+            self.assertEqual(response["payload"]["status"], "confirmation_required")
+            self.assertIn("preview_url", pending["review"])
+            self.assertFalse(self.input_events)
+            self.assertNotIn("review", core.permissions.list_public()[0])
+            decision = {"id": pending["id"], "approval_token": pending["approval_token"], "approved": True}
+            response = await ipc("confirmation.respond", decision)
+            self.assertEqual(response["payload"]["execution"]["status"], "SUCCEEDED_VERIFIED", response)
+            self.assertEqual(len(self.input_events), 2)
+            replay = await ipc("confirmation.respond", decision)
+            self.assertEqual(replay["type"], "error")
+            self.assertEqual(len(self.input_events), 2)
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            await core.ipc.stop()
+            core.daily.close()
+            core.task_journal.close()
+            core.memory.close()

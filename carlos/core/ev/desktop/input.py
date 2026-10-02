@@ -477,6 +477,7 @@ class DesktopInput:
         )
         if (
             not window
+            or window.get("deleted")
             or window.get("special")
             or window.get("minimized")
             or not (window.get("normal") or window.get("dialog"))
@@ -742,15 +743,26 @@ class DesktopInput:
             }
 
     async def click(
-        self, window_id: str, x: float, y: float, button: str = "left", count: int = 1
+        self, window_id: str, x: float, y: float, button: str = "left", count: int = 1,
+        *, before_press=None,
     ) -> dict[str, Any]:
         if button not in {"left", "middle", "right"} or count not in {1, 2}:
             raise ValueError("Unsupported pointer button or click count")
         async with self._lock:
+            if before_press is not None:
+                await before_press()
             await self._move(window_id, x, y)
             for _ in range(count):
                 self._raise_if_cancelled()
+                expected_window = None
+                if before_press is not None:
+                    expected_window = await before_press()
+                self._raise_if_cancelled()
                 world, window = await self._target(window_id)
+                if expected_window is not None and any(
+                    window.get(key) != value for key, value in expected_window.items()
+                ):
+                    raise RuntimeError("Visual target changed before pressing the pointer button")
                 self._point(world, window, x, y)
                 cursor = world.get("cursor", {})
                 if (

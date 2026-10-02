@@ -110,6 +110,15 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             None if verified else "Capture not produced",
             scope="capture_only",
         )
+    if name == "vision.candidate.click":
+        accepted = data.get("input_sent") is True or data.get("delivery_unknown") is True
+        verified = data.get("input_sent") is True and data.get("verified") is True
+        return ExecutionResult(
+            accepted, "SUCCEEDED_VERIFIED" if verified else ("EXECUTED_UNVERIFIED" if accepted else "FAILED"),
+            verified, None if accepted else "Visual click was not delivered", retryable=False,
+            verification_hint="Inspect before requesting a new candidate; this action is never replayed",
+            scope="declared_native_transition",
+        )
     if name in {"vision.candidates", "vision.candidate.review"}:
         accepted = (isinstance(data.get("candidates"), list) if name == "vision.candidates"
                     else isinstance(data.get("candidate_id"), str))

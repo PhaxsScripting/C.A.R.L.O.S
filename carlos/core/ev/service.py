@@ -1425,8 +1425,15 @@ class CarlosCore:
                 or (emergency_disconnect and self.state.current == CoreState.USING_TOOL),
             )
 
+        review = None
+        reason = spec.confirmation_reason
+        if spec.name == "vision.candidate.click":
+            review = await self.vision.visual_targets.confirmation_review(validated)
+            reason = review.pop("reason")
+            if generation != getattr(self, "_action_generation", 0):
+                return self._cancelled_tool_result(spec, dispatched=False)
         pending = self.permissions.create(
-            spec.name, validated, spec.permission, spec.confirmation_reason, correlation_id
+            spec.name, validated, spec.permission, reason, correlation_id, review=review
         )
         await asyncio.to_thread(
             self.memory.record_permission,

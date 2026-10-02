@@ -33,6 +33,21 @@ def register_local_vision_tools(registry):
         require_local(context)
         return await context.vision.visual_targets.review(arguments["candidate_id"])
 
+    async def click(arguments, context):
+        require_local(context)
+
+        async def observe(payload, correlation):
+            spec, validated = registry.validate(payload["name"], payload["arguments"])
+            if not spec.read_only and spec.name != "desktop.world":
+                raise ValueError("Visual result checks must use read-only observations")
+            return {"status": "completed", "result": await registry.execute(spec, validated)}
+
+        return await context.vision.visual_targets.click(arguments, observe)
+
+    def normalize_click(arguments, context):
+        require_local(context)
+        return context.vision.visual_targets.validate_click(arguments)
+
     candidate_properties = {
         "candidate_id": {"type": "string", "pattern": "[0-9a-f]{32}"},
         "capture_id": {"type": "string", "pattern": "[0-9a-f]{32}"},
@@ -45,6 +60,32 @@ def register_local_vision_tools(registry):
         "expires_in_seconds": {"type": "integer", "minimum": 0, "maximum": 60},
     }
     candidate_schema = object_schema(candidate_properties, list(candidate_properties))
+    registry.register(ToolSpec(
+        "vision.candidate.click", "VISION",
+        "Request one left click on an existing highlighted candidate. Mandatory local confirmation shows "
+        "its preview; execution consumes the candidate, rechecks native identity and current image pixels, "
+        "then checks 1-3 declared native changes in that same window. No retry after uncertain delivery.",
+        Permission.HIGH,
+        object_schema({
+            "candidate_id": candidate_properties["candidate_id"],
+            "expected": {"type": "array", "minItems": 1, "maxItems": 3,
+                         "items": {"type": "object"}},
+        }, ["candidate_id", "expected"]),
+        click, normalizer=normalize_click,
+        confirmation_reason="Review the highlighted candidate and expected native change before one click.",
+        requires_confirmation=True, offline_available=True, reversible=False, timeout_seconds=30,
+        output_schema=object_schema({
+            "candidate_id": candidate_properties["candidate_id"], "window_id": {"type": "string"},
+            "input_sent": {"type": "boolean"}, "verified": {"type": "boolean"},
+            "delivery_unknown": {"type": "boolean"}, "replay_allowed": {"type": "boolean", "enum": [False]},
+            "verification_scope": {"type": "string", "enum": ["declared_native_transition"]},
+            "before": {"type": "object"}, "after": {"type": "object"}, "message": {"type": "string"},
+        }, ["candidate_id", "window_id", "input_sent", "verified", "replay_allowed", "verification_scope", "message"]),
+        verification="Native predicates must be observable and unmet before input, then satisfied after input",
+        platform_requirements=("Native window identity", "Private capture", "Consented desktop input"),
+        side_effects=("focuses exact window", "sends one left click", "consumes related visual proposals"),
+        expected_latency_ms=1500,
+    ))
     registry.register(ToolSpec(
         "vision.candidates", "VISION",
         "Find exact visible text in one native window using local OCR and return private highlighted previews. "

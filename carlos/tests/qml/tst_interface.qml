@@ -410,6 +410,36 @@ TestCase {
         mock.confirmation = {}
         tryCompare(prompt, "opened", false)
     }
+    function test_visual_confirmation_requires_loaded_preview_before_approval() {
+        mock.confirmation = {id:"visual-request",tool:"vision.candidate.click",reason:"One fixture click",
+                             review:{preview_url:"file:///missing-carlos-fixture.png",caption:"Retry in fixture"}}
+        const prompt = item("confirmation-prompt")
+        tryCompare(prompt, "opened", true)
+        const preview = item("confirmation-preview")
+        const approve = item("confirmation-approve")
+        tryCompare(preview, "status", Image.Error)
+        verify(!approve.enabled)
+        prompt.respond(true)
+        compare(mock.calls.length, 0)
+        mock.confirmation = {id:"visual-request",tool:"vision.candidate.click",reason:"One fixture click",
+                             review:{preview_url:Qt.resolvedUrl("../../ui/assets/ev-neural-brain.png"),
+                                     caption:"Retry in fixture"}}
+        tryCompare(preview, "status", Image.Ready)
+        verify(approve.enabled)
+        verify(preview.width <= prompt.width)
+        approve.clicked()
+        prompt.respond(true)
+        compare(mock.calls, [{approved:true}])
+        verify(!approve.enabled)
+    }
+    function test_visual_confirmation_without_review_can_only_be_denied() {
+        mock.confirmation = {id:"no-preview",tool:"vision.candidate.click",reason:"Fixture"}
+        const prompt = item("confirmation-prompt")
+        tryCompare(prompt, "opened", true)
+        verify(!item("confirmation-approve").enabled)
+        keyClick(Qt.Key_Escape)
+        tryCompare(mock, "calls", [{approved:false}])
+    }
     function test_scene_card_sends_only_selected_fixture_id() {
         click("nav-10")
         click("open-scene-picker")

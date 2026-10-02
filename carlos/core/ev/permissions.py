@@ -8,6 +8,7 @@ import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
+from copy import deepcopy
 
 
 class Permission(StrEnum):
@@ -31,6 +32,7 @@ class PendingPermission:
     correlation_id: str
     created_monotonic: float
     expires_monotonic: float
+    review: dict[str, Any] | None = None
 
     def public(self, include_token: bool = True) -> dict[str, Any]:
         result = {
@@ -44,6 +46,8 @@ class PendingPermission:
         }
         if include_token:
             result["approval_token"] = self.token
+            if self.review is not None:
+                result["review"] = deepcopy(self.review)
         return result
 
 
@@ -66,6 +70,7 @@ class PermissionBroker:
         permission: Permission,
         reason: str,
         correlation_id: str,
+        *, review: dict[str, Any] | None = None,
     ) -> PendingPermission:
         pending_id = uuid.uuid4().hex
         now = time.monotonic()
@@ -80,6 +85,7 @@ class PermissionBroker:
             correlation_id=correlation_id,
             created_monotonic=now,
             expires_monotonic=now + self.timeout_seconds,
+            review=deepcopy(review),
         )
         self._pending[pending_id] = pending
         return pending
