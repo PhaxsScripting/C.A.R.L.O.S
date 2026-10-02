@@ -23,7 +23,7 @@ def read_temperature(hwmon_root: Path | None = None) -> dict[str, Any]:
     candidates: list[tuple[str, float]] = []
     for hwmon in entries(hwmon_root or Path("/sys/class/hwmon"), "hwmon[0-9]*", 64):
         name = read_text(hwmon / "name")
-        if name is None:
+        if name is None or name.casefold() not in {"coretemp", "k10temp", "cpu_thermal", "cpu-thermal", "x86_pkg_temp"}:
             continue
         for input_file in entries(hwmon, "temp[0-9]*_input", 32):
             channel = input_file.name.removesuffix("_input")
@@ -39,12 +39,15 @@ def read_temperature(hwmon_root: Path | None = None) -> dict[str, Any]:
             label_file = input_file.with_name(input_file.name.replace("_input", "_label"))
             label = read_text(label_file) or input_file.stem
             candidates.append((f"{name}:{label}", value))
-    preferred = [item for item in candidates if item[0].startswith("coretemp:Package")]
+    preferred = [item for item in candidates if item[0].casefold().startswith("coretemp:package")
+                 or item[0].casefold() == "k10temp:tdie"]
     if preferred:
-        return {"celsius": round(preferred[0][1], 1), "sensor": preferred[0][0]}
+        candidates = preferred
     if candidates:
-        hottest = max(candidates, key=lambda item: item[1])
-        return {"celsius": round(hottest[1], 1), "sensor": hottest[0]}
+        sensor, value = max(candidates, key=lambda item: item[1])
+        control = sensor.casefold() in {"k10temp:tctl", "k10temp:temp1_input"}
+        return {"celsius": round(value, 1), "sensor": sensor,
+                "measurement": "CPU_CONTROL" if control else "CPU_TEMPERATURE"}
     return {"celsius": None, "sensor": None}
 
 
@@ -180,7 +183,7 @@ class TelemetrySampler:
                         "telemetry",
                         {
                             "kind": "thermal",
-                            "message": f"CPU package temperature is {temperature:.0f} C",
+                            "message": f"Reported CPU sensor temperature is {temperature:.0f} degrees",
                             "celsius": temperature,
                             "threshold": threshold,
                         },

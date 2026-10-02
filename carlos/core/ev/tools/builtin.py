@@ -2364,7 +2364,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         ToolSpec(
             "system.get_temperature",
             "SYSTEM",
-            "Read the CPU package temperature from Linux hwmon.",
+            "Read an identified CPU temperature sensor, preferring Intel package or AMD die readings. Control values retain their label; unrelated GPU/disk sensors are excluded.",
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_temperature,

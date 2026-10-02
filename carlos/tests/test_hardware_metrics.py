@@ -162,7 +162,7 @@ class HardwareTests(unittest.TestCase):
         self.sampler.sample()
         self.assertEqual(before, {p: p.read_bytes() for p in before})
 
-    def test_invalid_temperature_cannot_bypass_model_thermal_guard(self):
+    def test_invalid_temperature_remains_unknown_and_serializes(self):
         self.write('class/hwmon/hwmon0/name', 'coretemp')
         self.write('class/hwmon/hwmon0/temp1_label', 'Package id 0')
         path = self.write('class/hwmon/hwmon0/temp1_input', 'nan')
@@ -184,6 +184,52 @@ class HardwareTests(unittest.TestCase):
         fault.write_text('0')
         self.assertEqual(read_temperature(self.root / 'class/hwmon')['celsius'], 90)
 
+    def temperature(self, hwmon, name, value, label='temp1_input'):
+        prefix = f'class/hwmon/{hwmon}/'
+        self.write(prefix + 'name', name)
+        self.write(prefix + 'temp1_input', value)
+        self.write(prefix + 'temp1_label', label)
+
+    def test_board_disk_and_gpu_sensors_are_not_reported_as_cpu(self):
+        for index, name in enumerate(('nvme', 'amdgpu', 'acpitz', 'pch_cannonlake')):
+            self.temperature(f'hwmon{index}', name, 99000)
+        self.assertIsNone(read_temperature(self.root / 'class/hwmon')['celsius'])
+        self.temperature('hwmon5', 'coretemp', 65000, 'Core 0')
+        result = read_temperature(self.root / 'class/hwmon')
+        self.assertEqual(result['celsius'], 65)
+        self.assertEqual(result['sensor'], 'coretemp:Core 0')
+
+    def test_hottest_package_is_selected_on_multi_socket_cpu(self):
+        self.temperature('hwmon0', 'coretemp', 45000, 'Package id 0')
+        self.temperature('hwmon1', 'coretemp', 94000, 'Package id 1')
+        self.temperature('hwmon2', 'coretemp', 95000, 'Core 5')
+        result = read_temperature(self.root / 'class/hwmon')
+        self.assertEqual(result['celsius'], 94)
+        self.assertEqual(result['sensor'], 'coretemp:Package id 1')
+
+    def test_amd_die_is_preferred_over_control_offset_and_nvme(self):
+        self.temperature('hwmon0', 'k10temp', 95000, 'Tctl')
+        self.write('class/hwmon/hwmon0/temp2_input', 75000)
+        self.write('class/hwmon/hwmon0/temp2_label', 'Tdie')
+        self.temperature('hwmon1', 'nvme', 99000)
+        result = read_temperature(self.root / 'class/hwmon')
+        self.assertEqual(result['sensor'], 'k10temp:Tdie')
+        self.assertEqual(result['celsius'], 75)
+        self.assertEqual(result['measurement'], 'CPU_TEMPERATURE')
+
+    def test_amd_control_only_sensor_retains_control_semantics(self):
+        self.temperature('hwmon0', 'k10temp', 65000)
+        result = read_temperature(self.root / 'class/hwmon')
+        self.assertEqual(result['measurement'], 'CPU_CONTROL')
+        self.write('class/hwmon/hwmon0/temp1_label', 'Tctl')
+        self.assertEqual(read_temperature(self.root / 'class/hwmon')['measurement'], 'CPU_CONTROL')
+
+    def test_explicit_cpu_thermal_device_is_supported(self):
+        self.temperature('hwmon0', 'cpu_thermal', 43000)
+        result = read_temperature(self.root / 'class/hwmon')
+        self.assertEqual(result['celsius'], 43)
+        self.assertEqual(result['measurement'], 'CPU_TEMPERATURE')
+
     def test_telemetry_uses_shared_sampler_and_keeps_existing_sensors(self):
         self.counter(3)
         telemetry = TelemetrySampler(PhaxEventBus(), hardware=self.sampler)
@@ -197,6 +243,20 @@ class HardwareTests(unittest.TestCase):
 
 
 class HardwareToolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_temperature_answer_preserves_control_sensor_meaning(self):
+        from ev.ai.offline import OfflineProvider
+        provider = OfflineProvider()
+        turn = await provider.begin('What is my CPU temperature?', [], [], [])
+        self.assertEqual(turn.tool_calls[0].name, 'system.get_temperature')
+        control = {'celsius':65, 'sensor':'k10temp:Tctl', 'measurement':'CPU_CONTROL'}
+        answer = await provider.continue_with_tools(turn, [(turn.tool_calls[0], {'result':control})], [])
+        self.assertIn('control sensor', answer.text)
+        self.assertNotIn('degrees Celsius', answer.text)
+        die = {'celsius':65, 'sensor':'k10temp:Tdie', 'measurement':'CPU_TEMPERATURE'}
+        answer = await provider.continue_with_tools(turn, [(turn.tool_calls[0], {'result':die})], [])
+        self.assertIn('reported CPU temperature', answer.text)
+        self.assertNotIn('CPU package', answer.text)
+
     async def test_offline_requests_use_sensor_tool_and_keep_unknowns_explicit(self):
         from ev.ai.offline import OfflineProvider
         provider = OfflineProvider()

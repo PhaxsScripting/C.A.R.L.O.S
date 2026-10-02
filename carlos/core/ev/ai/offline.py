@@ -582,9 +582,9 @@ class OfflineProvider(Provider):
         elif re.search(r"\b(cpu|processor)\b", lowered) and re.search(
             r"\b(temp|temperature|hot|heat)\b", lowered
         ):
-            interpreted = "Inspect the current CPU package temperature."
+            interpreted = "Inspect the current reported CPU temperature."
             plan = [
-                "Read the preferred CPU package hwmon sensor",
+                "Read an identified CPU hwmon sensor",
                 "Report the measured temperature",
             ]
             calls = [call("system.get_temperature")]
@@ -902,7 +902,9 @@ class OfflineProvider(Provider):
             text = (
                 "I couldn’t find a readable CPU temperature sensor."
                 if temperature is None
-                else f"The CPU package is currently {temperature:.0f} degrees Celsius."
+                else f"The CPU control sensor reports {temperature:.0f} degrees; this is a control value rather than a physical die reading."
+                if result.get("measurement") == "CPU_CONTROL"
+                else f"The reported CPU temperature is {temperature:.0f} degrees Celsius."
             )
         elif name == "system.get_hardware_metrics":
             clocks = [p['current_mhz'] for p in result['cpu_frequency']['policies']

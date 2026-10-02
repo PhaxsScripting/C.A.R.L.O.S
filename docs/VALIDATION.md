@@ -459,3 +459,12 @@ changed from READY to STOPPED before the old health row changed. One verified
 repair restored READY and accepted a new request in 480 ms. No microphone or
 playback was started by this fixture. This does not establish acoustic
 readiness, physical barge-in latency or whole-system recovery time.
+
+## October 1: CPU sensor selection
+
+1,202 Python tests passed in 69.110 seconds. Twenty-three hardware checks now
+include GPU/NVMe/board exclusion, hottest-package selection, AMD die preference,
+control-only labelling and spoken answer semantics. The Gentoo Intel package
+sensor remained readable. Other CPU sensor layouts were tested with disposable
+sysfs files; they are not physical AMD or ARM acceptance. Unknown CPU chips
+return unavailable instead of relabelling an unrelated hot device.

@@ -135,3 +135,10 @@ an older READY result immediately. ON_DEMAND means the adapter is configured
 and available but no persistent worker is promised. DISABLED applies to an
 unused neural detector. Voice becomes degraded when a required worker lacks
 current evidence. These labels do not replace microphone or playback tests.
+
+CPU temperature readings exclude generic board, GPU and disk sensors. Intel
+package readings and AMD Tdie readings take preference; the hottest matching
+package is used on a multi-socket system. If AMD only exposes Tctl, its control
+value stays labelled as such. An unidentified CPU sensor is unavailable.
+The [kernel's k10temp documentation](https://docs.kernel.org/hwmon/k10temp.html)
+explains the distinction between AMD die and control readings.
