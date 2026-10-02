@@ -671,3 +671,9 @@ unverified. No native UI appearance changes were made in this batch.
 
 Six installed source files match and import with host Python. Core remains
 stopped, preserving the current Minecraft session's background state.
+
+## Diagnostics responsiveness, October 2
+
+Capability queries and self diagnostics gather CLI readiness and AT-SPI observations outside the owner loop. Their result builders stay on the owner loop; tools, event history, voice state and desktop input are not moved into worker threads. Both requests can pass an in-flight tool on the same IPC connection.
+
+Validation: four isolated Core/Unix-socket checks in both source trees held each backend probe while a tool remained active, received health on the same connection, then completed diagnostics without interrupting the tool. The full public Python suite passed 1,329 tests in 86.789 seconds. Installed source imports and hashes passed while the desktop Core remained stopped. This is automated IPC evidence, not a live voice or authenticated engineering acceptance.

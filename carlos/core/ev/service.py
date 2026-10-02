@@ -663,7 +663,7 @@ class CarlosCore:
             },
         }
 
-    def capability_query(self, query: str = "") -> dict[str, Any]:
+    def capability_query(self, query: str = "", *, coding_status=None, accessibility_status=None) -> dict[str, Any]:
         words = set(re.findall(r"[a-z0-9_.-]+", query.casefold()))
         search_words = set(words)
         synonyms = {
@@ -692,10 +692,10 @@ class CarlosCore:
                 )
             ]
         gaps: list[dict[str, Any]] = []
-        accessibility = self.accessibility.status()
+        accessibility = self.accessibility.status() if accessibility_status is None else accessibility_status
         vision = self.vision.status()
         desktop_input = self.desktop.input.status()
-        coding = self.coding_agent.status()
+        coding = self.coding_agent.status() if coding_status is None else coding_status
         if (
             any(word in words for word in {"click", "accessibility"})
             and accessibility.get("status") != "READY"
@@ -758,7 +758,7 @@ class CarlosCore:
 
         return capability_evidence(tools, self.bus.history(1000), desktop_input)
 
-    def self_diagnostics(self) -> dict[str, Any]:
+    def self_diagnostics(self, *, coding_status=None, accessibility_status=None) -> dict[str, Any]:
         event_metrics = self.bus.metrics()
         voice = self.voice.snapshot()
         wake_status = (
@@ -775,10 +775,10 @@ class CarlosCore:
             )
         )
         provider = self.brain.provider_status()
-        accessibility = self.accessibility.status()
+        accessibility = self.accessibility.status() if accessibility_status is None else accessibility_status
         vision = self.vision.status()
         desktop_input = self.desktop.input.status()
-        coding = self.coding_agent.status()
+        coding = self.coding_agent.status() if coding_status is None else coding_status
         checks = [
             {'component': 'event_delivery', 'status': 'OBSERVED',
              'evidence': f"{event_metrics['queued_deliveries']}/{event_metrics['queue_capacity']} pending; "
@@ -2538,10 +2538,15 @@ class CarlosCore:
             return await self._cancel_active_plan(str(payload.get("reason", "user_request")))
         if request_type == "tool.catalog":
             return {"tools": self.tools.catalog()}
-        if request_type == "capability.query":
-            return self.capability_query(str(payload.get("query", "")))
-        if request_type == "self.diagnostics":
-            return self.self_diagnostics()
+        if request_type in {"capability.query", "self.diagnostics"}:
+            coding, accessibility = await asyncio.gather(
+                asyncio.to_thread(self.coding_agent.status),
+                asyncio.to_thread(self.accessibility.status),
+            )
+            observations = {"coding_status": coding, "accessibility_status": accessibility}
+            if request_type == "capability.query":
+                return self.capability_query(str(payload.get("query", "")), **observations)
+            return self.self_diagnostics(**observations)
         if request_type == "personality.update":
             return self.update_personality(payload)
         if request_type == "security.snapshot":

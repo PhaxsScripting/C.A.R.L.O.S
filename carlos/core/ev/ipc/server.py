@@ -30,6 +30,8 @@ RESPONSIVE_REQUESTS = frozenset(
         "latency.report",
         "plan.list",
         "tool.catalog",
+        "capability.query",
+        "self.diagnostics",
         "confirmation.list",
         "agent.tasks.list",
         "agent.tasks.get",

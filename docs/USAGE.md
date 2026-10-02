@@ -309,3 +309,5 @@ engineering restrictions and discard results crossing a privacy transition.
 The coding-tool outer deadline is one hour, including its bounded agent run and
 fixed validation stages; it is an upper bound, not a target duration. Its own
 timeout still cancels the job and joins cleanup.
+
+Capability queries and self diagnostics remain available while a command is busy. Slow CLI and accessibility readiness probes run outside the main loop.
