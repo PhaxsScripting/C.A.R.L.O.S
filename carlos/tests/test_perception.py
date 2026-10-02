@@ -6,7 +6,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from PIL import Image
 
@@ -315,7 +315,7 @@ class PerceptionTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(AccessibilityBridge, "_status_flag", side_effect=[True, False]):
             self.assertFalse(AccessibilityBridge._enabled())
 
-    def test_ocr_accepts_only_existing_private_capture_ids(self) -> None:
+    async def test_ocr_accepts_only_existing_private_capture_ids(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             capture_id = "a" * 32
@@ -323,14 +323,14 @@ class PerceptionTests(unittest.IsolatedAsyncioTestCase):
             perception = ScreenPerception(root, FakeDesktop(), {"ocr_python": sys.executable})
             with (
                 patch.object(ScreenPerception, "status", return_value={"ocr": True}),
-                patch("ev.vision.subprocess.run", return_value=FakeOcrCompleted()),
+                patch("ev.process_runner.command", new=AsyncMock(return_value={'code': 0, 'out': FakeOcrCompleted.stdout, 'err': ''})),
             ):
-                result = perception.ocr(capture_id)
+                result = await perception.ocr(capture_id)
             self.assertTrue(result["verified"])
             self.assertEqual(result["text"], "E.V.")
             self.assertTrue((root / f"{capture_id}.png").exists())
             with self.assertRaisesRegex(ValueError, "invalid capture id"):
-                perception.ocr("../escape")
+                await perception.ocr("../escape")
 
 
 if __name__ == "__main__":

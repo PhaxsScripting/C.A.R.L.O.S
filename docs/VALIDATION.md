@@ -515,3 +515,19 @@ unknown active output and vertically stacked displays with tied horizontal
 edges. Fresh metadata from the actual two-output KDE desktop resolved a saved
 nickname in a disposable database. No host display names or layout changed.
 Actual monitor hotplug and a physical window move are separate acceptance work.
+
+## October 1: OCR worker lifecycle
+
+The full Python suite passed 1,270 tests in 72.455 seconds. Six new lifecycle
+checks cover real owned worker cancellation/timeout, a busy-worker refusal,
+responsive temporary core IPC, malformed/oversized output and cancellation
+during process creation. A second cancellation still joins the returned child;
+a failed spawn preserves cancellation. Twelve perception and twenty-two
+security checks passed with the shared bounded runner.
+
+The real installed RapidOCR runtime recognized CARLOS RETRY 42 in a generated
+PNG and exited afterward. With the final OpenCV cap, one sample took 3,059 ms,
+peaked at seven process threads and sampled 369 MiB RSS. This is a synthetic
+image check, not desktop recognition accuracy or a latency distribution. No
+host screen, microphone or audio output was used. OCR results explicitly remain
+unverified inference for scene truth and do not grant coordinate actions.

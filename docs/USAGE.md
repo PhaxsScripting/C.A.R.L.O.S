@@ -213,3 +213,11 @@ When desktop notifications are enabled, monitor changes use the same bounded
 notification queue. Quiet scenes suppress informational changes, while important
 verified failures retain their priority. Only monitor-origin observations use
 this notification path; model statements do not become security evidence.
+
+OCR runs on demand with one worker per core. Cancellation and timeout stop and
+reap its owned child; output is capped at 1 MiB per stream. OpenCV uses one
+processing thread and each ONNX session uses two intra-op threads and one
+inter-op thread. These limits are per pool, not a total process thread limit.
+Source images are bounded to 16 MiB and 16 million pixels. The source capture
+keeps its ordinary expiry/deletion policy. Confidence is an OCR estimate, not
+independent proof of visible text, a click target or a completed action.

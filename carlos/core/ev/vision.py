@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import os
 import json
-import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -22,6 +21,7 @@ class ScreenPerception:
         self.capture_root = capture_root
         self.desktop = desktop
         self.config = config or {}
+        self._ocr_lock = asyncio.Lock()
         from .ai.local_vision import LocalVisualReasoner
 
         self.reasoner = LocalVisualReasoner(
@@ -138,7 +138,18 @@ class ScreenPerception:
         finally:
             self.delete(capture["capture_id"])
 
-    def ocr(self, capture_id: str, minimum_score: float = 0.55) -> dict[str, Any]:
+    async def ocr(self, capture_id: str, minimum_score: float = 0.55) -> dict[str, Any]:
+        if self._ocr_lock.locked():
+            raise RuntimeError("Local OCR is busy; no second worker was started")
+        async with self._ocr_lock:
+            return await self._ocr(capture_id, minimum_score)
+
+    async def _ocr(self, capture_id: str, minimum_score: float) -> dict[str, Any]:
+        import math
+        from .process_runner import command as run_command
+
+        if not isinstance(minimum_score, (int, float)) or isinstance(minimum_score, bool) or not math.isfinite(minimum_score) or not 0 <= minimum_score <= 1:
+            raise ValueError("OCR confidence must be between zero and one")
         path = self._capture_path(capture_id)
         status = self.status()
         if not status["ocr"]:
@@ -155,23 +166,18 @@ class ScreenPerception:
             "--minimum-score",
             str(minimum_score),
         ]
-        result = subprocess.run(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=float(self.config.get("ocr_timeout_seconds", 30)),
-            check=False,
-        )
+        timeout = float(self.config.get("ocr_timeout_seconds", 30))
+        if not math.isfinite(timeout) or not 0 < timeout <= 60:
+            raise ValueError("OCR timeout must be between zero and sixty seconds")
+        result = await run_command(command, timeout=timeout, maximum=1048576)
         marker = "EV_OCR_JSON:"
         payload_line = next(
-            (line for line in reversed(result.stdout.splitlines()) if line.startswith(marker)), ""
+            (line for line in reversed(result['out'].splitlines()) if line.startswith(marker)), ""
         )
-        if result.returncode != 0 or not payload_line:
+        if result['code'] != 0 or not payload_line:
             detail = (
-                result.stderr.strip().splitlines()[-1]
-                if result.stderr.strip()
+                result['err'].strip().splitlines()[-1]
+                if result['err'].strip()
                 else "local OCR failed"
             )
             raise RuntimeError(detail[:500])
@@ -179,17 +185,29 @@ class ScreenPerception:
             payload = json.loads(payload_line[len(marker) :])
         except json.JSONDecodeError as error:
             raise RuntimeError("local OCR returned invalid data") from error
+        if not isinstance(payload, dict) or not isinstance(payload.get('elements'), list) or len(payload['elements']) > 250:
+            raise RuntimeError("local OCR returned invalid data")
+        for element in payload['elements']:
+            score = element.get('confidence') if isinstance(element, dict) else None
+            if not isinstance(score, (int, float)) or isinstance(score, bool) or not math.isfinite(score) or not minimum_score <= score <= 1 or not isinstance(element.get('text'), str):
+                raise RuntimeError("local OCR returned invalid confidence or text")
+        duration = payload.get('duration_ms', 0)
+        if not isinstance(duration, (int, float)) or isinstance(duration, bool) or not math.isfinite(duration) or duration < 0:
+            raise RuntimeError("local OCR returned invalid timing")
         return {
             "verified": True,
             "capture_id": capture_id,
             "engine": payload.get("engine", "RapidOCR"),
             "elements": payload.get("elements", [])[:250],
             "text": str(payload.get("text", ""))[:65536],
-            "count": min(int(payload.get("count", 0)), 250),
-            "duration_ms": float(payload.get("duration_ms", 0.0)),
+            "count": len(payload['elements']),
+            "duration_ms": float(duration),
             "local_only": True,
             "uploaded": False,
             "capture_retained": True,
+            "evidence_kind": "ocr_inference",
+            "scene_accuracy_verified": False,
+            "coordinate_actions_allowed": False,
         }
 
     async def capture(self, output: str = "", window_id: str = "") -> dict[str, Any]:

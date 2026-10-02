@@ -121,6 +121,17 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             verification_hint="Model interpretation is not independently observed scene truth",
             scope="visual_inference",
         )
+    if name == "vision.ocr":
+        accepted = data.get('verified') is True and isinstance(data.get('elements'), list)
+        return ExecutionResult(
+            accepted,
+            "EXECUTED_UNVERIFIED" if accepted else "FAILED",
+            False,
+            None if accepted else "No OCR observation returned",
+            changed_state=False,
+            verification_hint="OCR confidence is not independent verification of text or an action target",
+            scope="ocr_inference",
+        )
     if name == "development.project.run":
         verified = data.get("verified") is True and data.get("exit_code") == 0
         return ExecutionResult(

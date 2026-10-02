@@ -2290,8 +2290,8 @@ def vision_delete(arguments: dict[str, Any], context: ToolContext) -> dict[str, 
     return _vision(context).delete(str(arguments["capture_id"]))
 
 
-def vision_ocr(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-    return _vision(context).ocr(
+async def vision_ocr(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    return await _vision(context).ocr(
         str(arguments["capture_id"]),
         float(arguments.get("minimum_score", 0.55)),
     )
