@@ -555,3 +555,16 @@ zero, valid bounded JSON, Running state and local node identity/address evidence
 Failed commands, invalid JSON and missing node data remain UNVERIFIED. These
 observations do not establish Internet, school-network or cellular reachability.
 Returned capability/status dictionaries cannot mutate the internal probe cache.
+
+## October 1: Core process-tree resources
+
+1,285 Python tests passed in 72.373 seconds; nine final resource checks passed
+in both source trees. Five native groups passed in 12.72 seconds after changing
+the two main-process metric labels. The new read-only tool checks process
+identities and separates summed RSS, proportional memory and interval CPU.
+Tests cover process births/exits, PID reuse, counter resets, missing PSS,
+incomplete reads, the detailed-read cap and cancellation before a second read.
+
+The resource tool runs only on request and does not control processes or change
+resource policy. Counts/measurement overhead and tree scope stay explicit.
+No main-process memory figure is presented as all Carlos components.

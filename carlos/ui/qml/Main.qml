@@ -596,8 +596,8 @@ ApplicationWindow {
                         MetricCard { label: "DISK FREE"; value: bytes(nested(evClient.telemetry, "disk", "free_bytes", null)); detail: percent(nested(evClient.telemetry, "disk", "percent", null)) + " USED"; accent: "#a482ff"; Layout.fillWidth: true; Layout.fillHeight: true }
                         MetricCard { label: "NETWORK DOWN"; value: bytes(nested(evClient.telemetry, "network", "download_bytes_per_second", null)) + "/s"; detail: nested(evClient.telemetry, "network", "connected_interfaces", "—") + " INTERFACES"; Layout.fillWidth: true; Layout.fillHeight: true }
                         MetricCard { label: "NETWORK UP"; value: bytes(nested(evClient.telemetry, "network", "upload_bytes_per_second", null)) + "/s"; detail: "LIVE RATE"; Layout.fillWidth: true; Layout.fillHeight: true }
-                        MetricCard { label: "Carlos RAM"; value: bytes(nested(evClient.telemetry, "ev_core", "rss_bytes", null)); detail: nested(evClient.telemetry, "ev_core", "threads", "—") + " THREADS"; accent: "#53efae"; Layout.fillWidth: true; Layout.fillHeight: true }
-                        MetricCard { label: "Carlos CPU"; value: percent(nested(evClient.telemetry, "ev_core", "cpu_percent", null)); detail: "BACKGROUND CORE"; accent: "#53efae"; Layout.fillWidth: true; Layout.fillHeight: true }
+                        MetricCard { label: "Core RAM"; value: bytes(nested(evClient.telemetry, "ev_core", "rss_bytes", null)); detail: nested(evClient.telemetry, "ev_core", "threads", "—") + " THREADS"; accent: "#53efae"; Layout.fillWidth: true; Layout.fillHeight: true }
+                        MetricCard { label: "Core CPU"; value: percent(nested(evClient.telemetry, "ev_core", "cpu_percent", null)); detail: "BACKGROUND CORE"; accent: "#53efae"; Layout.fillWidth: true; Layout.fillHeight: true }
                         MetricCard { label: "UPTIME"; value: (Number(get(evClient.telemetry, "uptime_seconds", 0)) / 3600).toFixed(1) + " h"; detail: "SYSTEM"; Layout.fillWidth: true; Layout.fillHeight: true }
                     }
                 }

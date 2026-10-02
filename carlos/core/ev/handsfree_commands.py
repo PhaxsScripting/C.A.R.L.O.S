@@ -15,6 +15,9 @@ def handsfree_action(clean):
     def match(pattern):
         return re.fullmatch(pattern, text, re.I)
 
+    if match(r"(?:(?:check|show|measure)(?: me)? carlos(?:'s)? (?:resources|resource usage)|how much (?:RAM|memory) (?:is carlos using|does carlos use))[.!?]*"):
+        return Action('system.carlos_resources', {})
+
     if m := match(r"(?:name|call) (?:the )?(?:monitor|screen|display) ([A-Za-z0-9_.-]+) (?:as )?(.+)"):
         return Action('desktop.output.alias.save', {'output_name': m[1], 'name': m[2]})
     if m := match(r"(?:forget|remove) (?:the )?monitor (?:name|alias) (.+)"):

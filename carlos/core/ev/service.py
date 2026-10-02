@@ -197,6 +197,9 @@ class CarlosCore:
 
         self.hardware_metrics = HardwareMetrics()
         register_hardware_tools(self.tools, self.hardware_metrics)
+        from .core_resources import register_core_resources
+
+        register_core_resources(self.tools)
         from .security_monitor import SecurityMonitor
         from .tools.security_monitor import register_security_monitor
 

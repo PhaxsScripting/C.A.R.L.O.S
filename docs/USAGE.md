@@ -227,3 +227,24 @@ metadata through execution. A usable unique serial is checked before dispatch,
 inside KWin immediately before the move, and during the placement readback.
 If identity changes or becomes ambiguous, resolve the target again. A screen
 without a usable serial still has connector-only semantics.
+
+## Core and worker resources
+
+Ask "How much RAM is Carlos using?" or "Check Carlos resources" for an
+on-demand process-tree reading. The CLI equivalent is:
+
+```sh
+evctl tool system.carlos_resources --arguments '{"seconds":3}'
+```
+
+The interval can be 1–15 seconds, with detailed reads capped at 64 processes.
+RSS sums can repeat shared pages; PSS apportions those pages when available.
+Incomplete reads leave totals unknown and return observed lower bounds. CPU
+needs the same continuously observed process identities throughout the interval;
+birth, exit, PID reuse or counter reset leaves it unknown. One hundred percent
+means one busy logical CPU, and the observation includes its own small overhead.
+
+This covers the Core OS process tree. Separate UI, pet, mobile services and
+reparented runtimes are excluded. It is not a whole-machine idle benchmark.
+The existing RAM/CPU cards are labelled Core RAM and Core CPU to reflect their
+original main-process measurements; they do not add workers to those values.
