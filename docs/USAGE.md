@@ -268,3 +268,9 @@ A stop also removes accepted, undispatched action requests from other connected
 clients, returning a cancelled reply for each request ID. Read-only status
 requests retain their order, and ordinary application commands remain serialized.
 Two cancellation slots are reserved separately from eight status slots.
+
+Engineering-job cancellation also stops owned fixed-validation processes and
+prevents remaining validators or review commits from starting. Captured
+validation output is bounded and is never interpreted as agent progress.
+The isolated worktree remains for inspection. A review commit already sent to
+Git may have completed; inspect that worktree before assuming anything was undone.

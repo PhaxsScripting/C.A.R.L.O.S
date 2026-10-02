@@ -232,6 +232,12 @@ class CodingAgentGateway:
             raise RuntimeError("live repository changed after proposal; create a new proposal")
         if self.state_root is None:
             raise RuntimeError("coding task state directory is not configured")
+        if self._running[proposal_id].is_set():
+            proposal.update(status="CANCELLED", completed_epoch=time.time())
+            self._save(proposal)
+            self._status_cache = None
+            self._emit("coding.cancelled", self._public(proposal), proposal_id)
+            return self._public(proposal)
 
         task_dir = self.state_root / proposal_id
         worktree = task_dir / "worktree"
@@ -349,7 +355,7 @@ class CodingAgentGateway:
             self._emit("coding.cancelled", self._public(proposal), proposal_id)
             return self._public(proposal)
         assessment = self._assess_changes(worktree, task_dir)
-        validations = self._validate(worktree)
+        validations = self._validate(worktree, proposal_id=proposal_id)
         proposal["change_review"] = assessment
         proposal["tests"] = validations
         if self._running[proposal_id].is_set():
@@ -377,18 +383,20 @@ class CodingAgentGateway:
             else:
                 proposal.update(
                     {
-                        "status": "FAILED",
-                        "failure": committed["stderr"].strip()
-                        or "failed to commit validated result",
+                        "status": "CANCELLED" if self._running[proposal_id].is_set() else "FAILED",
+                        "failure": ("Cancelled during review commit; inspect the preserved worktree for already completed changes."
+                                    if self._running[proposal_id].is_set() else
+                                    committed["stderr"].strip() or "failed to commit validated result"),
                     }
                 )
         proposal["completed_epoch"] = time.time()
         self._save(proposal)
         self._status_cache = None
-        self._emit("coding.completed", self._public(proposal), proposal_id)
+        self._emit("coding.cancelled" if proposal["status"] == "CANCELLED" else "coding.completed",
+                   self._public(proposal), proposal_id)
         return self._public(proposal)
 
-    def _collect_agent(self, process, proposal_id, timeout):
+    def _collect_agent(self, process, proposal_id, timeout, *, label="Codex", parse_progress=True):
         buffers = {"stdout": bytearray(), "stderr": bytearray()}
         pending = bytearray()
         changed_files = set()
@@ -402,7 +410,7 @@ class CodingAgentGateway:
             try:
                 while selector.get_map():
                     if cancel.is_set() or time.monotonic() >= deadline:
-                        stopped = "cancelled" if cancel.is_set() else "Codex execution timed out"
+                        stopped = "cancelled" if cancel.is_set() else f"{label} execution timed out"
                         break
                     for key, _ in selector.select(0.1):
                         chunk = os.read(key.fileobj.fileno(), 8192)
@@ -411,9 +419,9 @@ class CodingAgentGateway:
                             continue
                         buffers[key.data].extend(chunk)
                         if len(buffers[key.data]) > 2 * 1024 * 1024:
-                            stopped = "Codex output exceeded the bounded capture limit"
+                            stopped = f"{label} output exceeded the bounded capture limit"
                             break
-                        if key.data == "stdout":
+                        if parse_progress and key.data == "stdout":
                             pending.extend(chunk)
                             while b"\n" in pending:
                                 line, _, remaining = pending.partition(b"\n")
@@ -463,14 +471,14 @@ class CodingAgentGateway:
                 try:
                     process.wait(timeout=3)
                 except subprocess.TimeoutExpired:
-                    stopped = stopped or "Codex did not exit after closing its output"
+                    stopped = stopped or f"{label} did not exit after closing its output"
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
                         pass
                     process.wait(timeout=3)
             finally:
-                if process.poll() is None:
+                if stopped or process.poll() is None:
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except ProcessLookupError:
@@ -561,7 +569,7 @@ class CodingAgentGateway:
             ),
         }
 
-    def _validate(self, worktree: Path) -> list[dict[str, Any]]:
+    def _validate(self, worktree: Path, proposal_id: str | None = None) -> list[dict[str, Any]]:
         commands = [("git diff --check", [_platform_executable("/usr/bin/git"), "-C", str(worktree), "diff", "--check"], 30, worktree)]
         for project in (worktree, worktree / "carlos"):
             if (project / "core/ev").is_dir():
@@ -572,17 +580,44 @@ class CodingAgentGateway:
         for label, command, timeout, directory in commands:
             environment = self._clean_environment()
             environment["PYTHONPATH"] = str(directory / "core")
-            result = self._run(command, cwd=directory, timeout=timeout, environment=environment)
+            result = (self._run_owned(command, proposal_id, cwd=directory, timeout=timeout,
+                                      environment=environment, label=label)
+                      if proposal_id is not None else
+                      self._run(command, cwd=directory, timeout=timeout, environment=environment))
             results.append({"name": label, "passed": result["returncode"] == 0,
                             "returncode": result["returncode"],
+                            "cancelled": result.get("cancelled", False),
                             "output": (result["stdout"] + result["stderr"])[-20_000:]})
+            if result.get("cancelled"):
+                break
         return results
 
     def _commit_result(self, worktree: Path, proposal_id: str) -> dict[str, Any]:
-        added = self._git(worktree, "add", "--all", timeout=30)
+        def git(*arguments, timeout):
+            if proposal_id in self._running:
+                return self._run_owned([_platform_executable("/usr/bin/git"), "-C", str(worktree), *arguments],
+                                       proposal_id, timeout=timeout, label="Review commit")
+            return self._git(worktree, *arguments, timeout=timeout)
+
+        added = git("add", "--all", timeout=30)
         if added["returncode"] != 0:
             return added
-        return self._git(worktree, "commit", "-m", "fixed that bit", timeout=60)
+        return git("commit", "-m", "fixed that bit", timeout=60)
+
+    def _run_owned(self, command, proposal_id, *, cwd=None, timeout=10, environment=None, label="Validation"):
+        with self._running_lock:
+            if self._running[proposal_id].is_set():
+                return {"returncode": 130, "stdout": "", "stderr": "cancelled", "cancelled": True}
+            try:
+                process = subprocess.Popen(command, cwd=cwd, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                    env=environment, start_new_session=True)
+            except OSError as error:
+                return {"returncode": 124, "stdout": "", "stderr": str(error), "cancelled": False}
+        stdout, stderr, stopped = self._collect_agent(process, proposal_id, timeout,
+                                                     label=label, parse_progress=False)
+        return {"returncode": (130 if stopped == "cancelled" else 124) if stopped else process.returncode,
+                "stdout": stdout, "stderr": stopped or stderr, "cancelled": stopped == "cancelled"}
 
     @staticmethod
     def _prompt(proposal: dict[str, Any]) -> str:

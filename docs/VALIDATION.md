@@ -606,3 +606,19 @@ FIFO ordering; application-specific commands cannot become accidental stops.
 The installed IPC source matches the tested tree and imports with host Python.
 Core was stopped and remains stopped; no UI/model/microphone workers were launched.
 Physical acoustic interruption timing remains unmeasured.
+
+## October 2: engineering validation cancellation
+
+1,306 Python tests passed in 81.209 seconds. Four new cancellation checks passed
+in both trees; all nine existing coding-gateway checks passed. An actual isolated
+Git worktree ran a fixed Python test suite with a child ignoring SIGTERM. Cancel
+stopped its owned process group, preserved the dirty worktree, left the live
+project unchanged, and created no review commit. A separate actual child-group
+fixture confirms cancellation kills the descendant after its group leader exits.
+The test allows an exited descendant's temporary zombie state while init reaps it.
+
+Pre-cancelled review commands never spawn or stage files. Excess validator output
+is bounded, and validator JSON cannot spoof engineering progress events. These
+checks use an explicitly labelled CLI fixture; the previously recorded real
+Codex integration remains separate. Installed code matches and imports; session
+Core stays stopped. No automatic source deployment is introduced.
