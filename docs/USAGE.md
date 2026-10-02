@@ -274,3 +274,7 @@ prevents remaining validators or review commits from starting. Captured
 validation output is bounded and is never interpreted as agent progress.
 The isolated worktree remains for inspection. A review commit already sent to
 Git may have completed; inspect that worktree before assuming anything was undone.
+
+The engineering tool's own timeout also cancels the underlying job and joins
+cleanup. A shared cancellation token covers work queued before its execution
+thread registers, so a cancelled request cannot start fresh work later.

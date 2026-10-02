@@ -622,3 +622,15 @@ is bounded, and validator JSON cannot spoof engineering progress events. These
 checks use an explicitly labelled CLI fixture; the previously recorded real
 Codex integration remains separate. Installed code matches and imports; session
 Core stays stopped. No automatic source deployment is introduced.
+
+## October 2: engineering tool deadlines
+
+1,309 Python tests passed in 82.390 seconds. Three new tool-lifecycle checks
+passed in both trees. Actual ToolRegistry executions of an isolated CLI fixture
+were cancelled and timed out; both paths set the shared job cancellation token,
+joined worker cleanup, reaped the owned process and left a CANCELLED job receipt
+without a review commit. A token cancelled before thread registration prevents
+preflight and worktree creation. The fixture is not a real Codex latency sample.
+
+The two installed source files match and import with host Python. Core remains
+stopped; no resident workers/UI were launched.

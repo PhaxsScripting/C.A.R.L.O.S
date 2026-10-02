@@ -2143,13 +2143,29 @@ def coding_agent_proposal(arguments: dict[str, Any], context: ToolContext) -> di
     )
 
 
-def coding_agent_execute(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+async def coding_agent_execute(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if context.coding_agent is None:
         raise RuntimeError("The coding-agent gateway is unavailable")
-    return context.coding_agent.execute(
+    import threading
+    from ..process_runner import settle
+
+    cancel = threading.Event()
+    task = asyncio.create_task(asyncio.to_thread(context.coding_agent.execute,
         str(arguments["proposal_id"]),
         int(arguments.get("timeout_seconds", 1200)),
-    )
+        cancel_event=cancel,
+    ))
+    try:
+        await asyncio.wait({task})
+        return task.result()
+    except asyncio.CancelledError:
+        cancel.set()
+        try:
+            await settle(task)
+        except Exception:
+            # Join failed cleanup too; the gateway retains its terminal receipt.
+            pass
+        raise
 
 
 def coding_agent_result(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:

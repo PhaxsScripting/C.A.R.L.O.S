@@ -193,11 +193,11 @@ class CodingAgentGateway:
                 event.set()
         return {"cancel_requested": ids}
 
-    def execute(self, proposal_id: str, timeout_seconds: int = 1200) -> dict[str, Any]:
+    def execute(self, proposal_id: str, timeout_seconds: int = 1200, *, cancel_event=None) -> dict[str, Any]:
         with self._running_lock:
             if proposal_id in self._running:
                 raise ValueError("Coding task is already running")
-            self._running[proposal_id] = threading.Event()
+            self._running[proposal_id] = cancel_event if cancel_event is not None else threading.Event()
         try:
             return self._execute_inner(proposal_id, timeout_seconds)
         except Exception as error:
@@ -222,6 +222,12 @@ class CodingAgentGateway:
             raise ValueError("coding proposal has already been executed")
         if proposal.get("status") != "READY_FOR_REVIEW":
             raise ValueError("coding proposal is not ready for execution")
+        if self._running[proposal_id].is_set():
+            proposal.update(status="CANCELLED", completed_epoch=time.time())
+            self._save(proposal)
+            self._status_cache = None
+            self._emit("coding.cancelled", self._public(proposal), proposal_id)
+            return self._public(proposal)
         root = self._project(str(proposal["project"]))
         status = self.status(refresh=True)
         if not status["available"]:
