@@ -7,6 +7,7 @@ import logging
 import math
 import re
 from dataclasses import dataclass
+from copy import deepcopy
 from typing import Any, Awaitable, Callable
 
 from ..events import PhaxEventBus
@@ -68,7 +69,7 @@ class ToolSpec:
     required_capabilities: tuple[str, ...] = ()
 
     def public(self) -> dict[str, Any]:
-        return {
+        return deepcopy({
             "name": self.name,
             "read_only": self.read_only,
             "offline_available": self.offline_available,
@@ -87,7 +88,10 @@ class ToolSpec:
             "side_effects": list(self.side_effects),
             "cancellable": self.cancellable,
             "expected_latency_ms": self.expected_latency_ms,
-        }
+            "contract_gaps": [name for name in ("offline_available", "reversible", "output_schema")
+                              if getattr(self, name) is None],
+            "cancellation_scope": "Request cancellation; already-dispatched effects may complete",
+        })
 
 
 def _type_matches(value: Any, expected: str) -> bool:
@@ -160,17 +164,37 @@ class ToolRegistry:
         self._tools: dict[str, ToolSpec] = {}
 
     def register(self, spec: ToolSpec) -> None:
+        self.validate_declaration(spec)
         if spec.name in self._tools:
             raise ValueError(f"duplicate tool: {spec.name}")
         if spec.name in OBSERVATION_TOOLS:
             spec.read_only = True
-        if (
+        if spec.permission in {Permission.PRIVILEGED, Permission.DESTRUCTIVE} or (
             self.context.config.get("carlos", {}).get("strict_permissions", False)
-            and spec.permission in {Permission.HIGH, Permission.PRIVILEGED, Permission.DESTRUCTIVE}
-            and not spec.read_only
+            and spec.permission == Permission.HIGH and not spec.read_only
         ):
             spec.requires_confirmation = True
         self._tools[spec.name] = spec
+
+    @staticmethod
+    def validate_declaration(spec: ToolSpec) -> None:
+        if (not isinstance(spec, ToolSpec) or not isinstance(spec.name, str)
+                or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,127}", spec.name)
+                or not isinstance(spec.permission, Permission) or not callable(spec.executor)):
+            raise ValueError("Invalid tool identity, risk or executor")
+        if (not isinstance(spec.schema, dict) or spec.schema.get("type") != "object"
+                or (spec.output_schema is not None and (
+                    not isinstance(spec.output_schema, dict) or spec.output_schema.get("type") != "object"))):
+            raise ValueError("Tool input and declared output schemas must describe objects")
+        if (isinstance(spec.timeout_seconds, bool) or not isinstance(spec.timeout_seconds, (int, float))
+                or not math.isfinite(spec.timeout_seconds) or not 0 < spec.timeout_seconds <= 3600):
+            raise ValueError("Tool timeout must be finite and bounded to one hour")
+        if any(type(getattr(spec, name)) is not bool
+               for name in ("read_only", "cancellable", "requires_confirmation")):
+            raise ValueError("Tool action flags must be booleans")
+        if any(getattr(spec, name) is not None and type(getattr(spec, name)) is not bool
+               for name in ("offline_available", "reversible")):
+            raise ValueError("Tool contracts must be booleans or explicitly undeclared")
 
     def get(self, name: str) -> ToolSpec:
         try:
@@ -223,7 +247,7 @@ class ToolRegistry:
         if spec.output_schema is not None:
             validate_schema(result, spec.output_schema, "result")
         maximum = int(self.context.config["security"]["max_tool_output_bytes"])
-        encoded = json.dumps(result, ensure_ascii=False).encode("utf-8")
+        encoded = json.dumps(result, ensure_ascii=False, allow_nan=False).encode("utf-8")
         if len(encoded) > maximum:
             return {
                 "truncated": True,

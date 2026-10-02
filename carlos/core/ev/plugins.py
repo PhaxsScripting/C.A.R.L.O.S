@@ -75,6 +75,7 @@ def load_enabled_plugins(enabled, registry):
                     raise ValueError("Cancellable integrations require an async executor")
                 if not 0 < spec.timeout_seconds <= 120:
                     raise ValueError("Integration timeout must be bounded")
+                registry.validate_declaration(spec)
             for spec in specs:
                 registry.register(spec)
             results.append(

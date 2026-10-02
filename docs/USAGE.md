@@ -278,3 +278,17 @@ Git may have completed; inspect that worktree before assuming anything was undon
 The engineering tool's own timeout also cancels the underlying job and joins
 cleanup. A shared cancellation token covers work queued before its execution
 thread registers, so a cancelled request cannot start fresh work later.
+
+## Tool contracts
+
+Catalogue snapshots include contract_gaps for undeclared offline support,
+reversibility or output schemas. Undeclared values are not a support claim;
+request cancellation does not mean an already-dispatched effect can be undone.
+Destructive and privileged tools always require confirmation, including with
+strict permissions disabled or a read-only declaration. High-risk modification
+confirmation still follows the strict-permissions setting.
+
+Registry declarations require object schemas, boolean action flags and a finite
+positive timeout of at most one hour. Plugin batches pass the same checks before
+any tool is registered. Catalogue dictionaries cannot alter execution schemas,
+and nonfinite JSON results are rejected instead of reaching clients as success.

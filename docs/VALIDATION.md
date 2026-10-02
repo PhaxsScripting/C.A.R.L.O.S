@@ -634,3 +634,19 @@ preflight and worktree creation. The fixture is not a real Codex latency sample.
 
 The two installed source files match and import with host Python. Core remains
 stopped; no resident workers/UI were launched.
+
+## October 2: tool contract boundaries
+
+1,316 Python tests passed in 82.736 seconds. Seven focused contract checks passed
+in both trees. The full strict/read-only/risk permutation table confirms
+DESTRUCTIVE and PRIVILEGED cannot lose confirmation. Actual temporary Core
+requests with strict permissions disabled return confirmation_required without
+invoking critical executors. Catalogue input/output schema mutations do not
+change later validation.
+
+Invalid names, risks, executors, schemas, flags and deadlines cannot register.
+Plugin preflight stays atomic when a later declaration fails the new checks.
+Nested NaN/infinities fail JSON output validation without retry. Contract gaps
+remain explicit; this does not claim the older tools' offline/undo semantics
+have all been independently accepted. Installed files match and import with
+host Python; Core remains stopped.
