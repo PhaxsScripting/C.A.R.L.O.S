@@ -112,6 +112,20 @@ older instances, resets and missing identity return unavailable rates. Timing
 percentiles are sampled readings that may repeat or miss model results. Physical
 gesture accuracy and desktop-action latency are separate, unmeasured fields.
 
+## Monitor names
+
+On KDE, `desktop.world` lists the currently enabled connector names. Say
+"Name monitor HDMI-A-1 big monitor", then "Put Firefox on the big monitor".
+"Show my monitor names" checks saved names against the current screens;
+"Forget monitor name big monitor" removes that nickname.
+
+With a usable unique manufacturer/model/serial identity, the nickname follows
+the panel when its connector changes. Without one, Carlos explicitly binds the
+name to the connector, which can also refer to a replacement panel on that port.
+A disconnected or ambiguous binding cannot silently select another screen.
+Current/other remain contextual names. Private sessions keep nickname changes
+in RAM; Guest cannot read or change them. Naming does not change display layout.
+
 ## Hardware readings
 
 Ask "What is my fan speed?", "Check CPU clocks", "Show GPU usage", or

@@ -264,14 +264,30 @@ class DesktopWorldModel:
             )
         return scored[0][1]
 
-    def resolve_output(self, description: str, world: dict[str, Any]) -> dict[str, Any]:
+    def resolve_output(self, description: str, world: dict[str, Any], aliases=None) -> dict[str, Any]:
         outputs = [item for item in world.get("outputs", []) if item.get("enabled", True)]
         if not outputs:
             raise EntityResolutionError("KWin did not report an enabled output")
         query = description.strip().casefold()
+        if aliases:
+            from ..monitor_aliases import AliasResolutionError, resolve_alias
+            try:
+                output = resolve_alias(description, aliases, outputs)
+            except AliasResolutionError as error:
+                raise EntityResolutionError(str(error), error.candidates) from error
+            if output is not None:
+                return output
+        exact = [output for output in outputs if str(output.get("name", "")).casefold() == query]
+        if len(exact) == 1:
+            return exact[0]
         active_name = str(world.get("active_output", ""))
         if query in {"this", "current", "this monitor", "current monitor", "monitor i'm using"}:
-            return next((item for item in outputs if item.get("name") == active_name), outputs[0])
+            matches = [item for item in outputs if item.get("name") == active_name]
+            if len(matches) == 1:
+                return matches[0]
+            if len(outputs) == 1:
+                return outputs[0]
+            raise EntityResolutionError("The current monitor was not reported; choose an exact output", outputs)
         if "other" in query:
             others = [item for item in outputs if item.get("name") != active_name]
             if len(others) == 1:
@@ -290,12 +306,14 @@ class DesktopWorldModel:
                 for item in outputs
                 if not str(item.get("name", "")).casefold().startswith(("edp", "lvds"))
             ]
-        elif "left" in query:
-            return min(outputs, key=lambda item: int(item.get("geometry", {}).get("x", 0)))
-        elif "right" in query:
-            return max(outputs, key=lambda item: int(item.get("geometry", {}).get("x", 0)))
+        elif "left" in query or "right" in query:
+            choose = min if "left" in query else max
+            edge = choose(int(item.get("geometry", {}).get("x", 0)) for item in outputs)
+            matches = [item for item in outputs if int(item.get("geometry", {}).get("x", 0)) == edge]
         elif "main" in query or "primary" in query:
             matches = [item for item in outputs if item.get("primary")]
+            if not matches and len(outputs) == 1:
+                return outputs[0]
         elif "second" in query or re.search(r"\b2\b", query):
             ordered = sorted(
                 outputs,

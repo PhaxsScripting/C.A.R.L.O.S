@@ -213,6 +213,9 @@ class CarlosCore:
         from .tools.preferences import register_preference_tools
 
         register_preference_tools(self.tools)
+        from .tools.monitor_aliases import register_monitor_aliases
+
+        register_monitor_aliases(self.tools)
         from .tools.source import register_source_tools
 
         register_source_tools(self.tools)

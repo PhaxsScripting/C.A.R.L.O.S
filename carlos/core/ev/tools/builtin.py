@@ -1708,7 +1708,9 @@ async def desktop_resolve_output(arguments: dict[str, Any], context: ToolContext
     model = _desktop(context)
     world = await model.snapshot(force=True)
     try:
-        output = model.resolve_output(arguments["description"], world)
+        aliases = await asyncio.to_thread(context.daily.records, "monitor_alias") if context.daily else {}
+        output = (model.resolve_output(arguments["description"], world, aliases=aliases) if aliases
+                  else model.resolve_output(arguments["description"], world))
     except ValueError as error:
         return {
             "resolved": False,

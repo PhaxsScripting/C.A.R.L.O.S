@@ -501,3 +501,17 @@ allowlist. The direct tool and natural time request return a read-only clock
 observation; personal history and memory access remain denied. Mode-transition
 voice callbacks are isolated in this fixture, so it does not test physical
 guest use or audio. The preceding full suite result remains 1,218 tests.
+
+## October 1: monitor nicknames
+
+The full Python suite passed 1,263 tests in 71.653 seconds. The final thirteen
+monitor checks passed in both source trees, including an additional real core
+IPC fixture with simulated displays/windows. Naming, listing, a changed-port
+move and postcondition readback all stayed local. A disconnected panel stopped
+before mutation; Guest denied nickname reads and writes.
+
+The fixture also covers replacement panels, duplicate hardware identities,
+unknown active output and vertically stacked displays with tied horizontal
+edges. Fresh metadata from the actual two-output KDE desktop resolved a saved
+nickname in a disposable database. No host display names or layout changed.
+Actual monitor hotplug and a physical window move are separate acceptance work.
