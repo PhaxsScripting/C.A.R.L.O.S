@@ -352,3 +352,8 @@ core or changing privacy mode clears them. It does not undo arbitrary files or
 destructive actions. Voice setting readback does not prove that capture is available.
 The interface disables managed settings while a change is pending and does not
 replay changes after a disconnect.
+
+
+Window discovery excludes KWin entries retained only for closing animations.
+Exact actions against their old IDs fail before mutation. A new window with the
+same title is a separate target and does not inherit the old identity or undo record.

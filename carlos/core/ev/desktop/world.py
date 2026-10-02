@@ -151,7 +151,7 @@ class DesktopWorldModel:
         return [
             window
             for window in world.get("windows", [])
-            if not window.get("special")
+            if not window.get("deleted") and not window.get("special")
             and (window.get("normal") or window.get("dialog"))
             and int(window.get("geometry", {}).get("width", 0)) > 16
             and int(window.get("geometry", {}).get("height", 0)) > 16

@@ -93,6 +93,20 @@ class DesktopWorldTests(unittest.TestCase):
         with self.assertRaises(EntityResolutionError):
             self.model.resolve_window("window-id:closed-window", self.world)
 
+    def test_closed_animation_never_resolves_as_live_window_or_new_matching_title(self):
+        import copy
+        original = copy.deepcopy(self.world["windows"][0])
+        original["deleted"] = True
+        replacement = dict(copy.deepcopy(original), id="firefox-new", deleted=False)
+        self.world["windows"] = [original, replacement]
+        self.world["active_window_id"] = original["id"]
+        self.assertEqual(self.model.visible_windows(self.world), [replacement])
+        self.assertEqual(self.model.resolve_window("the browser", self.world)["id"], "firefox-new")
+        with self.assertRaises(EntityResolutionError):
+            self.model.resolve_window("window-id:" + original["id"], self.world)
+        with self.assertRaises(EntityResolutionError):
+            self.model.resolve_window("this window", self.world)
+
     def test_resolves_monitor_topology(self) -> None:
         self.assertEqual(self.model.resolve_output("laptop screen", self.world)["name"], "eDP-1")
         self.assertEqual(self.model.resolve_output("other monitor", self.world)["name"], "eDP-1")

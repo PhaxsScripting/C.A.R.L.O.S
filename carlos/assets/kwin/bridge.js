@@ -63,6 +63,7 @@ function serializeWindow(window) {
         output: window.output ? String(window.output.name || "") : "",
         desktops: desktops,
         active: Boolean(window.active),
+        deleted: Boolean(window.deleted),
         minimized: Boolean(window.minimized),
         fullscreen: Boolean(window.fullScreen),
         maximized: isMaximized(window),
@@ -84,7 +85,8 @@ function serializeWindow(window) {
 function findWindow(id) {
     const windows = workspace.stackingOrder;
     for (let i = 0; i < windows.length; ++i) {
-        if (String(windows[i].internalId) === String(id)) return windows[i];
+        if (windows[i] && !windows[i].deleted && String(windows[i].internalId) === String(id))
+            return windows[i];
     }
     throw new Error("Window no longer exists: " + id);
 }
@@ -110,7 +112,9 @@ function snapshot() {
     const outputs = [];
     const desktops = [];
     const stack = workspace.stackingOrder;
-    for (let i = 0; i < stack.length; ++i) windows.push(serializeWindow(stack[i]));
+    for (let i = 0; i < stack.length; ++i) {
+        if (stack[i] && !stack[i].deleted) windows.push(serializeWindow(stack[i]));
+    }
     for (let j = 0; j < workspace.screens.length; ++j) outputs.push(serializeOutput(workspace.screens[j]));
     for (let k = 0; k < workspace.desktops.length; ++k) {
         desktops.push({id: String(workspace.desktops[k].id), name: String(workspace.desktops[k].name || "")});
@@ -119,7 +123,7 @@ function snapshot() {
         windows: windows,
         outputs: outputs,
         desktops: desktops,
-        active_window_id: workspace.activeWindow ? String(workspace.activeWindow.internalId) : "",
+        active_window_id: workspace.activeWindow && !workspace.activeWindow.deleted ? String(workspace.activeWindow.internalId) : "",
         active_output: workspace.activeScreen ? String(workspace.activeScreen.name || "") : "",
         current_desktop: workspace.currentDesktop ? String(workspace.currentDesktop.id) : "",
         cursor: {x: Math.round(workspace.cursorPos.x), y: Math.round(workspace.cursorPos.y)}

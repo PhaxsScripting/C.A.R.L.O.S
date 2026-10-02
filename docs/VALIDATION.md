@@ -715,3 +715,11 @@ October 2 managed settings reversal:
 - Cancellation, failed voice initialization, external config edits, wrong-key guards, expiry, bounded history, private-session refusal and hard-mute transitions are covered. Recovery restores only the affected field and does not overwrite unrelated edits.
 - All five native Qt test groups passed, with the changed interface group rerun after correcting its repeater lookup. Native client tests cover duplicate requests, matching response/error cleanup, disconnect cleanup and no replay. The interface checks undo availability and disabled controls during pending requests or disconnection.
 - Three installed Core files and the control-center executable were backed up and updated. Native imports, all three settings contracts, read-only settings inspection, empty undo refusal, health and focus preservation passed. Protected Plasma configuration hashes were unchanged. Real microphone recovery and other-desktop acceptance remain separate.
+
+
+October 2 closed-window handling:
+
+- 1,380 Python tests passed. Focused desktop-world and undo groups passed in both source trees. Tests cover a closing window beside a new window with the same title, exact-ID refusal and stale active-window refusal.
+- The real Qt JavaScript engine verifies that snapshot skips deleted animation entries without reading their obsolete properties and that all ten window mutation routes reject their IDs. The native Qt bridge group passed.
+- An owned Qt/Wayland window was observed, closed through the installed tool and independently reaped. Its old ID then failed activation without changing focus; original focus was restored. No user window was closed.
+- The installed world model and KWin bridge were backed up and updated with healthy Core restart, current bridge readback and unchanged protected Plasma configuration. This addresses deleted animation targets; the previously observed GTK fullscreen mismatch remains unresolved.

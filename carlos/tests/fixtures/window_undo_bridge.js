@@ -39,3 +39,20 @@ for (const ids of [[], ["missing"], ["work", "missing"], ["work", "work"], "work
     check(rejected && target.desktops.length === 1 && target.desktops[0] === first,
           "Invalid assignment partially moved a window");
 }
+
+const ghost = {internalId: "closed", deleted: true};
+Object.defineProperty(ghost, "desktops", {get: function() { throw Error("Closed properties were read"); }});
+workspace.stackingOrder = [null, ghost, target];
+workspace.screens = [];
+workspace.activeWindow = ghost;
+workspace.cursorPos = {x: 0, y: 0};
+const observed = snapshot();
+check(observed.windows.length === 1 && observed.windows[0].id === "owned",
+      "Closing animation was exposed as a live window");
+check(observed.active_window_id === "", "Deleted window was exposed as active");
+for (const action of ["activate", "close", "minimize", "maximize", "restore", "fullscreen", "layout", "move_resize", "move_to_output", "move_to_desktop"]) {
+    let rejected = false;
+    try { execute({action: action, arguments: {window_id: "closed"}}); }
+    catch (error) { rejected = String(error).indexOf("no longer exists") !== -1; }
+    check(rejected, "Closed ID reached mutation: " + action);
+}

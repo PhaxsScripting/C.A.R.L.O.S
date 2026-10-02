@@ -31,6 +31,33 @@ var command={action:'move_to_output',arguments:{window_id:'owned',output:'HDMI-A
         check("workspace.screens.pop();panel.name='DP-2';var rejected=false;try{execute(command);}catch(error){rejected=true;}if(!rejected||moves!==1)throw Error('stale connector accepted');command.arguments.output='DP-2';execute(command);if(moves!==2)throw Error('fresh connector rejected');");
         check("delete command.arguments.expected_output_identity;panel.serialNumber='';execute(command);if(moves!==3)throw Error('explicit connector move broken');");
     }
+    void closedAnimationCannotBeObservedOrMutated() {
+        QFile source(CARLOS_WINDOW_BRIDGE);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        QJSEngine engine;
+        QVERIFY(!engine.evaluate(R"JS(
+function callDBus() {}
+var ghost={internalId:'closed',deleted:true};
+Object.defineProperty(ghost,'desktops',{get:function(){throw Error('deleted properties read');}});
+var live={internalId:'live',pid:123,desktops:[],frameGeometry:{x:0,y:0,width:800,height:600},
+ clientGeometry:{x:0,y:0,width:800,height:600},normalWindow:true,maximizeMode:0};
+var workspace={stackingOrder:[null,ghost,live],screens:[],desktops:[],activeWindow:ghost,cursorPos:{x:0,y:0}};
+)JS").isError());
+        QVERIFY(!engine.evaluate(QString::fromUtf8(source.readAll())).isError());
+        const auto result = engine.evaluate(R"JS(
+var observed=snapshot();
+if(observed.windows.length!==1||observed.windows[0].id!=='live'||observed.active_window_id!=='')
+ throw Error('closed animation is live');
+for(var action of ['activate','close','minimize','maximize','restore','fullscreen','layout','move_resize','move_to_output','move_to_desktop']) {
+ var rejected=false;
+ try {execute({action:action,arguments:{window_id:'closed'}});}
+ catch(error) {rejected=String(error).indexOf('no longer exists')!==-1;}
+ if(!rejected) throw Error('closed ID reached '+action);
+}
+if(findWindow('live')!==live) throw Error('live window lost');
+)JS");
+        QVERIFY2(!result.isError(), qPrintable(result.toString()));
+    }
     void nativeStateAndRestore() {
         QFile source(CARLOS_WINDOW_BRIDGE);
         QVERIFY(source.open(QIODevice::ReadOnly));
