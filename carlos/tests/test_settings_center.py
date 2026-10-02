@@ -42,6 +42,14 @@ class SettingsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('output_device', saved['voice']['tts'])
         self.core.voice.set_wake_paused.assert_not_awaited()
 
+    async def test_security_monitor_can_be_disabled_without_voice_or_approval_changes(self):
+        result = await self.settings.update({'key': 'security_monitoring', 'value': False}, None)
+        self.assertTrue(result['verified'])
+        saved = json.loads(self.core.paths.config_file.read_text())
+        self.assertFalse(saved['security']['monitoring']['enabled'])
+        self.assertNotIn('approval_mode', saved['security'])
+        self.core.voice.set_wake_paused.assert_not_awaited()
+
     async def test_wake_enable_updates_desired_and_persists_without_unrelated_changes(self):
         result = await self.settings.update({"key": "wake_enabled", "value": True}, None)
         self.assertTrue(result["verified"])

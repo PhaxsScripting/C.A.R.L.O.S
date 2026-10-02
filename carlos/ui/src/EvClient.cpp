@@ -497,7 +497,13 @@ void EvClient::processResponse(const QJsonObject &message) {
         m_plans = jsonArrayToList(payload.value(QStringLiteral("recent")));
         emit phase3Changed();
     } else if (requestType == QStringLiteral("security.snapshot")) {
-        m_security = payload.toVariantMap();
+        const auto mode = m_voice.value(QStringLiteral("privacy_profile")).toString();
+        if (mode == QStringLiteral("PRIVATE SESSION") || mode == QStringLiteral("GUEST")) {
+            m_security.clear();
+            m_security.insert(QStringLiteral("monitor"), QVariantMap{{QStringLiteral("state"), QStringLiteral("PAUSED")}});
+        } else {
+            m_security = payload.toVariantMap();
+        }
         emit phase3Changed();
     } else if (requestType == QStringLiteral("latency.report")) {
         m_latency = payload.toVariantMap();
@@ -629,6 +635,7 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
         m_activePlan.clear();
         m_confirmation.clear();
         m_cognition.clear();
+        m_security.clear();
         m_activityHistory.clear();
         m_projectMemories.clear();
         m_projectMemoryRequest.clear();
@@ -727,6 +734,21 @@ void EvClient::processEvent(const QJsonObject &event, bool historical) {
     } else if (type == QStringLiteral("ai.request_complete")) {
         m_cognition = payload.toVariantMap();
         emit cognitionChanged();
+    } else if (type == QStringLiteral("security.monitor_status") &&
+               source == QStringLiteral("security_monitor")) {
+        if (!historical) {
+            const auto mode = m_voice.value(QStringLiteral("privacy_profile")).toString();
+            if (mode != QStringLiteral("PRIVATE SESSION") && mode != QStringLiteral("GUEST")) {
+                m_security.insert(QStringLiteral("monitor"), payload.toVariantMap());
+                emit phase3Changed();
+            }
+        }
+    } else if ((type == QStringLiteral("security.alert") ||
+                type == QStringLiteral("security.observed")) &&
+               source == QStringLiteral("security_monitor")) {
+        appendTimeline(type == QStringLiteral("security.alert") ? QStringLiteral("WARNING") : QStringLiteral("INFO"),
+                       QStringLiteral("SECURITY"), payload.value(QStringLiteral("message")).toString(),
+                       valueString(event, "timestamp"));
     } else if (type == QStringLiteral("carlos.settings_changed")) {
         if (!historical)
             refreshDaily();

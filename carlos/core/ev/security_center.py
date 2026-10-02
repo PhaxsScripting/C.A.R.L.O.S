@@ -74,6 +74,7 @@ class SecurityCenter:
         self._updates_cache: dict[str, Any] | None = None
         self._updates_checked = 0.0
         self._catalog = catalog
+        self.monitor = None
 
     def firewall(self) -> dict[str, Any]:
         from .platform import IS_FREEBSD
@@ -380,7 +381,7 @@ class SecurityCenter:
                 "confidence": "HIGH",
                 "evidence": ["glsa-check executable discovery"],
                 "limitations": [
-                    "The potentially slow GLSA scan runs only when explicitly requested"
+                    "The GLSA scan runs through the configured monitor or a direct request"
                 ],
             }
         result = _run([glsa, "-n", "-l", "affected"], timeout=20, maximum=100_000)
@@ -574,6 +575,7 @@ class SecurityCenter:
             "startup": startup,
             "login_activity": logins,
             "updates": updates,
+            "monitor": self.monitor() if self.monitor is not None else {"state": "UNAVAILABLE"},
             "ev": ev,
             "host": socket.gethostname(),
             "local_only": True,

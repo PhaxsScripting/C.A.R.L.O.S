@@ -31,6 +31,17 @@ class CarlosTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["name"], "carlos.executing")
         self.assertEqual(event["protocol_version"], 1)
 
+    async def test_security_monitor_is_an_observation_and_guest_cannot_read_it(self):
+        result = await self.core.request_tool({"name": "security.monitor", "arguments": {}}, "monitor")
+        self.assertEqual(result["status"], "completed")
+        self.assertFalse(result["execution"]["changed_state"])
+        self.assertEqual(result["result"]["state"], "STARTING")
+        self.core._stop_all_actions = AsyncMock(return_value={})
+        self.core.voice.set_privacy_mode = AsyncMock(return_value={})
+        await self.core.privacy.set_mode("GUEST")
+        result = await self.core.request_tool({"name": "security.monitor", "arguments": {}}, "guest-monitor")
+        self.assertEqual(result["status"], "denied")
+
     async def test_destructive_denial_preserves_data_and_token_cannot_replay(self):
         record = self.core.memory.remember("test record")
         r = await self.core.request_tool(

@@ -783,6 +783,7 @@ ApplicationWindow {
                             SectionPanel {
                                 Layout.preferredWidth: 430; Layout.fillHeight: true
                                 ColumnLayout { anchors.fill: parent; anchors.margins: 13
+                                    SecurityMonitorPanel { Layout.fillWidth: true; monitor: get(evClient.security, "monitor", {}) }
                                     Text { text: "Carlos SELF-DIAGNOSTICS"; color: appWindow.cyan; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1.2 }
                                     ListView {
                                         ScrollBar.vertical: ListScrollBar {}

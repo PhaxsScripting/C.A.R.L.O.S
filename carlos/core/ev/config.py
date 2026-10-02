@@ -130,6 +130,11 @@ DEFAULT_CONFIG: dict[str, Any] = {
         },
     },
     "security": {
+        "monitoring": {
+            "enabled": True,
+            "critical_services": ["dbus", "NetworkManager", "networking", "tailscale", "tailscaled",
+                                  "display-manager", "sddm", "gdm", "smartd", "chronyd"],
+        },
         "approval_mode": "codex_only",
         "confirmation_timeout_seconds": 90,
         "allowed_roots": [

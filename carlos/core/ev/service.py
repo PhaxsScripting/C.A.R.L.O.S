@@ -197,6 +197,16 @@ class CarlosCore:
 
         self.hardware_metrics = HardwareMetrics()
         register_hardware_tools(self.tools, self.hardware_metrics)
+        from .security_monitor import SecurityMonitor
+        from .tools.security_monitor import register_security_monitor
+
+        self.security_monitor = SecurityMonitor(
+            self.security_center, self.bus, self.config.get("security", {}).get("monitoring", {}),
+            self.paths.state_dir / "security-startup-baseline.json",
+            lambda: (self.privacy.mode, self.privacy.changing, getattr(self, "_action_generation", 0)),
+        )
+        self.security_center.monitor = self.security_monitor.snapshot
+        register_security_monitor(self.tools, self.security_monitor)
         from .tools.projects import register_project_tools
 
         register_project_tools(self.tools, self.paths.state_dir / "project-runs")
@@ -395,6 +405,9 @@ class CarlosCore:
             title = "Carlos error"
             body = str(event.payload.get("message", "A component reported an error."))
             urgency = "critical"
+        elif event.type in {"security.alert", "security.observed"} and event.source == "security_monitor":
+            title = "Carlos security observation"
+            body = str(event.payload.get("message", "Local security evidence changed."))
         elif event.type == "voice.full_test_complete":
             title = "Carlos voice test complete"
             body = "The real microphone-to-speaker pipeline completed successfully."
@@ -2534,6 +2547,9 @@ class CarlosCore:
         warmup_task = asyncio.create_task(self._prewarm_response_stack())
         presence_task = asyncio.create_task(self.presence.run())
         health_task = asyncio.create_task(self.health_supervisor.run())
+        security_task = asyncio.create_task(self.security_monitor.run(self.stop_event))
+        self._background_tasks.add(security_task)
+        security_task.add_done_callback(self._background_tasks.discard)
         self._background_tasks.add(health_task)
         health_task.add_done_callback(self._background_tasks.discard)
         self._background_tasks.add(presence_task)

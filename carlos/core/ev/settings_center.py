@@ -12,6 +12,7 @@ from .tools.base import ToolSpec, ValidationError
 from .tools.builtin import object_schema
 
 FIELDS = {
+    'security_monitoring': ('security.monitoring', 'enabled', True, 'Security', 'Monitor local security evidence'),
     'activity_timeline': ('memory', 'activity_timeline', False, 'Privacy', 'Save local activity history (latest 2,000 events)'),
     'media_ducking': ('voice.tts', 'duck_media', False, 'Voice', 'Lower media volume while speaking'),
     "spoken_replies": ("assistant", "speak_responses", True, "Voice", "Speak replies"),
@@ -133,6 +134,8 @@ class SettingsCenter:
             self._save(data)
             try:
                 section(self.core.config, path)[name] = value
+                if key == 'security_monitoring' and hasattr(self.core, 'security_monitor'):
+                    self.core.bus.publish('security.monitor_status', 'security_monitor', self.core.security_monitor.snapshot())
                 if key == "operating_mode":
                     apply_mode(self.core)
                 if key == "wake_enabled":

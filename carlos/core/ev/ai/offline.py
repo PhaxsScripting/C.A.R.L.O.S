@@ -622,6 +622,10 @@ class OfflineProvider(Provider):
                 "Identify visible owning processes",
             ]
             calls = [call("security.network_exposure")]
+        elif re.search(r"\b(?:security monitor|failed logins?|smart warnings?|tailscale devices?)\b", lowered):
+            interpreted = "Read the local security monitor's observed evidence and missing sources."
+            plan = ["Read monitor status without triggering repairs or changing permissions"]
+            calls = [call("security.monitor")]
         elif re.search(r"\bssh(?:d)?\b", lowered):
             interpreted = "Inspect the OpenRC SSH daemon without changing it."
             plan = ["Read sshd service state", "Inspect the readable configured port"]
@@ -1030,6 +1034,12 @@ class OfflineProvider(Provider):
             exposed = int(result.get("network_accessible_count", 0))
             local = int(result.get("localhost_only_count", 0))
             text = f"I found {total} listening sockets: {local} localhost-only and {exposed} bound beyond localhost."
+        elif name == "security.monitor":
+            sources = result.get("sources", {})
+            unavailable = sum(row.get("status") != "OK" for row in sources.values())
+            text = (f"Security monitoring is {str(result.get('state', 'unknown')).lower()}. "
+                    f"{unavailable} of {len(sources)} sources lack complete readable evidence. "
+                    "Details are in Security; missing evidence does not mean a clean system.")
         elif name == "security.ssh":
             text = f"SSH is {'running' if result.get('running') else 'not running'}."
         elif name == "security.startup":

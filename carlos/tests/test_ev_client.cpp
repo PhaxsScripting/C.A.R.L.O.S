@@ -31,6 +31,26 @@ class EvClientTests : public QObject {
     }
 
   private slots:
+    void securityMonitorUsesOnlyLiveStatusAndClearsOnPrivacyChange() {
+        const QJsonObject observation{{"type", "security.monitor_status"},
+            {"source", "security_monitor"}, {"payload", QJsonObject{{"state", "MONITORING"},
+                {"sources", QJsonObject{{"listeners", QJsonObject{{"status", "OK"}, {"count", 3}}}}}}}};
+        send({{"type", "event"}, {"payload", observation}});
+        QTRY_COMPARE(client->security().value("monitor").toMap().value("state").toString(), QString("MONITORING"));
+        sendEvent("carlos.privacy_changed", {{"mode", "PRIVATE SESSION"}});
+        QTRY_VERIFY(client->security().isEmpty());
+        send({{"type", "event"}, {"payload", observation}});
+        QTest::qWait(30);
+        QVERIFY(client->security().isEmpty());
+        sendEvent("carlos.privacy_changed", {{"mode", "NORMAL"}});
+        send({{"type", "response"}, {"id", requestIds.value("events.history")},
+            {"payload", QJsonObject{{"events", QJsonArray{observation}}}}});
+        QTest::qWait(30);
+        QVERIFY(!client->security().contains("monitor"));
+        send({{"type", "event"}, {"payload", observation}});
+        QTRY_COMPARE(client->security().value("monitor").toMap().value("state").toString(), QString("MONITORING"));
+    }
+
     void offlineCommandIsNotReportedAsSent()
     {
         client->disconnectFromCore();

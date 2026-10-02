@@ -22,6 +22,7 @@ def priority_for(kind, source, payload):
         "voice.audio_level",
         "tts.audio_level",
         "agent.insights_changed",
+        "security.monitor_status",
         "download.completed",
         "coding.completed",
     }:

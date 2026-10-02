@@ -165,3 +165,32 @@ expire after fifteen minutes. A clear GLSA result covers that local advisory
 scan, not every vulnerability. Permission audits inspect the path itself and
 report missing, unreadable or symlinked required paths as incomplete. Their
 confirmation list comes from the running tool catalog.
+
+The Security page now shows the background monitor's read time and source
+coverage. `evctl tool security.monitor` reads that same snapshot. Settings →
+Security → Monitor local security evidence can disable it without changing
+permissions, voice or desktop behavior. The fast probes run once a minute;
+SMART reads run every fifteen minutes and local GLSA scans once an hour.
+
+It watches network-bound listeners, readable failed-login records, visible
+Tailscale peers, OpenRC crashed services or systemd failed units, firewall
+evidence, startup fingerprints, SMART health and local advisories. Ordinary
+listener/device/startup changes are observations, not intrusion claims. Initial
+listener/device/login readings establish a baseline. Tailscale visibility does
+not prove when a device joined an account. Restarted processes and device
+online/offline changes do not create new identities.
+
+Startup comparison survives core restarts using a private file containing only
+path/content fingerprints. It covers XDG autostart, user units and drop-ins,
+shell startup and Plasma environment scripts; symlink destinations are not
+audited. Private Session, Guest and privacy transitions pause collection and
+baseline writes. Probes finishing after a privacy change are discarded.
+
+The monitor never requests admin access, changes firewall rules, restarts system
+services, installs updates or runs disk tests. An active firewall service does
+not confirm filtering. Inaccessible login records, sleeping/inaccessible disks
+and failed advisory scans stay unknown. SMART commands use the device type and
+low-power check; they skip supported sleeping ATA disks instead of starting a
+test. Advisory coverage currently uses Gentoo's local GLSA data. Other Linux
+advisory sources still need adapters. This is bounded best-effort monitoring,
+not a replacement for a full security audit.
