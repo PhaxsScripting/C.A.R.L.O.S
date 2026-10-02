@@ -650,3 +650,24 @@ Nested NaN/infinities fail JSON output validation without retry. Contract gaps
 remain explicit; this does not claim the older tools' offline/undo semantics
 have all been independently accepted. Installed files match and import with
 host Python; Core remains stopped.
+
+## October 2: live engineering status questions
+
+1,325 Python tests passed in 86.233 seconds. Eight new status checks passed in
+both trees, plus the four engineering tool-lifecycle checks in the development
+tree. An actual isolated same-socket question returns current simulated job
+metadata while its owned action stays blocked; no model call, action interruption
+or implicit task receipt occurs. Other mutations stay blocked if the display
+state is idle while an action remains owned.
+
+The existing actual isolated Git/validator fixture now also observes the
+VALIDATING phase from its tracked running worker before cancellation. Snapshot
+mutations do not corrupt later status, phase/elapsed rows refresh under cached
+CLI readiness, and a stale running receipt cannot imply live execution.
+A blocked CLI status probe leaves health responsive; a privacy transition
+discards its result. Exact phrase/fast-command/IPC routing and transcribed
+interaction-state completion passed. Physical spoken recognition remains
+unverified. No native UI appearance changes were made in this batch.
+
+Six installed source files match and import with host Python. Core remains
+stopped, preserving the current Minecraft session's background state.

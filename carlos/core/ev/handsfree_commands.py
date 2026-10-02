@@ -15,6 +15,11 @@ def handsfree_action(clean):
     def match(pattern):
         return re.fullmatch(pattern, text, re.I)
 
+    from .engineering_queries import is_engineering_status_query
+
+    if is_engineering_status_query(text):
+        return Action('development.coding_agent_status', {})
+
     if match(r"(?:(?:check|show|measure)(?: me)? carlos(?:'s)? (?:resources|resource usage)|how much (?:RAM|memory) (?:is carlos using|does carlos use))[.!?]*"):
         return Action('system.carlos_resources', {})
 

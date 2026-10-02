@@ -1332,23 +1332,32 @@ class CarlosCore:
             CoreState.WAITING_FOR_CONFIRMATION,
         }
         emergency_disconnect = spec.name == "desktop.input.disconnect"
+        engineering_observation = spec.read_only and spec.name in {
+            "development.coding_agent_status", "development.coding_agent_result"
+        }
+        interactive = getattr(self, "_interactive_task", None)
+        action_owned = (interactive is not None and not interactive.done()
+                        and interactive is not asyncio.current_task())
         if (
             self.state.current not in runnable_states
             and not (
                 (_trusted_plan or _planner_owned) and self.state.current == CoreState.USING_TOOL
             )
             and not (emergency_disconnect and self.state.current == CoreState.USING_TOOL)
-        ):
+            and not engineering_observation
+        ) or (action_owned and self.state.current == CoreState.DORMANT
+              and not (_trusted_plan or _planner_owned or engineering_observation or emergency_disconnect)):
             self.bus.publish(
                 "tool.deferred",
                 "tools",
-                {"tool": spec.name, "reason": f"core_{self.state.current.value.casefold()}"},
+                {"tool": spec.name, "reason": "interactive_action_owned" if action_owned else f"core_{self.state.current.value.casefold()}"},
                 correlation_id,
             )
             return {
                 "status": "busy",
                 "tool": spec.name,
-                "message": f"Carlos is currently {self.state.current.value.casefold()}; try again when it is ready.",
+                "message": ("Carlos is finishing another action; try again when it is ready."
+                            if action_owned else f"Carlos is currently {self.state.current.value.casefold()}; try again when it is ready."),
             }
         self.bus.publish(
             "tool.requested",
@@ -1400,6 +1409,7 @@ class CarlosCore:
                 # between steps can steal focus right before typing.
                 preserve_state=_trusted_plan
                 or _planner_owned
+                or engineering_observation
                 or (emergency_disconnect and self.state.current == CoreState.USING_TOOL),
             )
 
@@ -1596,9 +1606,30 @@ class CarlosCore:
         ):
             await self.voice.stop_speaking("new_interactive_request", correlation_id)
 
+    async def _engineering_status_reply(self, correlation_id: str) -> dict[str, Any]:
+        from .engineering_queries import engineering_status_message
+
+        transcribed = self.state.current == CoreState.TRANSCRIBING
+        if transcribed:
+            self.state.transition(CoreState.THINKING, "Reading engineering status", correlation_id)
+        try:
+            outcome = await self.request_tool({"name": "development.coding_agent_status", "arguments": {}}, correlation_id)
+        finally:
+            if transcribed and self.state.current == CoreState.THINKING:
+                self.state.transition(CoreState.DORMANT, "Engineering status ready", correlation_id)
+        if outcome.get("status") == "completed":
+            outcome["response"] = engineering_status_message(outcome.get("result", {}))
+        else:
+            outcome["response"] = outcome.get("error") or "I couldn't read engineering status."
+        return {**outcome, "correlation_id": correlation_id}
+
     async def _submit_action_clauses(
         self, text: str, correlation_id: str | None = None, *, previous: dict | None = None
     ) -> dict[str, Any]:
+        from .engineering_queries import is_engineering_status_query
+
+        if is_engineering_status_query(text):
+            return await self._engineering_status_reply(correlation_id or uuid.uuid4().hex)
         if self._interactive_task and not self._interactive_task.done():
             return {"status": "busy", "message": "I'm finishing another action."}
         correlation_id = correlation_id or uuid.uuid4().hex
@@ -1630,7 +1661,7 @@ class CarlosCore:
         finally:
             if self._interactive_task is task:
                 self._interactive_task = None
-                self._interactive_correlation = None
+            self._interactive_correlation = None
             if self._reasoning_interrupt is task:
                 self._reasoning_interrupt = None
 
@@ -2426,12 +2457,19 @@ class CarlosCore:
             }
         if request_type == "command.submit":
             text = str(payload.get("text", ""))
+            from .engineering_queries import is_engineering_status_query
+
             if self._is_stop_all(text):
                 return await self._stop_all_actions(str(request.get("id") or uuid.uuid4().hex))
             if is_conversation_stop(text):
                 return await self._stop_all_actions(
                     str(request.get("id") or uuid.uuid4().hex), reason="user_stop_phrase"
                 )
+            if is_engineering_status_query(text):
+                result = await self._engineering_status_reply(str(request.get("id") or uuid.uuid4().hex))
+                if payload.get("speak", True) is not False:
+                    self._schedule_response_speech(result)
+                return result
             if self.planner.active is not None and re.search(
                 r"\b(?:cancel|never mind|stop that|wait)\b", text, re.IGNORECASE
             ):
@@ -2513,7 +2551,14 @@ class CarlosCore:
         if request_type == "vision.status":
             return self.vision.status()
         if request_type == "coding.status":
-            return self.coding_agent.status()
+            mode = self.privacy.mode
+            error = self.privacy.tool_error("development.coding_agent_status")
+            if error:
+                return {"status": "denied", "error": error}
+            result = await asyncio.to_thread(self.coding_agent.status)
+            if self.privacy.changing or self.privacy.mode != mode:
+                return {"status": "denied", "error": "Privacy settings changed; retry the observation"}
+            return result
         if request_type == "coding.propose":
             return await asyncio.to_thread(
                 self.coding_agent.propose,
@@ -2522,7 +2567,14 @@ class CarlosCore:
                 str(payload.get("diagnostics", "")),
             )
         if request_type == "coding.result":
-            return self.coding_agent.result(str(payload.get("proposal_id", "")))
+            mode = self.privacy.mode
+            error = self.privacy.tool_error("development.coding_agent_result")
+            if error:
+                return {"status": "denied", "error": error}
+            result = await asyncio.to_thread(self.coding_agent.result, str(payload.get("proposal_id", "")))
+            if self.privacy.changing or self.privacy.mode != mode:
+                return {"status": "denied", "error": "Privacy settings changed; retry the observation"}
+            return result
         if request_type == "tool.call":
             await self._prepare_interactive_request(str(request.get("id") or uuid.uuid4().hex))
             return await self.request_tool(payload, request.get("id"))

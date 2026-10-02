@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import time
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
@@ -34,6 +35,7 @@ class CodingAgentGateway:
         self.executable = str(Path(executable).expanduser()) if executable else None
         self._proposals: dict[str, dict[str, Any]] = {}
         self._running: dict[str, threading.Event] = {}
+        self._running_started: dict[str, float] = {}
         self._running_lock = threading.RLock()
         self._status_cache: tuple[float, dict[str, Any]] | None = None
         if self.state_root is not None:
@@ -51,7 +53,9 @@ class CodingAgentGateway:
     def status(self, refresh: bool = False) -> dict[str, Any]:
         now = time.monotonic()
         if not refresh and self._status_cache is not None and now - self._status_cache[0] < 10:
-            return dict(self._status_cache[1])
+            result = deepcopy(self._status_cache[1])
+            result.update(self._live_task_status())
+            return result
         executable = self.executable or self._codex_executable()
         if executable and not (Path(executable).is_file() and os.access(executable, os.X_OK)):
             executable = None
@@ -92,15 +96,26 @@ class CodingAgentGateway:
             "may_change_permissions": False,
             "network_exposure": "Codex service connection only; model-generated network access not granted",
             "reason": reason,
-            "tasks": [
-                self._task_summary(item)
-                for item in sorted(
-                    self._proposals.values(), key=lambda row: row.get("created_epoch", 0)
-                )[-12:]
-            ],
         }
         self._status_cache = (now, result)
-        return dict(result)
+        snapshot = deepcopy(result)
+        snapshot.update(self._live_task_status())
+        return snapshot
+
+    def _live_task_status(self):
+        with self._running_lock:
+            rows = []
+            for proposal in tuple(self._proposals.values()):
+                row = self._task_summary(proposal)
+                running = proposal.get("proposal_id") in self._running
+                row["worker_active"] = running
+                started = self._running_started.get(proposal.get("proposal_id"))
+                row["elapsed_ms"] = round(max(0, time.monotonic() - started) * 1000, 3) if running and started is not None else None
+                rows.append(row)
+            rows.sort(key=lambda row: row.get("created_epoch") or 0)
+            active = [row for row in rows if row["worker_active"]]
+            return {"tasks": rows[-12:], "active_tasks": active[-12:],
+                    "active_job_count": len(self._running), "tasks_observed_epoch": time.time()}
 
     def _project(self, value: str) -> Path:
         path = Path(value).expanduser().resolve()
@@ -198,6 +213,7 @@ class CodingAgentGateway:
             if proposal_id in self._running:
                 raise ValueError("Coding task is already running")
             self._running[proposal_id] = cancel_event if cancel_event is not None else threading.Event()
+            self._running_started[proposal_id] = time.monotonic()
         try:
             return self._execute_inner(proposal_id, timeout_seconds)
         except Exception as error:
@@ -215,6 +231,7 @@ class CodingAgentGateway:
         finally:
             with self._running_lock:
                 self._running.pop(proposal_id, None)
+                self._running_started.pop(proposal_id, None)
 
     def _execute_inner(self, proposal_id: str, timeout_seconds: int = 1200) -> dict[str, Any]:
         proposal = self._proposal(proposal_id)
@@ -272,6 +289,7 @@ class CodingAgentGateway:
                 "branch": branch,
                 "worktree": str(worktree),
                 "started_epoch": time.time(),
+                "phase": "STARTING_CODEX",
             }
         )
         self._save(proposal)
@@ -318,6 +336,7 @@ class CodingAgentGateway:
             env=self._clean_environment(),
             start_new_session=True,
         )
+        self._set_phase(proposal, "CODEX")
         stdout, stderr, stopped = self._collect_agent(
             process, proposal_id, max(60, min(int(timeout_seconds), 1800))
         )
@@ -360,7 +379,9 @@ class CodingAgentGateway:
             self._save(proposal)
             self._emit("coding.cancelled", self._public(proposal), proposal_id)
             return self._public(proposal)
+        self._set_phase(proposal, "REVIEWING_CHANGES")
         assessment = self._assess_changes(worktree, task_dir)
+        self._set_phase(proposal, "VALIDATING")
         validations = self._validate(worktree, proposal_id=proposal_id)
         proposal["change_review"] = assessment
         proposal["tests"] = validations
@@ -375,6 +396,7 @@ class CodingAgentGateway:
                 {"status": "VALIDATION_FAILED", "failure": "One or more fixed validations failed"}
             )
         else:
+            self._set_phase(proposal, "REVIEW_COMMIT")
             committed = self._commit_result(worktree, proposal_id)
             if committed["returncode"] == 0:
                 commit_id = self._git(worktree, "rev-parse", "HEAD", timeout=10)["stdout"].strip()
@@ -401,6 +423,11 @@ class CodingAgentGateway:
         self._emit("coding.cancelled" if proposal["status"] == "CANCELLED" else "coding.completed",
                    self._public(proposal), proposal_id)
         return self._public(proposal)
+
+    def _set_phase(self, proposal, phase):
+        proposal["phase"] = phase
+        self._emit("coding.phase_changed", {"proposal_id": proposal["proposal_id"], "phase": phase},
+                   proposal["proposal_id"])
 
     def _collect_agent(self, process, proposal_id, timeout, *, label="Codex", parse_progress=True):
         buffers = {"stdout": bytearray(), "stderr": bytearray()}
@@ -746,6 +773,8 @@ class CodingAgentGateway:
             "status": proposal.get("status", "UNKNOWN"),
             "created_epoch": proposal.get("created_epoch"),
             "duration_ms": proposal.get("duration_ms"),
+            "phase": proposal.get("phase", ""),
+            "started_epoch": proposal.get("started_epoch"),
             "commit_id": proposal.get("commit_id", ""),
             "requires_security_review": bool(
                 proposal.get("change_review", {}).get("requires_security_review", False)

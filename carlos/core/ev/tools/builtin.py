@@ -3517,7 +3517,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             ),
             coding_agent_execute,
             confirmation_reason="Codex will be allowed to edit and run project code in an isolated Git worktree. The live checkout will not be changed or deployed.",
-            timeout_seconds=1810,
+            timeout_seconds=3600,
             verification="Clean checkpoint, isolated worktree, fixed tests, changed-file and risk manifests, review commit",
             side_effects=(
                 "creates a private Git worktree and branch",

@@ -23,6 +23,11 @@ class CodingToolLifecycleTests(unittest.IsolatedAsyncioTestCase):
         register_builtin_tools(registry)
         return registry
 
+    def test_default_tool_budget_includes_fixed_validation_after_agent_time(self):
+        spec = self.registry().get('development.coding_agent_execute')
+        self.assertEqual(spec.timeout_seconds, 3600)
+        self.assertGreater(spec.timeout_seconds, 1800 + 2 * (120 + 600))
+
     def sleeping_cli(self):
         self.ready = self.base / 'codex.pid'
         self.fake.write_text('#!/usr/bin/python3\nimport sys,time,os\nfrom pathlib import Path\n'

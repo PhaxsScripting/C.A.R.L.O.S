@@ -80,6 +80,10 @@ class CodingCancellationTests(unittest.TestCase):
                 try:
                     self.wait_for(ready)
                     pid = int(ready.read_text())
+                    observed = self.gateway.status()
+                    self.assertEqual(observed['active_job_count'], 1)
+                    self.assertEqual(observed['active_tasks'][0]['phase'], 'VALIDATING')
+                    self.assertTrue(observed['active_tasks'][0]['worker_active'])
                     started = time.monotonic()
                     self.assertTrue(self.gateway.cancel(proposal['proposal_id'])['cancel_requested'])
                     result = task.result(timeout=5)

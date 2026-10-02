@@ -292,3 +292,20 @@ Registry declarations require object schemas, boolean action flags and a finite
 positive timeout of at most one hour. Plugin batches pass the same checks before
 any tool is registered. Catalogue dictionaries cannot alter execution schemas,
 and nonfinite JSON results are rejected instead of reaching clients as success.
+
+## Engineering status while work continues
+
+Ask "What's Codex doing?", "Check engineering status" or "Is Codex still running?"
+for a short local status reply. These exact questions can pass a busy connection
+and do not interrupt its action, invoke a model or create an implicit task.
+Only engineering status/result observations bypass that busy tool gate.
+
+Job phases and monotonic elapsed time are read fresh independently of cached
+CLI readiness. A saved RUNNING receipt is not a tracked live worker. Cancelled
+workers finishing cleanup are reported as cleanup. Status results cannot mutate
+the readiness cache. The observations obey the existing local/private/guest
+engineering restrictions and discard results crossing a privacy transition.
+
+The coding-tool outer deadline is one hour, including its bounded agent run and
+fixed validation stages; it is an upper bound, not a target duration. Its own
+timeout still cancels the job and joins cleanup.

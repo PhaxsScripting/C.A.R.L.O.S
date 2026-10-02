@@ -34,6 +34,8 @@ RESPONSIVE_REQUESTS = frozenset(
         "agent.tasks.list",
         "agent.tasks.get",
         "agent.tasks.steer",
+        "coding.status",
+        "coding.result",
         "tts.stop",
         "voice.privacy.set",
         "wake.pause.set",
@@ -72,10 +74,16 @@ def _is_responsive_request(request: dict[str, Any]) -> bool:
     if request.get("type") in RESPONSIVE_REQUESTS or _is_action_stop_request(request):
         return True
     payload = request.get("payload", {})
+    if request.get("type") == "command.submit" and isinstance(payload, dict):
+        from ..engineering_queries import is_engineering_status_query
+
+        if is_engineering_status_query(payload.get("text")):
+            return True
     return (
         request.get("type") == "tool.call"
         and isinstance(payload, dict)
-        and payload.get("name") == "desktop.input.disconnect"
+        and payload.get("name") in ("desktop.input.disconnect", "development.coding_agent_status",
+                                    "development.coding_agent_result")
     )
 
 
