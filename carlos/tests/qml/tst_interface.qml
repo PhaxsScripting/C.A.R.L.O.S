@@ -16,6 +16,7 @@ TestCase {
         id: mock
         signal sceneActivated(string hud)
         property bool connected: true
+        property bool settingsBusy: false
         property string state: "DORMANT"
         property string detail: "Isolated UI test; no desktop connection"
         property string statusMessage: "TEST CONNECTION"
@@ -65,7 +66,7 @@ TestCase {
     Component { id: appComponent; EV.Main { width:1080; height:680 } }
     function init() {
         mock.commands=[]; mock.calls=[]
-        mock.connected=true; mock.confirmation={}; mock.state="DORMANT"
+        mock.settingsBusy=false; mock.connected=true; mock.confirmation={}; mock.state="DORMANT"
         mock.timeline=[{kind:"USER",title:"ME",body:"Fixture request"}]
         mock.voice={wake_active:true}
         mock.activityHistory={}; mock.projectMemories={}
@@ -77,6 +78,30 @@ TestCase {
         waitForRendering(ui.contentItem)
     }
     function cleanup() { ui.close() }
+    function test_settings_undo_and_controls_wait_for_pending_response() {
+        mock.daily={settings:{undo_available:true,fields:[{key:"media_ducking",section:"Voice",label:"Lower media volume",value:false}],choices:[{key:"operating_mode",section:"General",label:"Mode",value:"DAILY",choices:[{value:"DAILY",label:"Daily"},{value:"DEV",label:"Development"}]}]}}
+        click("nav-9")
+        const fields = item("settings-fields")
+        const choices = item("settings-choices")
+        tryVerify(function() { return fields.itemAt(0) !== null && choices.itemAt(0) !== null })
+        const ducking = findChild(fields.itemAt(0), "setting-media_ducking")
+        const mode = findChild(choices.itemAt(0), "setting-operating_mode")
+        verify(ducking !== null && mode !== null)
+        verify(item("settings-undo").enabled)
+        click("settings-undo")
+        compare(mock.calls[0].name, "carlos.settings.undo_last")
+        mock.settingsBusy=true
+        tryCompare(item("settings-undo"), "enabled", false)
+        verify(!ducking.enabled)
+        verify(!mode.enabled)
+        mock.settingsBusy=false
+        mock.connected=false
+        tryCompare(item("settings-undo"), "enabled", false)
+        verify(!ducking.enabled)
+        mock.connected=true
+        mock.daily={settings:{undo_available:false,fields:[],choices:[]}}
+        tryCompare(item("settings-undo"), "enabled", false)
+    }
     function test_saved_activity_empty_state_and_clear_request() {
         click("nav-8")
         click("activity-saved")

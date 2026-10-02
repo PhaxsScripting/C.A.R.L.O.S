@@ -20,6 +20,9 @@ def handsfree_action(clean):
     if is_engineering_status_query(text):
         return Action('development.coding_agent_status', {})
 
+    if match(r"(?:undo|revert)(?: my| the)?(?: last)? carlos setting(?: change)?[.!?]*"):
+        return Action("carlos.settings.undo_last", {})
+
     if m := match(r"record (?:the |my )?(?:screen|desktop)(?: for ([a-z\d -]+?) (seconds?|minutes?))?[.!?]*"):
         amount = _spoken_percent(m[1] or '10')
         if amount is not None and (m[1] or '').lower() not in {'half', 'halfway', 'max', 'maximum', 'full'}:

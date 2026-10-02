@@ -873,14 +873,30 @@ ApplicationWindow {
                                     }
                                 }
                             }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                Text {
+                                    Layout.fillWidth: true; wrapMode: Text.WordWrap; color: appWindow.dim
+                                    text: evClient.settingsBusy ? "Applying setting…" : "Undo your latest Carlos setting change within ten minutes."
+                                }
+                                HudButton {
+                                    objectName: "settings-undo"
+                                    text: "UNDO LAST CHANGE"
+                                    enabled: evClient.connected && !evClient.settingsBusy && get(get(evClient.daily, "settings", {}), "undo_available", false)
+                                    onClicked: evClient.callTool("carlos.settings.undo_last", {})
+                                }
+                            }
                             Repeater {
+                                objectName: "settings-fields"
                                 model: get(get(evClient.daily, "settings", {}), "fields", [])
                                 delegate: RowLayout {
                                     required property var modelData
                                     Layout.fillWidth: true
                                     Text { Layout.fillWidth: true; text: modelData.section + " / " + modelData.label; color: appWindow.dim }
                                     HudButton {
+                                        objectName: "setting-" + modelData.key
                                         text: modelData.value ? "ON" : "OFF"
+                                        enabled: evClient.connected && !evClient.settingsBusy
                                         onClicked: evClient.callTool("carlos.settings.set", {key: modelData.key, value: !modelData.value})
                                     }
                                 }
@@ -894,6 +910,7 @@ ApplicationWindow {
                                     Text { Layout.fillWidth: true; wrapMode: Text.WordWrap; text: modelData.section + " / " + modelData.label; color: appWindow.dim }
                                     ComboBox {
                                         objectName: "setting-" + modelData.key
+                                        enabled: evClient.connected && !evClient.settingsBusy
                                         model: modelData.choices
                                         textRole: "label"
                                         valueRole: "value"

@@ -707,3 +707,11 @@ Four installed files passed preflight, graceful restart, catalogue/empty-undo IP
 A separate disposable GTK/Wayland test received a fullscreen configuration, but both Carlos and KWin's independent getWindowInfo still reported the old geometry/fullscreen state after three seconds. It was reported as failure and cleaned up. Its cause remains unresolved. This is a remaining acceptance gap; the successful Qt test does not establish GTK, monitor hotplug, partial-maximize or multiple-workspace behavior on every real application/desktop. Tile restoration and layout changes after topology movement are refused rather than approximated.
 
 The maximize-axis and all-workspace semantics follow KDE's KWin Window API: https://develop.kde.org/docs/plasma/kwin/api/ and the installed KWin headers.
+
+
+October 2 managed settings reversal:
+
+- 1,379 Python tests passed. The settings group includes 25 tests and a real isolated Core Unix-socket save/undo/health sequence using disposable config files. The development tree passed its 24 settings tests.
+- Cancellation, failed voice initialization, external config edits, wrong-key guards, expiry, bounded history, private-session refusal and hard-mute transitions are covered. Recovery restores only the affected field and does not overwrite unrelated edits.
+- All five native Qt test groups passed, with the changed interface group rerun after correcting its repeater lookup. Native client tests cover duplicate requests, matching response/error cleanup, disconnect cleanup and no replay. The interface checks undo availability and disabled controls during pending requests or disconnection.
+- Three installed Core files and the control-center executable were backed up and updated. Native imports, all three settings contracts, read-only settings inspection, empty undo refusal, health and focus preservation passed. Protected Plasma configuration hashes were unchanged. Real microphone recovery and other-desktop acceptance remain separate.

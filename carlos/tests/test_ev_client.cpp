@@ -51,6 +51,40 @@ class EvClientTests : public QObject {
         QTRY_COMPARE(client->security().value("monitor").toMap().value("state").toString(), QString("MONITORING"));
     }
 
+    void managedSettingsSuppressDuplicateUntilMatchingResponse() {
+        client->callTool("carlos.settings.set", {{"key", "media_ducking"}, {"value", true}});
+        QVERIFY(client->settingsBusy());
+        QTRY_VERIFY(peer->canReadLine());
+        const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+        QCOMPARE(request.value("type").toString(), QString("tool.call"));
+        client->callTool("carlos.settings.undo_last", {});
+        client->callTool("carlos.settings.set", {{"key", "media_ducking"}, {"value", false}});
+        QTest::qWait(30);
+        QVERIFY(!peer->canReadLine());
+        send({{"type", "response"}, {"id", "unrelated"}, {"payload", QJsonObject{}}});
+        QTest::qWait(30);
+        QVERIFY(client->settingsBusy());
+        send({{"type", "response"}, {"id", request.value("id")},
+              {"payload", QJsonObject{{"status", "failed"}, {"error", "Fixture refusal"}}}});
+        QTRY_VERIFY(!client->settingsBusy());
+    }
+
+    void managedSettingsRecoverFromProtocolErrorAndDisconnectWithoutReplay() {
+        client->callTool("carlos.settings.undo_last", {});
+        QVERIFY(client->settingsBusy());
+        QTRY_VERIFY(peer->canReadLine());
+        const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+        send({{"type", "error"}, {"id", request.value("id")},
+              {"payload", QJsonObject{{"message", "Fixture error"}}}});
+        QTRY_VERIFY(!client->settingsBusy());
+        client->callTool("carlos.settings.set", {{"key", "media_ducking"}, {"value", true}});
+        QVERIFY(client->settingsBusy());
+        client->disconnectFromCore();
+        QVERIFY(!client->settingsBusy());
+        client->callTool("carlos.settings.undo_last", {});
+        QVERIFY(!client->settingsBusy());
+    }
+
     void offlineCommandIsNotReportedAsSent()
     {
         client->disconnectFromCore();

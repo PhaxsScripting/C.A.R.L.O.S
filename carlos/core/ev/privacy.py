@@ -30,6 +30,8 @@ class PrivacyPolicy:
         c.daily.set_private(self.ephemeral, guest=self.mode == "GUEST")
         c.bus.set_private(self.ephemeral)
         c.logger.disabled = self.ephemeral
+        if hasattr(c, "settings_center"):
+            c.settings_center.clear_undo()
         if hasattr(c, "failure_reference"):
             c.failure_reference.clear()
 

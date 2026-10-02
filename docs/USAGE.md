@@ -337,3 +337,18 @@ another window's newer history record. Monitor serials are guarded when availabl
 connector-only checks are reported when hardware identity is unavailable. Geometry
 and state still need real-application readback: the native Qt test passed, while
 GTK fullscreen acceptance remains unresolved on the development host.
+
+
+Settings now has an **Undo last change** button. You can also say
+`undo my last Carlos setting change`, or call `carlos.settings.undo_last`
+with an optional exact `key` guard. This restores the latest managed field,
+including whether the original field was absent, and its runtime setting.
+Unrelated edits stay intact. External edits to the affected field, private/guest
+sessions, privacy transitions, hard microphone mute and active voice interactions
+can prevent restoration. No-op updates do not hide the previous change.
+
+Settings undo keeps at most 32 records in memory for ten minutes. Restarting the
+core or changing privacy mode clears them. It does not undo arbitrary files or
+destructive actions. Voice setting readback does not prove that capture is available.
+The interface disables managed settings while a change is pending and does not
+replay changes after a disconnect.

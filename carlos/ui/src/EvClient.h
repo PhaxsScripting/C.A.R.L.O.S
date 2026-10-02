@@ -13,6 +13,7 @@
 class EvClient final : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
+    Q_PROPERTY(bool settingsBusy READ settingsBusy NOTIFY settingsBusyChanged)
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
     Q_PROPERTY(QString detail READ detail NOTIFY stateChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
@@ -45,6 +46,7 @@ class EvClient final : public QObject {
     explicit EvClient(QObject *parent = nullptr);
 
     bool connected() const;
+    bool settingsBusy() const { return !m_settingsRequest.isEmpty(); }
     QString state() const { return m_state; }
     QString detail() const { return m_detail; }
     QString statusMessage() const { return m_statusMessage; }
@@ -115,6 +117,7 @@ class EvClient final : public QObject {
     void projectMemoriesChanged();
     void insightsChanged();
     void dailyChanged();
+    void settingsBusyChanged();
     void toolResultChanged();
     void connectedChanged();
     void stateChanged();
@@ -141,6 +144,7 @@ class EvClient final : public QObject {
     void processEvent(const QJsonObject &event, bool historical = false);
     void applySnapshot(const QJsonObject &snapshot);
     void setStatus(const QString &message);
+    void setSettingsRequest(const QString &id);
     void activateCore();
     void appendTimeline(const QString &kind, const QString &title, const QString &body,
                         const QString &timestamp = {});
@@ -153,6 +157,7 @@ class EvClient final : public QObject {
     QTimer m_healthTimer;
     QTimer m_healthTimeout;
     QString m_healthRequest;
+    QString m_settingsRequest;
     QTimer m_activityTimer;
     QTimer m_voiceRefreshTimer;
     QTimer m_eventRefreshTimer;

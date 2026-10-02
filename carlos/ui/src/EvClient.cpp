@@ -107,6 +107,7 @@ EvClient::EvClient(QObject *parent) : QObject(parent) {
         m_healthTimeout.stop();
         m_healthRequest.clear();
         m_pendingRequests.clear();
+        setSettingsRequest({});
         m_readBuffer.clear();
         m_voiceRefreshTimer.stop();
         m_eventRefreshTimer.stop();
@@ -269,6 +270,7 @@ void EvClient::disconnectFromCore() {
         emit outputWaveformChanged();
     }
     m_pendingRequests.clear();
+    setSettingsRequest({});
     m_socket.abort();
 }
 
@@ -370,10 +372,24 @@ void EvClient::refreshDaily() { sendRequest(QStringLiteral("daily.snapshot")); }
 void EvClient::refreshActivityHistory() {
     callTool(QStringLiteral("memory.timeline"), {{QStringLiteral("limit"), 100}});
 }
+void EvClient::setSettingsRequest(const QString &id) {
+    if (id == m_settingsRequest)
+        return;
+    m_settingsRequest = id;
+    emit settingsBusyChanged();
+}
 void EvClient::callTool(const QString &name, const QVariantMap &arguments) {
-    sendRequest(QStringLiteral("tool.call"),
-                {{QStringLiteral("name"), name},
-                 {QStringLiteral("arguments"), QJsonObject::fromVariantMap(arguments)}});
+    const bool managedSetting = name == QStringLiteral("carlos.settings.set") ||
+                                name == QStringLiteral("carlos.settings.undo_last");
+    if (managedSetting && settingsBusy()) {
+        setStatus(QStringLiteral("A setting change is already pending"));
+        return;
+    }
+    const QString id = sendRequest(QStringLiteral("tool.call"),
+        {{QStringLiteral("name"), name},
+         {QStringLiteral("arguments"), QJsonObject::fromVariantMap(arguments)}});
+    if (managedSetting)
+        setSettingsRequest(id);
 }
 void EvClient::refreshPhase3() {
     sendRequest(QStringLiteral("plan.list"));
@@ -429,6 +445,8 @@ void EvClient::processLine(const QByteArray &line) {
         processResponse(message);
     else if (type == QStringLiteral("error")) {
         m_pendingRequests.remove(valueString(message, "id"));
+        if (!m_settingsRequest.isEmpty() && valueString(message, "id") == m_settingsRequest)
+            setSettingsRequest({});
         if (valueString(message, "id") == m_projectMemoryRequest && !m_projectMemoryRequest.isEmpty()) {
             m_projectMemoryRequest.clear();
             m_projectMemories = {{QStringLiteral("error"), QStringLiteral("Could not load project notes")}};
@@ -445,6 +463,10 @@ void EvClient::processLine(const QByteArray &line) {
 void EvClient::processResponse(const QJsonObject &message) {
     const QString id = valueString(message, "id");
     const QString requestType = m_pendingRequests.take(id);
+    if (!m_settingsRequest.isEmpty() && id == m_settingsRequest) {
+        setSettingsRequest({});
+        refreshDaily();
+    }
     if (id == m_healthRequest) {
         if (message.value(QStringLiteral("payload")).toObject().value(QStringLiteral("ok")).toBool()) {
             m_healthTimeout.stop();
