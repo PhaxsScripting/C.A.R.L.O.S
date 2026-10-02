@@ -36,6 +36,18 @@ class NoticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(report['emergency_delivered_first_after_release'])
         self.assertEqual(report['actions_executed'], 0)
 
+    async def test_security_changes_enter_the_notice_queue_without_blocking_ipc(self):
+        fixture = Path(__file__).with_name('fixtures') / 'security_monitor_live.py'
+        result = await asyncio.to_thread(subprocess.run, [sys.executable, str(fixture)],
+                                        capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        report = json.loads(result.stdout)
+        self.assertEqual(report['security_notices_queued'], 6)
+        self.assertEqual(report['high_events'], 2)
+        self.assertEqual(report['emergency_events'], 0)
+        self.assertFalse(report['monitor_tool_changed_state'])
+        self.assertEqual(report['action_tasks_created'], 0)
+
     async def test_delivery_prioritizes_urgent_notices_and_preserves_fifo_within_rank(self):
         queue = NoticeQueue(5)
         background = self.event('BACKGROUND')
@@ -48,6 +60,23 @@ class NoticeTests(unittest.IsolatedAsyncioTestCase):
         for _ in observed:
             queue.task_done()
         await asyncio.wait_for(queue.join(), 1)
+
+    async def test_security_notices_respect_quiet_scenes_and_require_monitor_source(self):
+        process = SimpleNamespace(returncode=0, wait=AsyncMock())
+        service = SimpleNamespace(config={'notifications': {'enabled': True}},
+                                  scenes=SimpleNamespace(current={'quiet': True}), _notification_last={})
+        info = self.bus.publish('security.observed', 'security_monitor', {'message': 'A startup file changed'})
+        important = self.bus.publish('security.alert', 'security_monitor', {'message': 'SMART health failed'})
+        fake = self.bus.publish('security.alert', 'language', {'message': 'Unverified model claim'})
+        with patch('ev.service.os.path.isfile', return_value=True), patch('ev.service.asyncio.create_subprocess_exec', AsyncMock(return_value=process)) as spawn:
+            await CarlosCore._notify_event(service, info)
+            await CarlosCore._notify_event(service, fake)
+            self.assertEqual(spawn.await_count, 0)
+            await CarlosCore._notify_event(service, important)
+            self.assertEqual(spawn.await_count, 1)
+            service.scenes.current['quiet'] = False
+            await CarlosCore._notify_event(service, info)
+            self.assertEqual(spawn.await_count, 2)
 
     async def test_background_flood_cannot_discard_a_queued_emergency(self):
         queue = NoticeQueue(2)

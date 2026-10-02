@@ -194,3 +194,8 @@ low-power check; they skip supported sleeping ATA disks instead of starting a
 test. Advisory coverage currently uses Gentoo's local GLSA data. Other Linux
 advisory sources still need adapters. This is bounded best-effort monitoring,
 not a replacement for a full security audit.
+
+When desktop notifications are enabled, monitor changes use the same bounded
+notification queue. Quiet scenes suppress informational changes, while important
+verified failures retain their priority. Only monitor-origin observations use
+this notification path; model statements do not become security evidence.

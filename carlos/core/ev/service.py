@@ -406,6 +406,8 @@ class CarlosCore:
             body = str(event.payload.get("message", "A component reported an error."))
             urgency = "critical"
         elif event.type in {"security.alert", "security.observed"} and event.source == "security_monitor":
+            if self.scenes.current.get("quiet") and event.type == "security.observed":
+                return
             title = "Carlos security observation"
             body = str(event.payload.get("message", "Local security evidence changed."))
         elif event.type == "voice.full_test_complete":
@@ -543,6 +545,8 @@ class CarlosCore:
                     "tool.permission_check",
                     "system.warning",
                     "system.error",
+                    "security.alert",
+                    "security.observed",
                     "voice.full_test_complete",
                     "voice.full_test_failed",
                     "tool.completed",

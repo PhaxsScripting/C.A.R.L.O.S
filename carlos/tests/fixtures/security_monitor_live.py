@@ -76,6 +76,8 @@ async def main():
             assert len(events) == 6, events
             assert sum(event['priority'] == 'HIGH' for event in events) == 2
             assert all(event['priority'] != 'EMERGENCY' for event in events)
+            notice_metrics = core._notification_queue.metrics()
+            assert notice_metrics['queued'] == 6, notice_metrics
             result = await request('tool.call', {'name': 'security.monitor', 'arguments': {}}, 'monitor-read')
             assert result['status'] == 'completed' and not result['execution']['changed_state'], result
             assert 'FIXTURE_CANARY' not in json.dumps(result)
@@ -83,6 +85,7 @@ async def main():
             print(json.dumps({'scope': 'Temporary actual core IPC with simulated blocked probes and fixture startup files',
                               'health_response_ms': round(elapsed, 3), 'telemetry_progressed': True,
                               'change_events': len(events), 'high_events': 2, 'emergency_events': 0,
+                              'security_notices_queued': notice_metrics['queued'],
                               'monitor_tool_changed_state': False, 'action_tasks_created': receipt_count,
                               'raw_fixture_content_excluded': True}))
         finally:
