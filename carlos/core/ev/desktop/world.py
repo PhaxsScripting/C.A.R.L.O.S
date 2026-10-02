@@ -87,6 +87,11 @@ class DesktopWorldModel:
             "captured_monotonic": time.monotonic(),
             "window": deepcopy(window),
         }
+        if self._snapshot is not None:
+            outputs = [output for output in self._snapshot.data.get('outputs', [])
+                       if output.get('name') == window.get('output') and output.get('enabled', True)]
+            if len(outputs) == 1:
+                restore_point['output'] = deepcopy(outputs[0])
         self._window_history.append(restore_point)
         self._window_history = self._window_history[-24:]
         return deepcopy(restore_point)

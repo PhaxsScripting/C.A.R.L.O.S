@@ -27,7 +27,7 @@ from ..permissions import Permission
 from ..telemetry import read_temperature
 from .base import ToolContext, ToolRegistry, ToolSpec, ValidationError
 from .media import control_media
-from . import audio_undo
+from . import audio_undo, window_undo
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 _AUDIO_STATE_PROPERTIES = {
@@ -2024,67 +2024,9 @@ async def desktop_layout_window(arguments: dict[str, Any], context: ToolContext)
 
 
 async def desktop_undo_window_change(
-    _arguments: dict[str, Any], context: ToolContext
+    arguments: dict[str, Any], context: ToolContext
 ) -> dict[str, Any]:
-    model = _desktop(context)
-    restore = model.peek_window_restore()
-    if restore is None:
-        return {"verified": False, "reason": "No reversible window change is available"}
-    previous = restore["window"]
-    window_id = str(previous["id"])
-    world = await model.snapshot(force=True)
-    if not any(str(item.get("id")) == window_id for item in model.visible_windows(world)):
-        return {
-            "verified": False,
-            "reason": "The changed window no longer exists",
-            "window_id": window_id,
-        }
-    output = str(previous.get("output", ""))
-    if output:
-        await model.bridge.request("move_to_output", {"window_id": window_id, "output": output})
-        await asyncio.sleep(0.12)
-    desktops = [str(item) for item in previous.get("desktops", [])]
-    if desktops:
-        await model.bridge.request(
-            "move_to_desktop", {"window_id": window_id, "desktop_id": desktops[0]}
-        )
-    await model.bridge.request("activate", {"window_id": window_id})
-    await model.bridge.request("restore", {"window_id": window_id})
-    await asyncio.sleep(0.12)
-    geometry = {
-        key: int(previous.get("geometry", {}).get(key, 0)) for key in ("x", "y", "width", "height")
-    }
-    await model.bridge.request("move_resize", {"window_id": window_id, **geometry})
-    if previous.get("fullscreen"):
-        await model.bridge.request("fullscreen", {"window_id": window_id, "enabled": True})
-    elif previous.get("maximized"):
-        await model.bridge.request("maximize", {"window_id": window_id})
-    elif previous.get("minimized"):
-        await model.bridge.request("minimize", {"window_id": window_id})
-    actual = await _window_after(context, window_id, 0.25)
-    actual_geometry = (actual or {}).get("geometry", {})
-    state_ok = bool(actual) and all(
-        bool(actual.get(key)) == bool(previous.get(key))
-        for key in ("minimized", "fullscreen", "maximized")
-    )
-    placement_ok = (
-        bool(actual)
-        and (not output or actual.get("output") == output)
-        and all(
-            abs(int(actual_geometry.get(key, -999999)) - value) <= 2
-            for key, value in geometry.items()
-        )
-    )
-    desktop_ok = bool(actual) and (not desktops or desktops[0] in actual.get("desktops", []))
-    verified = state_ok and placement_ok and desktop_ok
-    if verified:
-        model.consume_window_restore()
-    return {
-        "verified": verified,
-        "restored_action": restore["action"],
-        "expected": previous,
-        "window": actual,
-    }
+    return await window_undo.undo_window_change(arguments, context)
 
 
 async def desktop_close_window(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -3401,8 +3343,16 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             "DESKTOP",
             "Undo the most recent E.V. window move, resize, layout, output, workspace, or state change.",
             Permission.LOW_RISK,
-            EMPTY_SCHEMA,
+            object_schema({"window_id": window_id}),
             desktop_undo_window_change,
+            offline_available=True, reversible=False,
+            output_schema=object_schema({
+                "verified": {"type": "boolean"}, "reason": {"type": "string"},
+                "window_id": {"type": "string"}, "restored_action": {"type": "string"},
+                "expected": {"type": "object"}, "window": {"type": ["object", "null"]},
+                "output_identity_guarded": {"type": "boolean"},
+                "output_identity_verified": {"type": ["boolean", "null"]},
+            }, ["verified"]),
             platform_requirements=kwin_requirements,
             verification="Restore and re-read geometry, output, workspace, and state",
             side_effects=("restores the prior state of one window",),

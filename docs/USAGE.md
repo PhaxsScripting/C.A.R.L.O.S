@@ -327,3 +327,13 @@ timeout still cancels the job and joins cleanup.
 Capability queries and self diagnostics remain available while a command is busy. Slow CLI and accessibility readiness probes run outside the main loop.
 
 Record a local clip with `record my screen for ten seconds`. Confirm, then choose one screen or window in the native dialog. `show recording status` and `show my recordings` inspect support and completed clips. The global `stop` command cancels an unfinished clip. See [screen clips](RECORDING.md) for limits, privacy, deletion and Linux dependencies.
+
+
+Window undo restores complete workspace assignments and independent maximize,
+fullscreen and minimized states. A missing/replaced monitor or removed workspace
+stops restoration before movement. Custom compositor tiles cannot currently be
+restored exactly. An optional `window_id` on `desktop.window.undo_last` refuses
+another window's newer history record. Monitor serials are guarded when available;
+connector-only checks are reported when hardware identity is unavailable. Geometry
+and state still need real-application readback: the native Qt test passed, while
+GTK fullscreen acceptance remains unresolved on the development host.

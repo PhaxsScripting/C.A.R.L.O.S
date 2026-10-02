@@ -157,9 +157,12 @@ function execute(command) {
     } else if (action === "minimize") {
         window.minimized = true;
     } else if (action === "maximize") {
+        const mode = args.mode === undefined ? 3 : args.mode;
+        if (typeof mode !== "number" || [1, 2, 3].indexOf(mode) === -1)
+            throw new Error("Invalid maximize mode; no window changed");
         window.minimized = false;
         window.fullScreen = false;
-        window.setMaximize(true, true);
+        window.setMaximize(Boolean(mode & 1), Boolean(mode & 2));
     } else if (action === "restore") {
         window.minimized = false;
         window.fullScreen = false;
@@ -190,7 +193,19 @@ function execute(command) {
         // is more reliable than synthesizing cross-output coordinates.
         workspace.sendClientToScreen(window, output);
     } else if (action === "move_to_desktop") {
-        window.desktops = [findDesktop(args.desktop_id)];
+        if (args.all_desktops === true) {
+            window.desktops = [];
+        } else if (args.desktop_ids !== undefined) {
+            if (!Array.isArray(args.desktop_ids) || args.desktop_ids.length < 1 ||
+                args.desktop_ids.length > workspace.desktops.length)
+                throw new Error("Invalid saved workspace assignment; no window changed");
+            const ids = args.desktop_ids.map(String);
+            if (ids.some(function(id, index) { return ids.indexOf(id) !== index; }))
+                throw new Error("Duplicate workspace assignment; no window changed");
+            window.desktops = ids.map(findDesktop);
+        } else {
+            window.desktops = [findDesktop(args.desktop_id)];
+        }
     } else if (action === "layout") {
         const layout = String(args.layout || "");
         const area = workspace.clientArea(KWin.MaximizeArea, window);
