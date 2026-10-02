@@ -20,6 +20,16 @@ def handsfree_action(clean):
     if is_engineering_status_query(text):
         return Action('development.coding_agent_status', {})
 
+    if m := match(r"record (?:the |my )?(?:screen|desktop)(?: for ([a-z\d -]+?) (seconds?|minutes?))?[.!?]*"):
+        amount = _spoken_percent(m[1] or '10')
+        if amount is not None and (m[1] or '').lower() not in {'half', 'halfway', 'max', 'maximum', 'full'}:
+            seconds = amount * (60 if m[2] and m[2].lower().startswith('minute') else 1)
+            return Action('desktop.recording.capture', {'seconds': seconds})
+    if match(r"(?:check|show) (?:screen )?recording status[.!?]*"):
+        return Action('desktop.recording.status', {})
+    if match(r"(?:list|show) (?:my |the )?(?:screen )?recordings[.!?]*"):
+        return Action('desktop.recording.list', {})
+
     if match(r"(?:(?:check|show|measure)(?: me)? carlos(?:'s)? (?:resources|resource usage)|how much (?:RAM|memory) (?:is carlos using|does carlos use))[.!?]*"):
         return Action('system.carlos_resources', {})
 

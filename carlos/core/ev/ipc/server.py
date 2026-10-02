@@ -85,7 +85,8 @@ def _is_responsive_request(request: dict[str, Any]) -> bool:
         request.get("type") == "tool.call"
         and isinstance(payload, dict)
         and payload.get("name") in ("desktop.input.disconnect", "development.coding_agent_status",
-                                    "development.coding_agent_result")
+                                    "development.coding_agent_result", "desktop.recording.status",
+                                    "desktop.recording.list")
     )
 
 

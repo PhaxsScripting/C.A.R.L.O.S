@@ -14,23 +14,23 @@ import sys
 PROFILES = {
     "debian": {
         "manager": ["apt-get", "install"],
-        "packages": "build-essential cmake ninja-build pkg-config python3 python3-venv python3-dev python3-dbus python3-gi qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools qt6-tools-dev-tools qt6-wayland qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qttest libgl1-mesa-dev libglib2.0-bin dbus-x11 xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat",
+        "packages": "build-essential cmake ninja-build pkg-config python3 python3-venv python3-dev python3-dbus python3-gi qt6-base-dev qt6-declarative-dev qt6-declarative-dev-tools qt6-tools-dev-tools qt6-wayland qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtqml qml6-module-qtqml-models qml6-module-qtqml-workerscript qml6-module-qttest libgl1-mesa-dev libglib2.0-bin dbus-x11 xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat gir1.2-gstreamer-1.0 gstreamer1.0-pipewire gstreamer1.0-plugins-base gstreamer1.0-plugins-good ffmpeg",
     },
     "fedora": {
         "manager": ["dnf", "install"],
-        "packages": "gcc-c++ cmake ninja-build pkgconf-pkg-config python3 python3-pip python3-devel python3-dbus python3-gobject qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtwayland glib2 dbus-daemon xorg-x11-server-Xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat",
+        "packages": "gcc-c++ cmake ninja-build pkgconf-pkg-config python3 python3-pip python3-devel python3-dbus python3-gobject qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qtwayland glib2 dbus-daemon xorg-x11-server-Xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat gstreamer1 gstreamer1-plugins-base gstreamer1-plugins-good pipewire-gstreamer ffmpeg-free",
     },
     "arch": {
         "manager": ["pacman", "-S", "--needed"],
-        "packages": "base-devel cmake ninja pkgconf python python-pip python-dbus python-gobject qt6-base qt6-declarative qt6-tools qt6-wayland glib2 dbus xorg-xwayland desktop-file-utils libpulse speech-dispatcher bubblewrap socat",
+        "packages": "base-devel cmake ninja pkgconf python python-pip python-dbus python-gobject qt6-base qt6-declarative qt6-tools qt6-wayland glib2 dbus xorg-xwayland desktop-file-utils libpulse speech-dispatcher bubblewrap socat gstreamer gst-plugins-base gst-plugins-good gst-plugin-pipewire ffmpeg",
     },
     "opensuse": {
         "manager": ["zypper", "install"],
-        "packages": "gcc-c++ cmake ninja pkgconf-pkg-config python3 python3-pip python3-devel python3-dbus-python python3-gobject qt6-base-devel qt6-declarative-devel qt6-tools-devel qt6-wayland glib2-tools dbus-1 xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat",
+        "packages": "gcc-c++ cmake ninja pkgconf-pkg-config python3 python3-pip python3-devel python3-dbus-python python3-gobject qt6-base-devel qt6-declarative-devel qt6-tools-devel qt6-wayland glib2-tools dbus-1 xwayland desktop-file-utils pulseaudio-utils speech-dispatcher bubblewrap socat gstreamer-plugin-pipewire gstreamer-plugins-base gstreamer-plugins-good typelib-1_0-Gst-1_0 ffmpeg",
     },
     "gentoo": {
         "manager": ["emerge", "--ask", "--noreplace"],
-        "packages": "sys-devel/gcc dev-build/cmake dev-build/ninja virtual/pkgconfig dev-lang/python dev-python/pip dev-python/virtualenv dev-python/dbus-python dev-python/pygobject dev-qt/qtbase:6 dev-qt/qtdeclarative:6 dev-qt/qttools:6 dev-qt/qtwayland:6 dev-libs/glib sys-apps/dbus x11-base/xwayland dev-util/desktop-file-utils media-libs/libpulse media-sound/speech-dispatcher sys-apps/bubblewrap net-misc/socat",
+        "packages": "sys-devel/gcc dev-build/cmake dev-build/ninja virtual/pkgconfig dev-lang/python dev-python/pip dev-python/virtualenv dev-python/dbus-python dev-python/pygobject dev-qt/qtbase:6 dev-qt/qtdeclarative:6 dev-qt/qttools:6 dev-qt/qtwayland:6 dev-libs/glib sys-apps/dbus x11-base/xwayland dev-util/desktop-file-utils media-libs/libpulse media-sound/speech-dispatcher sys-apps/bubblewrap net-misc/socat media-libs/gstreamer[introspection] media-libs/gst-plugins-base[introspection] media-libs/gst-plugins-good media-plugins/gst-plugins-vpx media-video/pipewire[gstreamer] media-video/ffmpeg",
     },
 }
 ALIASES = {

@@ -66,6 +66,7 @@ start always-on microphone recording, or turn the offline provider into a chat m
 | Pet app-aware comments | KWin app classification | Generic comments; no guessed native Wayland app activity |
 | Always above fullscreen | Native KDE Wayland layer overlay | Window-manager policy; cannot promise fullscreen stacking |
 | Exact window automation and verified desktop input | KWin backend | Unavailable; commands fail with a capability error |
+| Explicit screen recording | Native ScreenCast grant, PipeWire and installed encoder | Same portal backend when advertised; each session still needs acceptance |
 
 The normal Qt UI no longer imports KDE-only QML modules. On KDE Wayland with
 LayerShellQt 6.6+, the pet and voice HUD retain their native overlays. Otherwise

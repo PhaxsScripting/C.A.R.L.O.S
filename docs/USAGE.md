@@ -311,3 +311,5 @@ fixed validation stages; it is an upper bound, not a target duration. Its own
 timeout still cancels the job and joins cleanup.
 
 Capability queries and self diagnostics remain available while a command is busy. Slow CLI and accessibility readiness probes run outside the main loop.
+
+Record a local clip with `record my screen for ten seconds`. Confirm, then choose one screen or window in the native dialog. `show recording status` and `show my recordings` inspect support and completed clips. The global `stop` command cancels an unfinished clip. See [screen clips](RECORDING.md) for limits, privacy, deletion and Linux dependencies.

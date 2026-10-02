@@ -200,6 +200,11 @@ class CarlosCore:
         from .core_resources import register_core_resources
 
         register_core_resources(self.tools)
+        from .recording import ScreenRecorder
+        from .tools.recording import register_recording_tools
+
+        self.screen_recorder = ScreenRecorder(self.paths.data_dir / 'recordings')
+        register_recording_tools(self.tools, self.screen_recorder)
         from .security_monitor import SecurityMonitor
         from .tools.security_monitor import register_security_monitor
 
@@ -652,7 +657,8 @@ class CarlosCore:
             "ipc_clients": self.ipc.clients,
             "provider": self.brain.provider_status(),
             "voice": {**self.voice.snapshot(), "privacy_profile": self.privacy.mode},
-            "desktop": {**self.kwin_bridge.status, "input": self.desktop.input.status()},
+            "desktop": {**self.kwin_bridge.status, "input": self.desktop.input.status(),
+                        "recording": {"active": self.screen_recorder.active, "audio_recorded": False}},
             "planner": self.planner.snapshot(),
             "activity": self.activity.snapshot(),
             "insights": self.insights.snapshot(),
@@ -1333,7 +1339,8 @@ class CarlosCore:
         }
         emergency_disconnect = spec.name == "desktop.input.disconnect"
         engineering_observation = spec.read_only and spec.name in {
-            "development.coding_agent_status", "development.coding_agent_result"
+            "development.coding_agent_status", "development.coding_agent_result",
+            "desktop.recording.status", "desktop.recording.list"
         }
         interactive = getattr(self, "_interactive_task", None)
         action_owned = (interactive is not None and not interactive.done()
