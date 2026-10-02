@@ -81,10 +81,27 @@ class CarlosTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("PERSONAL_CANARY", str(await self.core._model_context("personal")))
         r = await self.core.handle_request({"type": "memory.list", "payload": {}})
         self.assertEqual(r["status"], "denied")
+
         r = await self.core.request_tool(
             {"name": "memory.remember", "arguments": {"content": "secret"}}, "test"
         )
         self.assertEqual(r["status"], "denied")
+
+    async def test_guest_clock_works_through_tool_and_natural_request_without_personal_access(self):
+        self.core._stop_all_actions = AsyncMock(return_value={})
+        self.core.voice.set_privacy_mode = AsyncMock(return_value={})
+        await self.core.privacy.set_mode('GUEST')
+        result = await self.core.request_tool({'name':'system.clock','arguments':{}}, 'guest-clock')
+        self.assertEqual(result['status'], 'completed')
+        self.assertIn('local_time', result['result'])
+        self.assertFalse(result['execution']['changed_state'])
+        result = await self.core.handle_request({'type':'command.submit',
+                                                'payload':{'text':'What time is it?', 'speak':False}})
+        self.assertEqual(result['status'], 'completed')
+        self.assertIn("It's", result['response'])
+        result = await self.core.request_tool({'name':'memory.recall','arguments':{'period':'today'}},
+                                              'guest-history')
+        self.assertEqual(result['status'], 'denied')
 
     async def test_catalog_and_runtime_agree_on_confirmation(self):
         spec = self.core.tools.get("memory.forget")

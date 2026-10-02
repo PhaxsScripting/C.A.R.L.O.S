@@ -7,7 +7,7 @@ import os
 import tempfile
 
 MODES = frozenset({"NORMAL", "LOCAL ONLY", "PRIVATE SESSION", "DO NOT LISTEN", "GUEST"})
-GUEST_TOOLS = frozenset({"system.get_cpu_usage", "system.get_memory_usage", "system.get_time"})
+GUEST_TOOLS = frozenset({"system.get_cpu_usage", "system.get_memory_usage", "system.get_time", "system.clock"})
 
 
 class PrivacyPolicy:

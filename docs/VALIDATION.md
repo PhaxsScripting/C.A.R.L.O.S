@@ -492,3 +492,12 @@ long complete private-key block are filtered before truncation. XML parsing
 confirms literal markup, complete entities at the display boundary, and removal
 of invalid control/surrogate characters. No real desktop notification was sent
 by these checks; arbitrary unlabelled secrets remain outside the filter.
+
+## October 1: Guest clock
+
+The seventeen Carlos integration checks passed in both source trees after
+adding the current `system.clock` name to Guest's existing basic-information
+allowlist. The direct tool and natural time request return a read-only clock
+observation; personal history and memory access remain denied. Mode-transition
+voice callbacks are isolated in this fixture, so it does not test physical
+guest use or audio. The preceding full suite result remains 1,218 tests.
