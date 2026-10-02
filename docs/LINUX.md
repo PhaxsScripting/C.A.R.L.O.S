@@ -115,3 +115,12 @@ Native package references: [Ubuntu Qt](https://packages.ubuntu.com/noble/qt6-bas
 [Arch Qt](https://archlinux.org/packages/extra/x86_64/qt6-base/),
 [openSUSE Qt](https://software.opensuse.org/package/qt6-base-devel),
 [Gentoo Qt](https://packages.gentoo.org/packages/dev-qt/qtbase).
+
+
+Power-profile controls can use a running Power Profiles Daemon on non-KDE
+systems without a KDE service or `powerprofilesctl` executable. They use the
+[standard D-Bus profile properties](https://upower.pages.freedesktop.org/power-profiles-daemon/gdbus-org.freedesktop.UPower.PowerProfiles.html)
+and also recognize the earlier net.hadess service and object path. Existing
+system authorization still applies. A machine with neither usable backend reports
+unavailable; Carlos does not alter governors, thermal limits or services to create one.
+Other native desktop tools retain their documented compositor requirements.

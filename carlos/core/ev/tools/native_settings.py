@@ -3,6 +3,7 @@ from ev.platform import executable as _platform_executable
 """Native settings with explicit availability and exact readback; no GUI fallback."""
 import json
 import re
+import subprocess
 import time
 
 from ..permissions import Permission
@@ -18,7 +19,7 @@ _PROFILE = [
 _INTERFACE = "org.kde.Solid.PowerManagement.Actions.PowerProfile."
 
 
-def power_profile_status(a, c):
+def _kde_profile_status():
     try:
         captured = time.monotonic()
         choices = checked(_PROFILE + [_INTERFACE + "profileChoices"]).splitlines()
@@ -28,7 +29,7 @@ def power_profile_status(a, c):
         return {
             "available": available,
             "profiles": choices,
-            "current": current,
+            "current": current if available else None,
             "captured_at_monotonic": captured,
             "backend": "PowerDevil PowerProfile D-Bus",
             "reason": (
@@ -37,8 +38,19 @@ def power_profile_status(a, c):
                 else "PowerDevil exposes no usable profile backend"
             ),
         }
-    except (RuntimeError, OSError) as error:
-        return {"available": False, "profiles": [], "current": None, "reason": str(error)}
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as error:
+        return {"available": False, "profiles": [], "current": None, "backend": "PowerDevil PowerProfile D-Bus", "reason": str(error)}
+
+
+def power_profile_status(a, c):
+    native = _kde_profile_status()
+    if native["available"]:
+        return native
+    from .power_profiles import status
+    fallback = status()
+    if fallback["available"]:
+        return fallback
+    return dict(native, reason="No usable running PowerDevil or Power Profiles Daemon backend")
 
 
 def power_profile_set(a, c):
@@ -46,10 +58,16 @@ def power_profile_set(a, c):
         before = power_profile_status({}, c)
         if not before["available"] or a["profile"] not in before["profiles"]:
             raise ValueError("Choose an available native profile; no system change was made")
+        if "expected_current" in a and before["current"] != a["expected_current"]:
+            raise ValueError("Current profile changed; no system change was made")
         if before["current"] == a["profile"]:
             return {**before, "verified": True, "already_set": True}
+        from .power_profiles import PowerProfiles, BACKEND
+        if before["backend"] == BACKEND:
+            with PowerProfiles() as daemon:
+                return daemon.set(a["profile"], before)
         checked(_PROFILE + [_INTERFACE + "setProfile", a["profile"]])
-        after = power_profile_status({}, c)
+        after = _kde_profile_status()
         return {
             **after,
             "verified": after["available"] and after["current"] == a["profile"],
@@ -158,15 +176,23 @@ def association_set(a, c):
 
 
 def register_native_settings_tools(registry):
+    profile_output = object_schema({
+        "available": {"type": "boolean"}, "profiles": {"type": "array", "items": {"type": "string"}, "maxItems": 32},
+        "current": {"type": ["string", "null"]}, "backend": {"type": "string"}, "reason": {"type": "string"},
+        "captured_at_monotonic": {"type": "number"}, "owner": {"type": "string"}, "bus_id": {"type": "string"},
+        "service": {"type": "string"}, "performance_degraded": {"type": "string", "maxLength": 256},
+        "verified": {"type": "boolean"}, "already_set": {"type": "boolean"}, "previous": {"type": "string"},
+    }, ["available", "profiles", "current", "backend", "reason"])
     registry.register(
         ToolSpec(
             "settings.power_profile.get",
             "SETTINGS",
-            "Read native PowerDevil power profiles and current selection. An installed service with no choices is explicitly unavailable.",
+            "Read running PowerDevil or standard Power Profiles Daemon profiles and current selection. No service starts or settings changes.",
             Permission.SAFE,
             object_schema({}, []),
             power_profile_status,
-            read_only=True,
+            read_only=True, offline_available=True, reversible=False, output_schema=profile_output,
+            verification="Exact native current profile and available choices; backend unavailable is explicit",
         )
     )
     registry.register(
@@ -176,9 +202,13 @@ def register_native_settings_tools(registry):
             "Select one profile reported by settings.power_profile.get and read back the actual current profile. No CPU clock/thermal overrides or root commands.",
             Permission.LOW_RISK,
             object_schema(
-                {"profile": {"type": "string", "pattern": "[a-z][a-z0-9-]{0,63}"}}, ["profile"]
+                {"profile": {"type": "string", "pattern": "[a-z][a-z0-9-]{0,63}"},
+                 "expected_current": {"type": "string", "pattern": "[a-z][a-z0-9-]{0,63}"}}, ["profile"]
             ),
             power_profile_set,
+            offline_available=True, reversible=False, output_schema=profile_output,
+            side_effects=("Native power-profile request; existing system authorization applies",),
+            verification="Read back through the selected backend; PPD system bus and unique owner remain pinned",
         )
     )
     registry.register(

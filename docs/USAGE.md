@@ -357,3 +357,12 @@ replay changes after a disconnect.
 Window discovery excludes KWin entries retained only for closing animations.
 Exact actions against their old IDs fail before mutation. A new window with the
 same title is a separate target and does not inherit the old identity or undo record.
+
+
+Power profile inspection and selection use an existing PowerDevil backend first,
+then a running standard Power Profiles Daemon. Both current UPower and older
+net.hadess interfaces are supported. Carlos does not start a daemon or install a
+power manager. `settings.power_profile.set` accepts an optional
+`expected_current` guard. The daemon's unique owner and system-bus identity must
+match the observation before dispatch; readback stays on that backend. Failed or
+missing readback does not trigger another write. There is no automatic undo.

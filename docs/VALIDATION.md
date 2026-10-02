@@ -723,3 +723,11 @@ October 2 closed-window handling:
 - The real Qt JavaScript engine verifies that snapshot skips deleted animation entries without reading their obsolete properties and that all ten window mutation routes reject their IDs. The native Qt bridge group passed.
 - An owned Qt/Wayland window was observed, closed through the installed tool and independently reaped. Its old ID then failed activation without changing focus; original focus was restored. No user window was closed.
 - The installed world model and KWin bridge were backed up and updated with healthy Core restart, current bridge readback and unchanged protected Plasma configuration. This addresses deleted animation targets; the previously observed GTK fullscreen mismatch remains unresolved.
+
+
+October 2 native power-profile portability:
+
+- 1,388 Python tests passed. Eight new power-profile tests and ten existing native-settings tests passed; corresponding development tests passed.
+- Fourteen actual checks ran on a disposable D-Bus session for both current and older daemon interfaces. They cover native registered-tool routing, exact readback, external changes, replacement owners, malformed properties and loss of the daemon after dispatch. The real system bus was not used by this fixture.
+- Two installed modules were backed up and updated. Native imports, both explicit tool contracts, read-only live inspection, healthy Core restart, focus preservation and protected Plasma hashes passed. The first installation check caught a blank unavailable KDE profile; rollback restored both source states, and the corrected result now uses null.
+- This laptop reports no usable profile backend. No live power-profile write was attempted. These checks validate the protocol and unavailable state, not a physical power-policy test across all distributions.
