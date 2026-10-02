@@ -310,6 +310,7 @@ class CarlosCore:
             self.config.get("plugins", {}).get("enabled", []), self.tools
         )
         self.voice.set_command_handler(self._handle_voice_command)
+        self.voice.action_cancel_handler = self._stop_pending_voice_actions
         self.voice.set_response_handler(self._schedule_response_speech)
         self.voice.interrupt_handler = self._interrupt_reasoning_for_wake
         self._interactive_task: asyncio.Task | None = None
@@ -317,6 +318,10 @@ class CarlosCore:
         self._interactive_correlation: str | None = None
         self._steering_lock = asyncio.Lock()
         self._action_generation = 0
+        self._running_tool_tasks: dict[asyncio.Task, Any] = {}
+        self._stopping_tools = False
+        self._stop_requests = 0
+        self._tool_state_owner: asyncio.Task | None = None
         self._reasoning_interrupt: asyncio.Task | None = None
         self.ipc = IpcServer(
             self.paths.socket,
@@ -955,6 +960,53 @@ class CarlosCore:
         *,
         preserve_state: bool = False,
     ) -> dict[str, Any]:
+        if getattr(self, "_stopping_tools", False):
+            return self._cancelled_tool_result(spec, dispatched=False)
+        if not hasattr(self, "_running_tool_tasks"):
+            self._running_tool_tasks = {}
+        task = asyncio.create_task(self._execute_tool(
+            spec, arguments, correlation_id, preserve_state=preserve_state
+        ))
+        self._running_tool_tasks[task] = spec
+        try:
+            result = await task
+            if asyncio.current_task().cancelling():
+                raise asyncio.CancelledError
+            return result
+        except asyncio.CancelledError:
+            from .process_runner import settle
+
+            try:
+                await settle(task)
+            except asyncio.CancelledError:
+                pass
+            if asyncio.current_task().cancelling():
+                raise
+            return self._cancelled_tool_result(spec, dispatched=False)
+        finally:
+            self._running_tool_tasks.pop(task, None)
+
+    @staticmethod
+    def _cancelled_tool_result(spec: Any, *, dispatched: bool) -> dict[str, Any]:
+        uncertain = dispatched and not spec.read_only
+        return {
+            "status": "cancelled", "tool": spec.name,
+            "execution": {
+                "ok": False, "status": "CANCELLED", "verified": False,
+                "changed_state": None if uncertain else False,
+                "scope": "cancellation",
+            },
+            "in_flight_effects_may_complete": uncertain,
+        }
+
+    async def _execute_tool(
+        self,
+        spec: Any,
+        arguments: dict[str, Any],
+        correlation_id: str,
+        *,
+        preserve_state: bool = False,
+    ) -> dict[str, Any]:
         policy_error = self.privacy.tool_error(spec.name)
         if policy_error:
             return {"status": "denied", "tool": spec.name, "error": policy_error}
@@ -964,6 +1016,7 @@ class CarlosCore:
             self.state.transition(
                 CoreState.USING_TOOL, f"Executing {spec.name}", correlation_id, {"tool": spec.name}
             )
+            self._tool_state_owner = asyncio.current_task()
         self.bus.publish(
             "tool.started",
             "tools",
@@ -976,10 +1029,17 @@ class CarlosCore:
             },
             correlation_id,
         )
+        journal_step = None
+        dispatched = False
+        completed = None
+        journal_write = None
         try:
-            journal_step = await asyncio.to_thread(
+            journal_write = asyncio.create_task(asyncio.to_thread(
                 self.task_journal.start_step, correlation_id, spec.name, arguments
-            )
+            ))
+            await asyncio.wait({journal_write})
+            journal_step = journal_write.result()
+            journal_write = None
             if spec.name == "spotify.play" or (
                 spec.name == "browser.video"
                 and arguments.get("action") in {"play", "pause", "mute", "unmute"}
@@ -989,18 +1049,22 @@ class CarlosCore:
 
             correlation_token = execution_correlation.set(correlation_id)
             try:
+                dispatched = True
                 result, execution = await self.execution.execute(spec, arguments)
             finally:
                 execution_correlation.reset(correlation_token)
-            await asyncio.to_thread(
+            completed = {
+                "status": "completed" if execution.ok else "failed",
+                "result": result, "execution": execution.public(),
+            }
+            journal_write = asyncio.create_task(asyncio.to_thread(
                 self.task_journal.finish_step,
                 journal_step,
-                {
-                    "status": "completed" if execution.ok else "failed",
-                    "result": result,
-                    "execution": execution.public(),
-                },
-            )
+                completed,
+            ))
+            await asyncio.wait({journal_write})
+            journal_write.result()
+            journal_write = None
             if spec.name == "settings.audio.app_mute" and result.get("verified"):
                 await self.voice.media_focus.preserve_explicit_mute(
                     str(result.get("stream_index", "")), result.get("stream_identity", [])
@@ -1019,13 +1083,14 @@ class CarlosCore:
                 correlation_id,
                 duration,
             )
-            if not preserve_state:
+            if not preserve_state and self._tool_state_owner is asyncio.current_task():
                 target = (
                     CoreState.THINKING
                     if previous in {CoreState.THINKING, CoreState.RETRIEVING_MEMORY}
                     else CoreState.DORMANT
                 )
                 self.state.transition(target, f"{spec.name} completed", correlation_id)
+                self._tool_state_owner = None
             return {
                 "status": "completed" if execution.ok else "failed",
                 "tool": spec.name,
@@ -1033,6 +1098,37 @@ class CarlosCore:
                 "execution": execution.public(),
                 "duration_ms": round(duration, 3),
             }
+        except asyncio.CancelledError:
+            from .process_runner import settle
+
+            async def record_cancellation():
+                nonlocal journal_step
+                if journal_write is not None:
+                    value, _ = await settle(journal_write)
+                    if completed is None:
+                        journal_step = value
+                cancelled = self._cancelled_tool_result(spec, dispatched=dispatched)
+                if completed is not None:
+                    cancelled["execution"] = completed["execution"]
+                    cancelled["execution_finished"] = True
+                    cancelled["result"] = completed["result"]
+                    cancelled["in_flight_effects_may_complete"] = False
+                else:
+                    await asyncio.to_thread(self.task_journal.finish_step, journal_step, cancelled)
+                self.bus.publish("tool.cancelled", "tools", {
+                    "tool": spec.name, "execution": cancelled["execution"],
+                    "execution_finished": completed is not None,
+                    "in_flight_effects_may_complete": cancelled["in_flight_effects_may_complete"],
+                }, correlation_id)
+                if not preserve_state and self._tool_state_owner is owner:
+                    if self.state.current == CoreState.USING_TOOL:
+                        self.state.transition(CoreState.DORMANT, f"{spec.name} cancelled", correlation_id)
+                    self._tool_state_owner = None
+                return cancelled
+
+            owner = asyncio.current_task()
+            cancelled, _ = await settle(asyncio.create_task(record_cancellation()))
+            return cancelled
         except Exception as error:
             if "journal_step" in locals():
                 await asyncio.to_thread(
@@ -1048,13 +1144,14 @@ class CarlosCore:
                 correlation_id,
                 duration,
             )
-            if not preserve_state:
+            if not preserve_state and self._tool_state_owner is asyncio.current_task():
                 self.state.transition(
                     CoreState.ERROR, f"{spec.name} failed", correlation_id, {"tool": spec.name}
                 )
                 self.state.transition(
                     CoreState.DORMANT, "Recovered from tool failure", correlation_id
                 )
+                self._tool_state_owner = None
             raise
 
     async def _request_planned_tool(
@@ -1189,11 +1286,14 @@ class CarlosCore:
         _trusted_plan: bool = False,
         _planner_owned: bool = False,
     ) -> dict[str, Any]:
+        generation = getattr(self, "_action_generation", 0)
         name = payload.get("name")
         arguments = payload.get("arguments", {})
         if not isinstance(name, str):
             raise ValueError("tool name must be a string")
         spec, validated = self.tools.validate(name, arguments)
+        if getattr(self, "_stopping_tools", False):
+            return self._cancelled_tool_result(spec, dispatched=False)
         policy_error = self.privacy.tool_error(name)
         if policy_error:
             return {"status": "denied", "tool": name, "error": policy_error}
@@ -1223,6 +1323,8 @@ class CarlosCore:
                 validated = {**validated, field: target}
                 self.tools.validate(name, validated)
         correlation_id = str(payload.get("correlation_id") or request_id or uuid.uuid4().hex)
+        if generation != getattr(self, "_action_generation", 0):
+            return self._cancelled_tool_result(spec, dispatched=False)
         runnable_states = {
             CoreState.DORMANT,
             CoreState.THINKING,
@@ -1288,6 +1390,8 @@ class CarlosCore:
                 {"tool": spec.name, "permission": spec.permission.value, "decision": decision},
                 correlation_id,
             )
+            if generation != getattr(self, "_action_generation", 0):
+                return self._cancelled_tool_result(spec, dispatched=False)
             return await self.execute_tool(
                 spec,
                 validated,
@@ -1310,6 +1414,9 @@ class CarlosCore:
             "PENDING",
             pending.arguments_hash,
         )
+        if generation != getattr(self, "_action_generation", 0):
+            self.permissions.cancel(pending.id)
+            return self._cancelled_tool_result(spec, dispatched=False)
         self.state.transition(
             CoreState.WAITING_FOR_CONFIRMATION,
             f"Waiting for permission: {spec.name}",
@@ -1328,6 +1435,7 @@ class CarlosCore:
         }
 
     async def resolve_confirmation(self, payload: dict[str, Any]) -> dict[str, Any]:
+        generation = getattr(self, "_action_generation", 0)
         pending_id = payload.get("id")
         token = payload.get("approval_token")
         approved = payload.get("approved")
@@ -1346,6 +1454,14 @@ class CarlosCore:
             "APPROVED" if decision else "DENIED",
             pending.arguments_hash,
         )
+        if generation != getattr(self, "_action_generation", 0) or getattr(self, "_stopping_tools", False):
+            spec = self.tools.get(pending.tool_name)
+            result = self._cancelled_tool_result(spec, dispatched=False)
+            self.brain.pending.pop(pending.id, None)
+            self.brain._tool_history.pop(pending.correlation_id, None)
+            self.planner.record_external_confirmation(pending.id, result)
+            await asyncio.to_thread(self.task_journal.finish, pending.correlation_id, result)
+            return result
         self.bus.publish(
             "tool.permission_check",
             "security",
@@ -1449,7 +1565,7 @@ class CarlosCore:
 
     async def _handle_voice_command(self, text: str, correlation_id: str) -> dict[str, Any]:
         try:
-            if self._is_stop_all(text):
+            if self._is_stop_all(text) or is_conversation_stop(text):
                 return await self._stop_all_actions(correlation_id)
             return await self._submit_action_clauses(text, correlation_id)
         except Exception as error:
@@ -1730,7 +1846,7 @@ class CarlosCore:
         if self._is_stop_all(text):
             return await self._stop_all_actions(correlation)
         if is_conversation_stop(text):
-            return await self.voice.end_conversation("user_stop_phrase", correlation)
+            return await self._stop_all_actions(correlation, reason="user_stop_phrase")
         if re.fullmatch(r"(?:have|ask) codex (?:to )?fix that[.!?]*", text.strip(), re.I):
             try:
                 reference = self.failure_reference.get()
@@ -2055,7 +2171,36 @@ class CarlosCore:
             )
         )
 
-    async def _stop_all_actions(self, correlation_id: str) -> dict[str, Any]:
+    async def _stop_pending_voice_actions(self, correlation_id: str) -> dict[str, Any]:
+        # stop_capture owns its capture lock until the transcript is dispatched.
+        return await self._stop_all_actions(correlation_id, end_voice=False)
+
+    async def _stop_all_actions(
+        self, correlation_id: str, *, end_voice: bool = True, reason: str = "stop_everything"
+    ) -> dict[str, Any]:
+        self._stop_requests = getattr(self, "_stop_requests", 0) + 1
+        self._stopping_tools = True
+        tasks = tuple(task for task in getattr(self, "_running_tool_tasks", {})
+                      if task is not asyncio.current_task() and not task.done())
+        for task in tasks:
+            task.cancel()
+        try:
+            result = await self._finish_stop_all_actions(correlation_id, end_voice=end_voice, reason=reason)
+            pending = set()
+            if tasks:
+                _, pending = await asyncio.wait(tasks, timeout=2)
+            result["tools"] = {"cancel_requested": len(tasks), "cleanup_pending": len(pending)}
+            if (getattr(getattr(self, "state", None), "current", None) == CoreState.WAITING_FOR_CONFIRMATION
+                    and not self.permissions.list_public() and self.planner.active is None):
+                self.state.transition(CoreState.DORMANT, "Pending actions cancelled", correlation_id)
+            return result
+        finally:
+            self._stop_requests -= 1
+            self._stopping_tools = self._stop_requests > 0
+
+    async def _finish_stop_all_actions(
+        self, correlation_id: str, *, end_voice: bool = True, reason: str = "stop_everything"
+    ) -> dict[str, Any]:
         if hasattr(self, "reply_streams"):
             self.reply_streams.cancel()
         self._action_generation += 1
@@ -2095,7 +2240,8 @@ class CarlosCore:
             await self._interrupt_reasoning_for_wake()
         self.desktop.input.cancel_current()
         await self.desktop.input.close()
-        await self.voice.end_conversation("stop_everything", correlation_id)
+        if end_voice:
+            await self.voice.end_conversation(reason, correlation_id)
         result = {
             "status": "conversation_ended",
             "correlation_id": correlation_id,
@@ -2282,16 +2428,14 @@ class CarlosCore:
             text = str(payload.get("text", ""))
             if self._is_stop_all(text):
                 return await self._stop_all_actions(str(request.get("id") or uuid.uuid4().hex))
+            if is_conversation_stop(text):
+                return await self._stop_all_actions(
+                    str(request.get("id") or uuid.uuid4().hex), reason="user_stop_phrase"
+                )
             if self.planner.active is not None and re.search(
                 r"\b(?:cancel|never mind|stop that|wait)\b", text, re.IGNORECASE
             ):
                 return await self._cancel_active_plan("user_request")
-            if is_conversation_stop(text):
-                self.desktop.input.cancel_current()
-                await self.desktop.input.close()
-                return await self.voice.end_conversation(
-                    "user_stop_phrase", str(request.get("id") or uuid.uuid4().hex)
-                )
             await self._prepare_interactive_request(str(request.get("id") or uuid.uuid4().hex))
             from .voice.reply_stream import desktop_speech
 

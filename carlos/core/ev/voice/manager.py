@@ -80,6 +80,7 @@ class VoiceManager:
             verify=self.stt.transcribe,
         )
         self.command_handler: CommandHandler | None = None
+        self.action_cancel_handler = None
         self.response_handler: ResponseHandler | None = None
         self.interrupt_handler: Callable[[], Awaitable[bool]] | None = None
         self.capture_active = False
@@ -1917,6 +1918,8 @@ class VoiceManager:
                 )
                 return {"status": "empty_transcript", **stopped, **transcription}
             if is_conversation_stop(normalized):
+                if mode != "transcription_test" and self.action_cancel_handler is not None:
+                    await self.action_cancel_handler(correlation_id)
                 self.bus.publish(
                     "voice.conversation_ended",
                     "voice",

@@ -248,3 +248,17 @@ This covers the Core OS process tree. Separate UI, pet, mobile services and
 reparented runtimes are excluded. It is not a whole-machine idle benchmark.
 The existing RAM/CPU cards are labelled Core RAM and Core CPU to reflect their
 original main-process measurements; they do not add workers to those values.
+
+## Stopping pending work
+
+"Stop", "wait", "actually don't", "cancel that" and "stop everything" cancel
+pending tool work, planner actions, engineering jobs, watches, permissions,
+voice interaction and queued speech. Application-specific requests such as
+"stop Spotify" still target that application.
+
+Owned asynchronous tool workers join their cleanup. A direct tool client receives
+a cancelled reply and can keep using the connection. Already-dispatched
+synchronous or OS actions may finish: cancellation is not rollback. Their
+changed-state evidence remains unknown unless execution actually finished and
+returned its postcondition before cancellation. Permission persistence cannot
+start an old operation after a stop.

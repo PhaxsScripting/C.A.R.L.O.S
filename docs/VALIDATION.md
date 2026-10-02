@@ -568,3 +568,27 @@ incomplete reads, the detailed-read cap and cancellation before a second read.
 The resource tool runs only on request and does not control processes or change
 resource policy. Counts/measurement overhead and tree scope stay explicit.
 No main-process memory figure is presented as all Carlos components.
+
+## October 2: direct tool cancellation
+
+1,298 Python tests passed in 81.403 seconds. Thirteen focused checks passed in
+both source trees. Actual isolated Unix-socket requests ran a real owned Python
+worker, stopped it through a second client, reaped its PID, returned a cancelled
+reply and reused the original connection for health. Direct diagnostic calls
+still create no implicit task.
+
+Checks cover nested tools, repeated cancellation while a journal row is being
+written, completed-evidence preservation, externally cancelled callers,
+concurrent stop gates, stale state ownership and permission/confirmation races.
+A synthetic transcript passed through the actual capture-stop lock and action
+cancellation callback without reentering that lock or calling a language model.
+A blocked synchronous fixture finished its write after cancellation; the reply
+correctly left effects unknown and never replayed it.
+
+This establishes execution cancellation and cleanup behavior, not microphone
+recognition quality or acoustic interruption latency. Same-connection short-stop
+queue preemption is being audited separately.
+
+The installed three source files match the tested development tree and import
+with the host Python. The session Core was stopped; installation preserved that
+stopped state and did not launch microphone/model workers or the UI.

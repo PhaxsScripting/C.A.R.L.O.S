@@ -99,6 +99,8 @@ def is_negative_action(text: str) -> bool:
 
 def is_conversation_stop(text: str) -> bool:
     lowered = normalize_transcript(text).casefold().replace("’", "'").strip(" .,!?")
+    if re.fullmatch(r"actually(?:[, ]+)?\s*(?:don't|dont|do not)", lowered):
+        return True
     if re.fullmatch(
         r"(?:(?:alright|all right|okay|ok)[, .!]+)?(?:enough|that's enough|thats enough|stop responding|stop answering)(?:[, .!]+(?:good|thanks|thank you|now|please))?",
         lowered,
