@@ -151,6 +151,41 @@ class NoticeTests(unittest.IsolatedAsyncioTestCase):
             await CarlosCore._notify_event(service, warning)
         self.assertEqual(spawn.await_count, 1)
 
+    async def notification_body(self, message):
+        process = SimpleNamespace(returncode=0, wait=AsyncMock())
+        service = SimpleNamespace(config={'notifications': {'enabled':True}},
+                                  scenes=SimpleNamespace(current={}), _notification_last={})
+        event = self.event('HIGH', message=message)
+        with patch('ev.service.os.path.isfile', return_value=True), patch('ev.service.asyncio.create_subprocess_exec', AsyncMock(return_value=process)) as spawn:
+            await CarlosCore._notify_event(service, event)
+        return spawn.await_args.args[-1]
+
+    async def test_error_credentials_are_redacted_before_notification_arguments(self):
+        body = await self.notification_body('request failed password="NOTICE-CREDENTIAL-CANARY" at worker startup')
+        self.assertNotIn('NOTICE-CREDENTIAL-CANARY', body)
+        self.assertIn('[REDACTED_CREDENTIAL]', body)
+        self.assertIn('worker startup', body)
+
+    async def test_complete_key_is_filtered_before_body_length_limit(self):
+        private_key = '-----BEGIN PRIVATE KEY-----\n' + 'PRIVATE-NOTICE-CANARY-' * 60 + '\n-----END PRIVATE KEY-----'
+        body = await self.notification_body(private_key + ' remaining error context')
+        self.assertNotIn('PRIVATE-NOTICE-CANARY', body)
+        self.assertIn('[REDACTED_PRIVATE_KEY]', body)
+        self.assertIn('remaining error context', body)
+        self.assertLessEqual(len(body), 500)
+
+    async def test_untrusted_error_markup_is_literal_text(self):
+        import xml.etree.ElementTree as XML
+        body = await self.notification_body('build failed in a<b.cpp & <a href="https://example.com">link</a>')
+        self.assertIn('a&lt;b.cpp &amp;', body)
+        self.assertNotIn('<a ', body)
+        self.assertIn('&lt;a href=', body)
+        original = 'a' * 499 + '& trailing content'
+        body = await self.notification_body(original)
+        self.assertEqual(XML.fromstring('<body>' + body + '</body>').text, original[:500])
+        body = await self.notification_body('error\x00\x1b in\ud800 worker')
+        self.assertEqual(XML.fromstring('<body>' + body + '</body>').text, 'error in worker')
+
     async def test_support_exposes_only_queue_counts(self):
         from ev.paths import Paths
         with tempfile.TemporaryDirectory() as directory:

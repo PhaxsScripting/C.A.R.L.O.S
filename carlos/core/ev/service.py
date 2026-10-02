@@ -4,6 +4,7 @@ from ev.platform import executable as _platform_executable
 
 import asyncio
 import fcntl
+import html
 import json
 import logging
 import os
@@ -29,7 +30,7 @@ from .events import Event, PhaxEventBus
 from .execution import ExecutionController
 from .intents import split_action_clauses
 from .ipc import IpcServer
-from .logging_utils import configure_logging
+from .logging_utils import configure_logging, redact_credentials
 from .lifecycle import shutdown_step, shutdown_tasks
 from .memory import MemoryStore
 from .paths import Paths, get_paths
@@ -420,13 +421,15 @@ class CarlosCore:
         ):
             return
         self._notification_last[key] = now
+        body = redact_credentials(body)
+        body = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff\ufffe\uffff]", "", body)[:500]
         process = await asyncio.create_subprocess_exec(
             _platform_executable("/usr/bin/notify-send"),
             "--app-name=Carlos",
             "--icon=ev-control-center",
             f"--urgency={urgency}",
             title,
-            body[:500],
+            html.escape(body),
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )

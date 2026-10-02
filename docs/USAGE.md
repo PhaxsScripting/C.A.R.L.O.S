@@ -151,3 +151,9 @@ message contents. A first warning has no repeat cooldown; escalating from a
 high thermal warning to an emergency is a new priority and can be reported.
 This ordering does not interrupt speech, executing tools or an in-flight
 notification backend call. Existing quiet-mode and notification settings apply.
+
+Desktop notice text uses the same recognizable credential filter as logs.
+Filtering happens before the 500-character display limit, so truncation cannot
+cut a private-key block before it is recognized. Markup and invalid XML control
+characters are handled as text, without interpreting error output as a link
+or image. Unlabelled secrets still cannot be reliably identified.

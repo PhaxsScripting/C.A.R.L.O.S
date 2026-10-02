@@ -482,3 +482,13 @@ retained during 100 background events and delivered first after release. The
 32-slot queue discarded 69 background notices and no emergency; no actions were
 executed. This is IPC/persistence acceptance with a simulated notifier, not an
 actual desktop notification, acoustic preemption or end-to-end latency target.
+
+## October 1: notice text
+
+1,218 Python tests passed in 69.089 seconds. The final fifteen notice checks
+passed again after boundary handling was added. New checks inspect the actual
+subprocess arguments with a simulated notifier: recognized credentials and a
+long complete private-key block are filtered before truncation. XML parsing
+confirms literal markup, complete entities at the display boundary, and removal
+of invalid control/surrogate characters. No real desktop notification was sent
+by these checks; arbitrary unlabelled secrets remain outside the filter.
