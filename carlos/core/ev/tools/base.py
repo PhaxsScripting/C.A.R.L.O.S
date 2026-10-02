@@ -6,7 +6,7 @@ import json
 import logging
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from copy import deepcopy
 from typing import Any, Awaitable, Callable
 
@@ -42,6 +42,7 @@ class ToolContext:
     capability_probe: Any = None
     project_changed: Any = None
     project_scope: Any = None
+    audio_undo: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(slots=True)

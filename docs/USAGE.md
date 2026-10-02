@@ -284,6 +284,20 @@ thread registers, so a cancelled request cannot start fresh work later.
 Catalogue snapshots include contract_gaps for undeclared offline support,
 reversibility or output schemas. Undeclared values are not a support claim;
 request cancellation does not mean an already-dispatched effect can be undone.
+
+Say `undo volume`, `undo mute`, or `undo the audio change` to reverse Carlos's
+most recent output-volume or mute adjustment. The undo history stays in memory,
+holds up to 32 changes, and expires after ten minutes. It restores exact channel
+levels on the original output without changing the default route. A later manual
+adjustment to that setting, a replaced device, or an audio-server restart prevents
+restoration. Volume undo keeps the current mute state; mute undo keeps current
+channel levels. A request naming volume or mute refuses if the latest change
+affects the other setting. Generic `undo that` still uses the existing window-undo path.
+Unsupported device metadata, remote audio servers, or an original level above
+100% leave ordinary audio controls usable but report `undo_available: false`.
+These checks use separate observations and writes; they cannot exclude an external
+adjustment happening in the interval between them. Stop does not restore audio
+automatically, and an already-dispatched audio command may still finish.
 Destructive and privileged tools always require confirmation, including with
 strict permissions disabled or a read-only declaration. High-risk modification
 confirmation still follows the strict-permissions setting.

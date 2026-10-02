@@ -640,6 +640,11 @@ def audio_request(clean: str) -> Action | None:
         r"\b(?:mic|microphone|spotify|firefox|youtube|discord|headphones?|speakers?)\b", clean
     ):
         return None  # Do not redirect an app/device-specific operation to global output.
+    if undo := re.fullmatch(
+        r"(?:undo|revert)(?: the| my)?(?: last)? (volume|mute|audio|sound)(?: change| adjustment)?",
+        clean,
+    ):
+        return Action("audio.undo_last", {"field": undo[1]} if undo[1] in {'volume', 'mute'} else {})
     if re.fullmatch(
         r"(?:what(?:'s| is)(?: my| the| current)? (?:volume|sound)(?: level)?|how loud is (?:it|my (?:volume|sound))|check (?:my |the )?volume)",
         clean,

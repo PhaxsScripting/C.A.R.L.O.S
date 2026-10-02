@@ -12,6 +12,11 @@ from ev.service import CarlosCore
 CONDITIONS = [{"kind": "audio_muted", "expected": True}]
 
 
+def audio_state(muted):
+    return {"sink": "fixture-output", "percent": 50, "muted": muted,
+            "message": "Volume is 50%" + (" and muted." if muted else ".")}
+
+
 class WaitTests(unittest.IsolatedAsyncioTestCase):
     async def test_observes_changed_state_without_replaying_actions(self):
         request = AsyncMock(
@@ -63,7 +68,7 @@ class WaitTests(unittest.IsolatedAsyncioTestCase):
                 paths=Paths(*(root / n for n in ("config", "data", "state", "cache", "runtime")))
             )
             try:
-                service.tools.get("audio.get_volume").executor = lambda a, c: {"muted": True}
+                service.tools.get("audio.get_volume").executor = lambda a, c: audio_state(True)
                 async with asyncio.timeout(2):
                     result = await service._request_model_tool(
                         {"name": "agent.wait_for", "arguments": {"conditions": CONDITIONS}},
@@ -98,7 +103,7 @@ class WaitTests(unittest.IsolatedAsyncioTestCase):
                 paths=Paths(*(root / n for n in ("config", "data", "state", "cache", "runtime")))
             )
             try:
-                service.tools.get("audio.get_volume").executor = lambda a, c: {"muted": False}
+                service.tools.get("audio.get_volume").executor = lambda a, c: audio_state(False)
                 task = asyncio.create_task(
                     service._request_model_tool(
                         {
@@ -148,7 +153,7 @@ class WaitTests(unittest.IsolatedAsyncioTestCase):
                 paths=Paths(*(root / n for n in ("config", "data", "state", "cache", "runtime")))
             )
             try:
-                service.tools.get("audio.get_volume").executor = lambda a, c: {"muted": False}
+                service.tools.get("audio.get_volume").executor = lambda a, c: audio_state(False)
                 task = asyncio.create_task(
                     service.request_tool(
                         {

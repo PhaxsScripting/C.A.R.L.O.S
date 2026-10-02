@@ -27,8 +27,13 @@ from ..permissions import Permission
 from ..telemetry import read_temperature
 from .base import ToolContext, ToolRegistry, ToolSpec, ValidationError
 from .media import control_media
+from . import audio_undo
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
+_AUDIO_STATE_PROPERTIES = {
+    "sink": {"type": "string"}, "percent": {"type": "integer", "minimum": 0},
+    "muted": {"type": "boolean"}, "message": {"type": "string"},
+}
 PROTECTED_PROCESSES = {"init", "systemd", "plasmashell", "kwin_wayland", "dbus-daemon", "ev-core"}
 _SCRIPT_INTERPRETER = re.compile(
     r"^(?:python(?:\d+(?:\.\d+)*)?|pypy\d*|node(?:js)?|ruby|perl|lua(?:\d+(?:\.\d+)*)?)$",
@@ -883,7 +888,11 @@ def set_volume(arguments: dict[str, Any], _context: ToolContext) -> dict[str, An
     if not 0 <= percent <= 100:
         raise ValueError("Normal output volume must be between 0 and 100 percent")
     with _OUTPUT_CONTROL_LOCK:
-        return _set_output_percent(get_volume({}, _context), percent)
+        before = get_volume({}, _context)
+        saved = audio_undo.snapshot(before['sink']) if _context is not None else None
+        result = _set_output_percent(before, percent)
+        result['undo_available'] = audio_undo.remember(_context, saved, 'volume', result['verified'])
+        return result
 
 
 def adjust_volume(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -892,13 +901,17 @@ def adjust_volume(arguments: dict[str, Any], context: ToolContext) -> dict[str, 
         raise ValueError("Specify a nonzero volume adjustment up to 100 percentage points")
     with _OUTPUT_CONTROL_LOCK:
         before = get_volume({}, context)
-        return _set_output_percent(before, max(0, min(100, before["percent"] + delta)))
+        saved = audio_undo.snapshot(before['sink']) if context is not None else None
+        result = _set_output_percent(before, max(0, min(100, before["percent"] + delta)))
+        result['undo_available'] = audio_undo.remember(context, saved, 'volume', result['verified'])
+        return result
 
 
 def set_mute(arguments: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
     muted = bool(arguments["muted"])
     with _OUTPUT_CONTROL_LOCK:
         before = get_volume({}, _context)
+        saved = audio_undo.snapshot(before['sink']) if _context is not None else None
         result = run_command(
             [
                 _platform_executable("/usr/bin/pactl"),
@@ -914,6 +927,7 @@ def set_mute(arguments: dict[str, Any], _context: ToolContext) -> dict[str, Any]
             **after,
             "set": verified,
             "verified": verified,
+            "undo_available": audio_undo.remember(_context, saved, 'mute', verified),
             "message": (
                 ("Output muted." if muted else "Output unmuted.")
                 if verified
@@ -2563,6 +2577,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_volume,
+            read_only=True, offline_available=True, reversible=True,
+            output_schema=object_schema(_AUDIO_STATE_PROPERTIES, list(_AUDIO_STATE_PROPERTIES)),
         )
     )
     register(
@@ -2575,6 +2591,13 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 {"percent": {"type": "integer", "minimum": 0, "maximum": 100}}, ["percent"]
             ),
             set_volume,
+            cancellable=False,
+            offline_available=True,
+            reversible=True,
+            output_schema=object_schema({**_AUDIO_STATE_PROPERTIES,
+                "set": {"type": "boolean"}, "verified": {"type": "boolean"},
+                "requested_percent": {"type": "integer"}, "undo_available": {"type": "boolean"},
+            }, [*_AUDIO_STATE_PROPERTIES, "set", "verified", "requested_percent", "undo_available"]),
         )
     )
     register(
@@ -2588,6 +2611,12 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             ),
             adjust_volume,
             cancellable=False,
+            offline_available=True,
+            reversible=True,
+            output_schema=object_schema({**_AUDIO_STATE_PROPERTIES,
+                "set": {"type": "boolean"}, "verified": {"type": "boolean"},
+                "requested_percent": {"type": "integer"}, "undo_available": {"type": "boolean"},
+            }, [*_AUDIO_STATE_PROPERTIES, "set", "verified", "requested_percent", "undo_available"]),
         )
     )
     register(
@@ -2598,6 +2627,32 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             object_schema({"muted": {"type": "boolean"}}, ["muted"]),
             set_mute,
+            cancellable=False,
+            offline_available=True,
+            reversible=True,
+            output_schema=object_schema({**_AUDIO_STATE_PROPERTIES,
+                "set": {"type": "boolean"}, "verified": {"type": "boolean"},
+                "undo_available": {"type": "boolean"},
+            }, [*_AUDIO_STATE_PROPERTIES, "set", "verified", "undo_available"]),
+        )
+    )
+    register(
+        ToolSpec(
+            "audio.undo_last", "AUDIO",
+            "Undo Carlos's last volume or mute change within ten minutes on the original output. Refuse if the device, server or affected setting changed. Restore exact per-channel volume without changing the default route.",
+            Permission.LOW_RISK,
+            object_schema({"field": {"type": "string", "enum": ["volume", "mute"]}}),
+            audio_undo.undo_last,
+            cancellable=False, offline_available=True, reversible=False,
+            output_schema=object_schema({
+                "verified": {"type": "boolean"}, "restored": {"type": "boolean"},
+                "reason": {"type": "string"}, "discarded": {"type": "boolean"},
+                "field": {"type": "string", "enum": ["volume", "mute"]},
+                "sink": {"type": "string"}, "command_ok": {"type": "boolean"},
+                "message": {"type": "string"},
+            }, ["verified", "restored"]),
+            verification="Exact original device identity and per-channel volume or mute readback",
+            side_effects=("Restore one recent output volume or mute setting",),
         )
     )
     register(
