@@ -157,3 +157,11 @@ Filtering happens before the 500-character display limit, so truncation cannot
 cut a private-key block before it is recognized. Markup and invalid XML control
 characters are handled as text, without interpreting error output as a link
 or image. Unlabelled secrets still cannot be reliably identified.
+
+Security advisory checks report incomplete when the command fails, times out or
+returns unrecognized/truncated output. Gentoo uses local GLSA data; it does not
+sync repositories or install anything. Cached results carry a timestamp and
+expire after fifteen minutes. A clear GLSA result covers that local advisory
+scan, not every vulnerability. Permission audits inspect the path itself and
+report missing, unreadable or symlinked required paths as incomplete. Their
+confirmation list comes from the running tool catalog.

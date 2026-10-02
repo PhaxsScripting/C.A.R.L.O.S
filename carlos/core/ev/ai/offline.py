@@ -1041,6 +1041,8 @@ class OfflineProvider(Provider):
         elif name == "security.ev":
             count = len(result.get("findings", []))
             text = (
+                "The local permission audit is incomplete. Details are in Security."
+                if result.get("status") == "INCOMPLETE" else
                 "E.V.'s sensitive local files and IPC permissions look private."
                 if count == 0
                 else f"E.V.'s permission audit found {count} item{'s' if count != 1 else ''} to review."

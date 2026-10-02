@@ -114,7 +114,7 @@ class CarlosCore:
         self.vision = ScreenPerception(
             self.paths.cache_dir / "captures", self.desktop, self.config.get("vision", {})
         )
-        self.security_center = SecurityCenter(self.paths, self.config)
+        self.security_center = SecurityCenter(self.paths, self.config, lambda: self.tools.catalog())
         try:
             self._event_loop = asyncio.get_running_loop()
         except RuntimeError:

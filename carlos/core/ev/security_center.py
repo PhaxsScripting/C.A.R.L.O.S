@@ -11,10 +11,13 @@ import socket
 import stat
 import subprocess
 import time
+from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .paths import Paths
+from .logging_utils import redact_credentials
 
 
 def _run(arguments: list[str], timeout: float = 8.0, maximum: int = 200_000) -> dict[str, Any]:
@@ -43,6 +46,7 @@ def _run(arguments: list[str], timeout: float = 8.0, maximum: int = 200_000) -> 
         "returncode": result.returncode,
         "stdout": result.stdout[:maximum],
         "stderr": result.stderr[:maximum],
+        "output_truncated": len(result.stdout) > maximum or len(result.stderr) > maximum,
         "duration_ms": round((time.perf_counter() - started) * 1000, 3),
     }
 
@@ -59,7 +63,8 @@ def _binding_scope(address: str) -> str:
 class SecurityCenter:
     """Read-only local security inspection with evidence and confidence."""
 
-    def __init__(self, paths: Paths, config: dict[str, Any]) -> None:
+    def __init__(self, paths: Paths, config: dict[str, Any],
+                 catalog: Callable[[], list[dict[str, Any]]] | None = None) -> None:
         from .platform import IS_FREEBSD
         from .platform.freebsd_security import NativeSecurity
 
@@ -67,6 +72,8 @@ class SecurityCenter:
         self.paths = paths
         self.config = config
         self._updates_cache: dict[str, Any] | None = None
+        self._updates_checked = 0.0
+        self._catalog = catalog
 
     def firewall(self) -> dict[str, Any]:
         from .platform import IS_FREEBSD
@@ -356,7 +363,9 @@ class SecurityCenter:
         if self._native is not None:
             return self._native.updates(refresh)
         if self._updates_cache is not None and not refresh:
-            return dict(self._updates_cache)
+            age = max(0.0, time.monotonic() - self._updates_checked)
+            if age < 900:
+                return {**deepcopy(self._updates_cache), "cached": True, "age_seconds": round(age, 3)}
         glsa = shutil.which("glsa-check")
         if not glsa:
             return {
@@ -374,21 +383,40 @@ class SecurityCenter:
                     "The potentially slow GLSA scan runs only when explicitly requested"
                 ],
             }
-        result = _run([glsa, "-l"], timeout=20, maximum=100_000)
-        unresolved = [
-            line.strip()
-            for line in result["stdout"].splitlines()
-            if line.strip() and not line.startswith("[")
-        ]
+        result = _run([glsa, "-n", "-l", "affected"], timeout=20, maximum=100_000)
+        unresolved = []
+        unparsed = 0
+        if result["ok"]:
+            for line in result["stdout"].splitlines():
+                if not line.strip():
+                    continue
+                match = re.fullmatch(r"\s*(\d{6}-\d+)\s+\[([AUN])\]\s+(.+)", line)
+                if match is None:
+                    unparsed += 1
+                elif match[2] == "N":
+                    unresolved.append(line.strip())
+        complete = bool(result["ok"] and not unparsed and not result.get("output_truncated"))
+        limitations = ["This reads local GLSA data, not every package update or live advisory feed"]
+        if not complete:
+            limitations.append("The scan did not complete reliably; no clean-system claim was made")
+        if not result["ok"]:
+            limitations.append(redact_credentials(result["stderr"])[-500:] or "GLSA command failed")
         self._updates_cache = {
-            "status": "REVIEW" if unresolved else "NO_UNRESOLVED_GLSA_REPORTED",
+            "status": ("REVIEW" if unresolved else
+                       "NO_UNRESOLVED_GLSA_REPORTED" if complete else "INCOMPLETE"),
+            "complete": complete,
             "unresolved": unresolved[:100],
-            "confidence": "MEDIUM",
-            "evidence": ["glsa-check -l"],
-            "limitations": ["This checks GLSA advisories, not every possible package update"],
+            "unresolved_count": len(unresolved),
+            "confidence": "MEDIUM" if complete else "LOW",
+            "evidence": ["glsa-check -n -l affected"],
+            "limitations": limitations,
             "duration_ms": result["duration_ms"],
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+            "cached": False,
+            "age_seconds": 0.0,
         }
-        return dict(self._updates_cache)
+        self._updates_checked = time.monotonic()
+        return deepcopy(self._updates_cache)
 
     def ev_security(self) -> dict[str, Any]:
         targets = {
@@ -402,21 +430,36 @@ class SecurityCenter:
         findings: list[dict[str, Any]] = []
         uid = os.getuid()
         for name, path in targets.items():
-            if not path.exists():
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
                 files.append({"name": name, "path": str(path), "exists": False})
                 continue
-            info = path.stat()
+            except OSError:
+                files.append({"name": name, "path": str(path), "exists": None,
+                              "inspection": "UNREADABLE"})
+                continue
             mode = stat.S_IMODE(info.st_mode)
+            try:
+                owner = pwd.getpwuid(info.st_uid).pw_name
+            except KeyError:
+                owner = str(info.st_uid)
             item = {
                 "name": name,
                 "path": str(path),
                 "exists": True,
                 "owner_uid": info.st_uid,
-                "owner": pwd.getpwuid(info.st_uid).pw_name,
+                "owner": owner,
                 "mode": oct(mode),
                 "is_socket": stat.S_ISSOCK(info.st_mode),
+                "is_symlink": stat.S_ISLNK(info.st_mode),
+                "is_directory": stat.S_ISDIR(info.st_mode),
+                "is_file": stat.S_ISREG(info.st_mode),
             }
             files.append(item)
+            if item["is_symlink"]:
+                findings.append({"severity": "MEDIUM", "kind": "SYMLINK", "target": name,
+                                 "detail": "Sensitive path is a symlink; its destination was not audited"})
             if info.st_uid != uid:
                 findings.append(
                     {
@@ -426,7 +469,7 @@ class SecurityCenter:
                         "detail": "Sensitive E.V. path is not owned by the current user",
                     }
                 )
-            if mode & 0o077:
+            if not item["is_symlink"] and mode & 0o077:
                 findings.append(
                     {
                         "severity": (
@@ -439,26 +482,42 @@ class SecurityCenter:
                         "detail": f"Mode {oct(mode)} grants group/other access",
                     }
                 )
+        by_name = {item["name"]: item for item in files}
+        complete = all(by_name[name].get("exists") is True
+                       and not by_name[name].get("is_symlink")
+                       for name in ("runtime_directory", "ipc_socket", "config", "database"))
+        complete = complete and all(item.get("exists") is not None for item in files)
+        complete = complete and by_name["runtime_directory"].get("is_directory", False)
+        complete = complete and by_name["ipc_socket"].get("is_socket", False)
+        complete = complete and all(by_name[name].get("is_file", False) for name in ("config", "database"))
+        scope = None
+        if self._catalog is not None:
+            scope = sorted(row["name"] for row in self._catalog() if row.get("requires_confirmation"))
         return {
+            "status": "COMPLETE" if complete else "INCOMPLETE",
             "files": files,
             "findings": findings,
-            "ipc_local_only": self.paths.socket.exists()
-            and stat.S_ISSOCK(self.paths.socket.stat().st_mode),
+            "ipc_local_only": by_name["ipc_socket"].get("is_socket", False),
             "api_key_storage": (
-                "private provider.env allowlist"
-                if (self.paths.config_dir / "provider.env").exists()
-                else "no provider.env present"
+                "provider.env present; permissions shown above"
+                if by_name["provider_environment"].get("exists") is True
+                   and by_name["provider_environment"].get("is_file")
+                else "no provider.env present" if by_name["provider_environment"].get("exists") is False
+                else "UNVERIFIED"
             ),
             "approval_mode": str(
                 self.config.get("security", {}).get("approval_mode", "codex_only")
             ),
-            "approval_scope": ["development.coding_agent_execute"],
+            "approval_scope": scope,
+            "approval_scope_source": "runtime tool catalog" if scope is not None else "UNAVAILABLE",
+            "limitations": ([] if complete else ["Some required sensitive paths could not be audited"])
+                           + ([] if scope is not None else ["Runtime confirmation catalog was not supplied"]),
             "evidence": [
                 "lstat owner and permission bits",
                 "Unix-domain socket type",
                 "E.V. runtime config",
             ],
-            "confidence": "HIGH",
+            "confidence": "HIGH" if complete else "LOW",
         }
 
     def overview(self) -> dict[str, Any]:
