@@ -173,6 +173,19 @@ function execute(command) {
         window.closeWindow();
     } else if (action === "move_to_output") {
         const output = findOutput(args.output);
+        const expected = args.expected_output_identity;
+        if (expected) {
+            const matches = [];
+            for (let i = 0; i < workspace.screens.length; ++i) {
+                const candidate = workspace.screens[i];
+                const metadata = serializeOutput(candidate);
+                if (metadata.manufacturer === expected.manufacturer &&
+                    metadata.model === expected.model &&
+                    metadata.serial_number === expected.serial_number) matches.push(candidate);
+            }
+            if (!expected.serial_number || matches.length !== 1 || matches[0] !== output)
+                throw new Error("Monitor identity changed before execution; no window moved");
+        }
         // This native primitive preserves KWin's own maximize/tile semantics and
         // is more reliable than synthesizing cross-output coordinates.
         workspace.sendClientToScreen(window, output);

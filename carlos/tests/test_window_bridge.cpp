@@ -6,6 +6,31 @@
 class WindowBridgeTests : public QObject {
     Q_OBJECT
   private slots:
+    void monitorIdentityAtMutation() {
+        QFile source(CARLOS_WINDOW_BRIDGE);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        QJSEngine engine;
+        QVERIFY(!engine.evaluate(R"JS(
+function callDBus() {}
+var moves=0;
+var panel={name:'HDMI-A-1',manufacturer:'Fixture',model:'Panel',serialNumber:'A',geometry:{x:0,y:0,width:800,height:600}};
+var target={internalId:'owned',pid:123,desktops:[],frameGeometry:{x:0,y:0,width:800,height:600},
+ clientGeometry:{x:0,y:0,width:800,height:600},normalWindow:true,maximizeMode:0};
+var workspace={screens:[panel],stackingOrder:[target],sendClientToScreen:function(window,output){moves++;window.output=output;}};
+var expected={manufacturer:'Fixture',model:'Panel',serial_number:'A'};
+var command={action:'move_to_output',arguments:{window_id:'owned',output:'HDMI-A-1',expected_output_identity:expected}};
+)JS").isError());
+        QVERIFY(!engine.evaluate(QString::fromUtf8(source.readAll())).isError());
+        auto check = [&engine](const QString &code) {
+            const auto result = engine.evaluate(code);
+            QVERIFY2(!result.isError(), qPrintable(result.toString()));
+        };
+        check("execute(command);if(moves!==1||target.output!==panel)throw Error('matching panel not moved');");
+        check("panel.serialNumber='B';var rejected=false;try{execute(command);}catch(error){rejected=true;}if(!rejected||moves!==1)throw Error('replacement accepted');");
+        check("panel.serialNumber='A';workspace.screens.push({name:'DP-3',manufacturer:'Fixture',model:'Panel',serialNumber:'A',geometry:panel.geometry});var rejected=false;try{execute(command);}catch(error){rejected=true;}if(!rejected||moves!==1)throw Error('duplicate accepted');");
+        check("workspace.screens.pop();panel.name='DP-2';var rejected=false;try{execute(command);}catch(error){rejected=true;}if(!rejected||moves!==1)throw Error('stale connector accepted');command.arguments.output='DP-2';execute(command);if(moves!==2)throw Error('fresh connector rejected');");
+        check("delete command.arguments.expected_output_identity;panel.serialNumber='';execute(command);if(moves!==3)throw Error('explicit connector move broken');");
+    }
     void nativeStateAndRestore() {
         QFile source(CARLOS_WINDOW_BRIDGE);
         QVERIFY(source.open(QIODevice::ReadOnly));

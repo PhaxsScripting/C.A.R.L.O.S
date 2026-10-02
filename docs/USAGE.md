@@ -221,3 +221,9 @@ inter-op thread. These limits are per pool, not a total process thread limit.
 Source images are bounded to 16 MiB and 16 million pixels. The source capture
 keeps its ordinary expiry/deletion policy. Confidence is an OCR estimate, not
 independent proof of visible text, a click target or a completed action.
+
+Deterministic monitor-move/open-on-monitor plans carry the resolved output
+metadata through execution. A usable unique serial is checked before dispatch,
+inside KWin immediately before the move, and during the placement readback.
+If identity changes or becomes ambiguous, resolve the target again. A screen
+without a usable serial still has connector-only semantics.

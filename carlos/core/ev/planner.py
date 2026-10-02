@@ -985,6 +985,7 @@ class TaskPlanner:
                     {
                         "window_id": {"$ref": "window.result.window.id"},
                         "output": {"$ref": "output.result.output.name"},
+                        "expected_output": {"$ref": "output.result.output"},
                     },
                     "Window center is on requested output",
                     ["window", "output"],
@@ -1041,6 +1042,7 @@ class TaskPlanner:
                     {
                         "window_id": {"$ref": "window.result.window.id"},
                         "output": {"$ref": "output.result.output.name"},
+                        "expected_output": {"$ref": "output.result.output"},
                     },
                     "Window appears on requested output",
                     ["window", "output"],

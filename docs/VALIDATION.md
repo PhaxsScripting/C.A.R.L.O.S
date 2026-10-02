@@ -531,3 +531,18 @@ peaked at seven process threads and sampled 369 MiB RSS. This is a synthetic
 image check, not desktop recognition accuracy or a latency distribution. No
 host screen, microphone or audio output was used. OCR results explicitly remain
 unverified inference for scene truth and do not grant coordinate actions.
+
+## October 1: monitor identity through execution
+
+1,272 Python tests passed in 71.538 seconds; all five native groups passed in
+12.18 seconds. Plans carry resolved display metadata into the move. The Python
+preflight rejects changed/duplicate hardware, KWin checks identity again at the
+mutation, and postcondition readback cannot verify a later replacement. Native
+QJSEngine tests execute the actual bridge source for matching, replaced, duplicate
+and changed-connector cases; simulated topology is not physical hotplug.
+
+The installed core and actual KWin moved a disposable owned GTK window to the
+external HDMI display with verified identity, then to the laptop connector.
+Both placement readbacks passed and the unrelated foreground window stayed
+unchanged. The laptop lacks a usable unique serial and therefore has explicit
+connector-only coverage. No other windows or saved nickname preferences changed.

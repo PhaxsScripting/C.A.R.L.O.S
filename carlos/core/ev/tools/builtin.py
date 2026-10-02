@@ -1924,12 +1924,33 @@ async def desktop_move_window_to_output(
         for item in world.get("outputs", [])
     ):
         raise ValidationError("output is unavailable")
+    from ..monitor_aliases import identity, usable_identity
+
+    outputs = [item for item in world.get('outputs', []) if item.get('enabled', True)]
+    destination = next(item for item in outputs if str(item.get('name')) == output)
+    expected = arguments.get('expected_output', destination)
+    if expected.get('name', output) != output:
+        raise ValidationError('The resolved monitor connector changed; resolve it again')
+    guard = {}
+    if usable_identity(expected):
+        matches = [item for item in outputs if identity(item) == identity(expected)]
+        if len(matches) != 1 or matches[0].get('name') != output:
+            raise ValidationError('The resolved monitor identity changed or became ambiguous; no window moved')
+        guard = {key: expected.get(key, '') for key in ('manufacturer', 'model', 'serial_number')}
     model.remember_window(initial, "move_to_output")
-    await model.bridge.request("move_to_output", {"window_id": window_id, "output": output})
+    bridge_arguments = {"window_id": window_id, "output": output}
+    if guard:
+        bridge_arguments['expected_output_identity'] = guard
+    await model.bridge.request("move_to_output", bridge_arguments)
     actual = await _window_after(context, window_id, 0.2)
+    final_world = await model.snapshot(force=True) if guard else {}
+    matching = [item for item in final_world.get('outputs', []) if item.get('enabled', True) and identity(item) == identity(guard)]
+    identity_verified = not guard or (len(matching) == 1 and matching[0].get('name') == output)
     return {
-        "verified": bool(actual and actual.get("output") == output),
+        "verified": bool(actual and actual.get("output") == output and identity_verified),
         "expected_output": output,
+        "identity_guarded": bool(guard),
+        "identity_verified": identity_verified if guard else None,
         "window": actual,
     }
 
@@ -3230,6 +3251,10 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 {
                     "window_id": window_id,
                     "output": {"type": "string", "minLength": 1, "maxLength": 100},
+                    "expected_output": {"type": "object", "properties": {
+                        key: {"type": "string", "maxLength": 256}
+                        for key in ('name', 'manufacturer', 'model', 'serial_number')
+                    }},
                 },
                 ["window_id", "output"],
             ),

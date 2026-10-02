@@ -17,7 +17,7 @@ from ev.paths import Paths
 from ev.service import CarlosCore
 from ev.tools import ToolContext
 from ev.tools.base import ValidationError
-from ev.tools.builtin import desktop_resolve_output
+from ev.tools.builtin import desktop_resolve_output, desktop_move_window_to_output
 from ev.tools.monitor_aliases import save_alias, list_aliases, forget_alias
 from ev.voice.normalization import normalize_transcript
 
@@ -79,6 +79,47 @@ class MonitorAliasTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(serial=serial):
                 output = {**self.outputs[1], 'serial_number': serial}
                 self.assertEqual(make_binding(output, [output])['binding'], 'CONNECTOR')
+
+    async def test_replaced_or_duplicate_panel_between_resolution_and_move_stops_before_bridge(self):
+        from copy import deepcopy
+
+        window = {'id': 'owned', 'title': 'Fixture', 'app_id': 'fixture', 'normal': True, 'special': False, 'output': 'eDP-1',
+                  'geometry': {'width': 800, 'height': 600}}
+        self.world['windows'] = [window]
+        self.model.bridge.request = AsyncMock()
+        expected = deepcopy(self.outputs[1])
+        for change in ('replacement', 'duplicate'):
+            with self.subTest(change=change):
+                if change == 'replacement':
+                    self.outputs[1]['serial_number'] = 'NEW_PANEL'
+                else:
+                    self.outputs[1]['serial_number'] = 'SERIAL_A'
+                    self.outputs.append({**self.outputs[1], 'name': 'DP-3'})
+                with self.assertRaisesRegex(ValidationError, 'identity changed or became ambiguous'):
+                    await desktop_move_window_to_output({'window_id': 'owned', 'output': 'HDMI-A-1',
+                                                         'expected_output': expected}, self.context)
+                self.model.bridge.request.assert_not_awaited()
+                self.assertEqual(window['output'], 'eDP-1')
+
+    async def test_identity_change_after_dispatch_cannot_claim_verified_placement(self):
+        from copy import deepcopy
+
+        expected = deepcopy(self.outputs[1])
+        window = {'id': 'owned', 'title': 'Fixture', 'app_id': 'fixture', 'normal': True, 'special': False, 'output': 'eDP-1',
+                  'geometry': {'width': 800, 'height': 600}}
+        self.world['windows'] = [window]
+
+        async def move(*args, **kwargs):
+            window['output'] = 'HDMI-A-1'
+            self.outputs[1]['serial_number'] = 'NEW_PANEL'
+
+        self.model.bridge.request = AsyncMock(side_effect=move)
+        result = await desktop_move_window_to_output({'window_id': 'owned', 'output': 'HDMI-A-1',
+                                                     'expected_output': expected}, self.context)
+        self.assertFalse(result['verified'])
+        self.assertTrue(result['identity_guarded'])
+        self.assertFalse(result['identity_verified'])
+        self.assertEqual(self.model.bridge.request.await_args.args[1]['expected_output_identity']['serial_number'], 'SERIAL_A')
 
     async def test_aliases_cannot_replace_dynamic_context_or_connector_names(self):
         for name in ('current', 'this monitor', 'other monitor', 'eDP-1', 'x; reboot'):
@@ -193,6 +234,7 @@ class MonitorCommandTests(unittest.IsolatedAsyncioTestCase):
                 moved = await command(normalize_transcript('Carlos, put Firefox on the big monitor.'))
                 self.assertEqual(moved['status'], 'completed', moved)
                 self.assertEqual(window['output'], 'DP-2')
+                self.assertEqual(moved['plan']['steps'][-1]['actual_result']['result']['identity_verified'], True)
                 self.assertEqual(len(mutations), 1)
                 panel['enabled'] = False
                 refused = await command('put Firefox on the big monitor')
