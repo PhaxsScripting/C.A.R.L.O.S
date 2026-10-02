@@ -3,6 +3,12 @@ from ev.events import PhaxEventBus
 
 
 class PriorityTests(unittest.TestCase):
+    def test_invalid_thermal_values_do_not_grant_emergency_priority(self):
+        bus = PhaxEventBus()
+        for value in (None, True, '99', float('nan'), float('inf'), float('-inf'), 10 ** 400):
+            event = bus.publish('system.warning', 'telemetry', {'kind':'thermal','celsius':value})
+            self.assertNotEqual(event.priority, 'EMERGENCY')
+
     def test_priority_uses_observed_source_and_not_model_claim(self):
         bus = PhaxEventBus()
         self.assertEqual(

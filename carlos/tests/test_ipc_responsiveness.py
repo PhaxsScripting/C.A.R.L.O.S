@@ -1,4 +1,5 @@
 from __future__ import annotations
+from ev.notices import NoticeQueue
 
 import asyncio
 import json
@@ -142,7 +143,7 @@ class NotificationIsolationTests(unittest.IsolatedAsyncioTestCase):
                 raise OSError("database unavailable")
 
         service = SimpleNamespace(
-            _notification_queue=asyncio.Queue(maxsize=32),
+            _notification_queue=NoticeQueue(maxsize=32),
             memory=SimpleNamespace(record_event=record_event),
             bus=bus,
             activity=SimpleNamespace(consume=Mock(return_value=False)),
@@ -186,7 +187,7 @@ class NotificationIsolationTests(unittest.IsolatedAsyncioTestCase):
             await release_notification.wait()
 
         service = SimpleNamespace(
-            _notification_queue=asyncio.Queue(maxsize=32),
+            _notification_queue=NoticeQueue(maxsize=32),
             _notify_event=notify,
             bus=bus,
             activity=SimpleNamespace(consume=Mock(return_value=False)),
@@ -222,7 +223,7 @@ class NotificationIsolationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_notification_failure_does_not_kill_delivery_worker(self) -> None:
         service = SimpleNamespace(
-            _notification_queue=asyncio.Queue(maxsize=32),
+            _notification_queue=NoticeQueue(maxsize=32),
             _notify_event=AsyncMock(side_effect=[OSError("daemon unavailable"), None]),
             logger=Mock(),
         )

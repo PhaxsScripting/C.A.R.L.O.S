@@ -142,3 +142,12 @@ package is used on a multi-socket system. If AMD only exposes Tctl, its control
 value stays labelled as such. An unidentified CPU sensor is unavailable.
 The [kernel's k10temp documentation](https://docs.kernel.org/hwmon/k10temp.html)
 explains the distinction between AMD die and control readings.
+
+Desktop notices use a bounded priority queue. Emergency/high notices are sent
+before lower-priority queued notices; equal priorities keep their order. On
+overflow, less important notices are discarded first. The support bundle
+reports queue capacity, queued count and discarded counts by priority, without
+message contents. A first warning has no repeat cooldown; escalating from a
+high thermal warning to an emergency is a new priority and can be reported.
+This ordering does not interrupt speech, executing tools or an in-flight
+notification backend call. Existing quiet-mode and notification settings apply.

@@ -468,3 +468,17 @@ control-only labelling and spoken answer semantics. The Gentoo Intel package
 sensor remained readable. Other CPU sensor layouts were tested with disposable
 sysfs files; they are not physical AMD or ARM acceptance. Unknown CPU chips
 return unavailable instead of relabelling an unrelated hot device.
+
+## October 1: notice overload
+
+1,215 Python tests passed in 68.454 seconds. Twelve notice tests cover priority
+delivery, FIFO ties, bounded retention, rejected/evicted accounting, join after
+replacement, waiting consumers, shutdown, diagnostic content filtering, repeat
+cooldowns, thermal escalation and a temporary real core integration fixture.
+
+With a simulated notifier held stalled, the real core's IPC health response
+took 0.225 ms in one sample and telemetry advanced. A synthetic emergency was
+retained during 100 background events and delivered first after release. The
+32-slot queue discarded 69 background notices and no emergency; no actions were
+executed. This is IPC/persistence acceptance with a simulated notifier, not an
+actual desktop notification, acoustic preemption or end-to-end latency target.

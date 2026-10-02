@@ -1,10 +1,15 @@
 """Deterministic event importance; model text cannot grant interrupt priority."""
+import math
 
 
 def priority_for(kind, source, payload):
     if kind == "system.warning" and source == "telemetry" and payload.get("kind") == "thermal":
         value = payload.get("celsius")
-        if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 98:
+        try:
+            finite = isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        except OverflowError:
+            finite = False
+        if finite and value >= 98:
             return "EMERGENCY"
         return "HIGH"
     if kind in {"system.error", "system.warning", "security.alert", "voice.full_test_failed"}:

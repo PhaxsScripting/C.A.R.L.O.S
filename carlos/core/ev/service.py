@@ -326,7 +326,8 @@ class CarlosCore:
 
         self.health_supervisor = GiggleGuard(self)
         self._notification_last: dict[str, float] = {}
-        self._notification_queue: asyncio.Queue[Event] = asyncio.Queue(maxsize=32)
+        from .notices import NoticeQueue
+        self._notification_queue = NoticeQueue(maxsize=32)
         if self.privacy.ephemeral:
             self.privacy.apply_storage()
         self.voice.privacy_mode = self.privacy.mode == "DO NOT LISTEN"
@@ -409,12 +410,13 @@ class CarlosCore:
             body = str(event.payload.get("tool"))
         else:
             return
-        key = f"{event.type}:{event.payload.get('tool', event.payload.get('kind', ''))}"
+        key = f"{event.type}:{event.payload.get('tool', event.payload.get('kind', ''))}:{event.priority}"
         now = time.monotonic()
         repeat = float(settings.get("minimum_repeat_seconds", 90.0))
+        previous = self._notification_last.get(key)
         if (
             event.type != "tool.permission_check"
-            and now - self._notification_last.get(key, 0.0) < repeat
+            and previous is not None and now - previous < repeat
         ):
             return
         self._notification_last[key] = now
@@ -529,10 +531,7 @@ class CarlosCore:
                     "voice.full_test_failed",
                     "tool.completed",
                 }:
-                    if self._notification_queue.full():
-                        self._notification_queue.get_nowait()
-                        self._notification_queue.task_done()
-                    self._notification_queue.put_nowait(event)
+                    self._notification_queue.offer(event)
                 if self.timeline.should_record(event):
                     await asyncio.to_thread(self.timeline.record, event)
             except Exception as error:
