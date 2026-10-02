@@ -128,3 +128,10 @@ disabled fan sensors have no trusted RPM. Zero RPM is a valid reading.
 GPU load is available when the driver provides `gpu_busy_percent`; otherwise
 it is unavailable. Carlos does not install drivers, request elevated access,
 or change CPU, fan, GPU or charging settings to obtain these readings.
+
+The status screen lists VAD, STT and TTS separately. A persistent worker needs
+a recent health observation and a live process to show READY. STOPPED overrides
+an older READY result immediately. ON_DEMAND means the adapter is configured
+and available but no persistent worker is promised. DISABLED applies to an
+unused neural detector. Voice becomes degraded when a required worker lacks
+current evidence. These labels do not replace microphone or playback tests.

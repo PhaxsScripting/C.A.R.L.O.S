@@ -5,12 +5,19 @@ import time
 
 
 def project_readiness(snapshot, capabilities, startup_seconds=None, fresh_after=None):
-    voice = snapshot.get("voice", {})
-    rows = capabilities.get("capabilities", capabilities)
+    def mapping(value):
+        return value if isinstance(value, dict) else {}
+
+    voice = mapping(snapshot.get("voice"))
+    capabilities = mapping(capabilities)
+    rows = mapping(capabilities.get("capabilities", capabilities))
     now = time.time()
 
     def observed(row, max_age):
+        row = mapping(row)
         state = row.get("state", "UNVERIFIED")
+        if not isinstance(state, str):
+            return "UNVERIFIED"
         if state != "READY":
             return state
         stamp = row.get("observed_at", row.get("checked_at"))
@@ -20,21 +27,39 @@ def project_readiness(snapshot, capabilities, startup_seconds=None, fresh_after=
             return "STALE"
         return "READY" if 0 <= now - stamp <= max_age else "STALE"
 
-    health = snapshot.get("health", {})
+    health = mapping(snapshot.get("health"))
     model = health.get("Local AI", rows.get("LocalAI", {}))
+    workers = mapping(voice.get("workers"))
+    speech = {}
+    for name in ("VAD", "STT", "TTS"):
+        worker = mapping(workers.get(name))
+        mode = worker.get("mode")
+        if mode == "DISABLED" and name == "VAD":
+            speech[name] = "DISABLED"
+        elif mode == "ON_DEMAND" and name != "VAD":
+            speech[name] = "ON_DEMAND" if worker.get("available") is True else "UNAVAILABLE"
+        elif mode == "PERSISTENT":
+            state = observed(health.get(name, {}), 60)
+            speech[name] = state if state != "READY" or worker.get("running") is True else "STOPPED"
+        else:
+            speech[name] = "UNVERIFIED"
+    speech_ready = all(speech[name] == "READY" if mapping(workers.get(name)).get("mode") == "PERSISTENT"
+                       else speech[name] in {"ON_DEMAND", "DISABLED"} for name in speech)
     components = {
         "Core": "READY",
         "Voice": "MUTED" if voice.get("privacy_mode") else
                  "DISABLED" if not voice.get("wake_enabled") else
                  "PAUSED" if voice.get("wake_paused") else
                  "SUSPENDED" if voice.get("resource_suspended") else
-                 "READY" if voice.get("wake_active") and voice.get("stt_available") and voice.get("tts_available") else "STARTING",
+                 "STARTING" if not (voice.get("wake_active") is True and voice.get("stt_available") is True and voice.get("tts_available") is True) else
+                 "READY" if speech_ready else "DEGRADED",
         "Local AI": observed(model, 60),
         "Desktop": "READY" if snapshot.get("desktop", {}).get("available") else "UNVERIFIED",
         "Remote": observed(rows.get("Remote", {}), 15),
+        **speech,
     }
     return {
-        "state": "FULLY_READY" if all(value == "READY" for value in components.values()) else "PARTIAL",
+        "state": "FULLY_READY" if all(components[name] == "READY" for name in ("Core", "Voice", "Local AI", "Desktop", "Remote")) else "PARTIAL",
         "components": components,
         "observed_at": now,
         "startup_to_ipc_seconds": startup_seconds,

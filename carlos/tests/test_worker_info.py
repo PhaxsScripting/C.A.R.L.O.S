@@ -5,6 +5,33 @@ from ev.voice.worker_info import runtime_versions, safe_versions, worker_report
 
 
 class WorkerInfoTests(unittest.TestCase):
+    def test_voice_snapshot_reports_current_process_liveness_and_configuration(self):
+        import tempfile
+        from pathlib import Path
+        from ev.events import PhaxEventBus
+        from ev.state import StateMachine
+        from ev.voice.manager import VoiceManager
+        bus = PhaxEventBus()
+        with tempfile.TemporaryDirectory() as directory:
+            voice = VoiceManager({'vad': {'neural_enabled':True},
+                                  'stt': {'persistent_server':True},
+                                  'tts': {'provider':'piper'}}, bus, StateMachine(bus), Path(directory))
+            for name, owner, field in (('VAD', voice.neural_vad, 'process'),
+                                      ('STT', voice.stt, '_server_process'),
+                                      ('TTS', voice.tts.piper, '_worker')):
+                self.assertEqual(voice.snapshot()['workers'][name]['mode'], 'PERSISTENT')
+                self.assertFalse(voice.snapshot()['workers'][name]['running'])
+                setattr(owner, field, SimpleNamespace(returncode=None))
+                self.assertTrue(voice.snapshot()['workers'][name]['running'])
+                getattr(owner, field).returncode = 1
+                self.assertFalse(voice.snapshot()['workers'][name]['running'])
+            voice.neural_vad.config['neural_enabled'] = False
+            voice.stt.config['persistent_server'] = False
+            voice.tts.config['provider'] = 'espeak-ng'
+            workers = voice.snapshot()['workers']
+            self.assertEqual([workers[n]['mode'] for n in ('VAD','STT','TTS')],
+                             ['DISABLED','ON_DEMAND','ON_DEMAND'])
+
     def test_metadata_contains_only_versions_and_known_packages(self):
         self.assertEqual(safe_versions({"python":"3.12.9", "onnxruntime":"1.22.1", "piper-tts":"/private/file", "token":"canary", "numpy":True}),
                          {"python":"3.12.9", "onnxruntime":"1.22.1"})

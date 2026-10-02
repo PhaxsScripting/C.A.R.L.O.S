@@ -6,6 +6,42 @@ from ev.events import PhaxEventBus
 
 
 class HealthTests(unittest.IsolatedAsyncioTestCase):
+    def speech_voice(self):
+        return SimpleNamespace(
+            neural_vad=SimpleNamespace(config={'neural_enabled':False}, process=None, start=AsyncMock()),
+            stt=SimpleNamespace(config={'persistent_server':False}, _server_process=None, prewarm=AsyncMock()),
+            tts=SimpleNamespace(selected='espeak-ng',
+                                piper=SimpleNamespace(config={'persistent_worker':True}, _worker=None),
+                                prewarm=AsyncMock()),
+        )
+
+    async def test_disabled_and_on_demand_workers_do_not_spend_recovery_budget(self):
+        voice = self.speech_voice()
+        health = GiggleGuard(SimpleNamespace(voice=voice, bus=PhaxEventBus()))
+        health.components = {name: {'state':'READY'} for name in ('VAD','STT','TTS')}
+        await health.check_speech_workers()
+        self.assertEqual({name: row['state'] for name,row in health.components.items()},
+                         {'VAD':'DISABLED','STT':'ON_DEMAND','TTS':'ON_DEMAND'})
+        self.assertEqual(dict(health.attempts), {})
+        voice.neural_vad.start.assert_not_awaited()
+        voice.stt.prewarm.assert_not_awaited()
+        voice.tts.prewarm.assert_not_awaited()
+
+    async def test_persistent_worker_defaults_and_selected_engine_are_respected(self):
+        voice = self.speech_voice()
+        voice.neural_vad.config['neural_enabled'] = True
+        voice.stt.config['persistent_server'] = True
+        voice.tts.selected = 'piper'
+        voice.tts.piper.config = {}
+        for owner, field in ((voice.neural_vad, 'process'), (voice.stt, '_server_process'),
+                             (voice.tts.piper, '_worker')):
+            setattr(owner, field, SimpleNamespace(returncode=None))
+        health = GiggleGuard(SimpleNamespace(voice=voice, bus=PhaxEventBus()))
+        await health.check_speech_workers()
+        self.assertEqual([health.components[n]['state'] for n in ('VAD','STT','TTS')], ['READY']*3)
+        self.assertTrue(all(not attempts for attempts in health.attempts.values()))
+        voice.tts.prewarm.assert_not_awaited()
+
     async def test_repeated_failure_stops_after_three_repairs(self):
         h = GiggleGuard(SimpleNamespace(bus=PhaxEventBus()))
         healthy = AsyncMock(return_value=False)

@@ -110,6 +110,34 @@ class GiggleGuard:
             return
         await self.check("Local AI", model._managed_healthy, model.prewarm)
 
+    async def check_speech_workers(self):
+        v = self.core.voice
+
+        async def stt_ready():
+            process = getattr(v.stt, "_server_process", None)
+            return process is not None and process.returncode is None
+
+        async def vad_ready():
+            return v.neural_vad.process is not None and v.neural_vad.process.returncode is None
+
+        if v.neural_vad.config.get("neural_enabled", False):
+            await self.check("VAD", vad_ready, v.neural_vad.start)
+        else:
+            self.components["VAD"] = {"state": "DISABLED", "observed_at": time.time()}
+        if v.stt.config.get("persistent_server", False):
+            await self.check("STT", stt_ready, v.stt.prewarm)
+        else:
+            self.components["STT"] = {"state": "ON_DEMAND", "observed_at": time.time()}
+        piper = getattr(v.tts, "piper", None)
+        if (v.tts.selected == "piper" and piper is not None
+                and piper.config.get("persistent_worker", True)):
+            async def tts_ready():
+                return piper._worker is not None and piper._worker.returncode is None
+
+            await self.check("TTS", tts_ready, v.tts.prewarm)
+        else:
+            self.components["TTS"] = {"state": "ON_DEMAND", "observed_at": time.time()}
+
     async def run(self):
         # Give ordinary startup ownership and warmup time to settle.
         await asyncio.sleep(35)
@@ -124,27 +152,7 @@ class GiggleGuard:
                 and c.state.current.value == "DORMANT"
             ):
 
-                async def stt_ready():
-                    # Adapter availability alone is not running-process evidence.
-                    process = getattr(v.stt, "_server_process", None)
-                    return process is not None and process.returncode is None
-
-                # Only restart owned worker processes using their existing ownership checks.
-                async def vad_ready():
-                    return (
-                        v.neural_vad.process is not None and v.neural_vad.process.returncode is None
-                    )
-
-                await self.check("VAD", vad_ready, v.neural_vad.start)
-                if v.stt.config.get("persistent_server", False):
-                    await self.check("STT", stt_ready, v.stt.prewarm)
-                piper = getattr(v.tts, "piper", None)
-                if piper is not None and piper.config.get("persistent_worker", False):
-
-                    async def tts_ready():
-                        return piper._worker is not None and piper._worker.returncode is None
-
-                    await self.check("TTS", tts_ready, v.tts.prewarm)
+                await self.check_speech_workers()
             # Pausing wake listening is not a request to disable typed local AI.
             if not v.resource_suspended and c.state.current.value == "DORMANT":
                 await self.check_local_model()

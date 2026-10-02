@@ -230,6 +230,22 @@ class VoiceManager:
             "wake_speech_backup": self.speech_wake.snapshot(),
         }
         return {
+            "workers": {
+                "VAD": {
+                    "mode": "PERSISTENT" if self.neural_vad.config.get("neural_enabled", False) else "DISABLED",
+                    "running": self.neural_vad.process is not None and self.neural_vad.process.returncode is None,
+                },
+                "STT": {
+                    "mode": "PERSISTENT" if self.stt.config.get("persistent_server", False) else "ON_DEMAND",
+                    "running": self.stt._server_process is not None and self.stt._server_process.returncode is None,
+                    "available": stt_available,
+                },
+                "TTS": {
+                    "mode": "PERSISTENT" if self.tts.selected == "piper" and self.tts.config.get("persistent_worker", True) else "ON_DEMAND",
+                    "running": self.tts.piper._worker is not None and self.tts.piper._worker.returncode is None,
+                    "available": self.tts_available,
+                },
+            },
             "worker_versions": {
                 "wake": worker_report(self.wake, self.wake.process),
                 "vad": worker_report(self.neural_vad, self.neural_vad.process),

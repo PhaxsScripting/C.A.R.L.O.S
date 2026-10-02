@@ -443,3 +443,19 @@ a read-only tool; GPU load was unavailable on this Intel driver.
 Counters do not prove instantaneous throttling. AMD GPU paths were exercised
 with a disposable sysfs fixture, not AMD hardware. Thermal load/overheating
 acceptance, other machines and remote stream adaptation remain unverified.
+
+## October 1: speech readiness
+
+1,196 Python tests passed in 68.454 seconds. All five native groups passed in
+12.55 seconds. Speech readiness now combines current child-process liveness
+with recent supervised health observations. Fresh READY history cannot hide
+a stopped process; missing, stale or pre-resume observations remain unverified.
+The status includes separate VAD, STT and TTS rows, with explicit disabled and
+on-demand modes. Disabled neural VAD and on-demand engines do not spend
+automatic repair attempts.
+
+A separate real local VAD worker accepted a PCM request, was terminated, and
+changed from READY to STOPPED before the old health row changed. One verified
+repair restored READY and accepted a new request in 480 ms. No microphone or
+playback was started by this fixture. This does not establish acoustic
+readiness, physical barge-in latency or whole-system recovery time.

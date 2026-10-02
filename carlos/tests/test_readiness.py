@@ -7,6 +7,10 @@ class ReadinessTests(unittest.TestCase):
     def ready(self):
         snapshot = {"voice": {"wake_enabled": True, "wake_active": True, "stt_available": True, "tts_available": True},
                     "desktop": {"available": True}}
+        snapshot['voice']['workers'] = {name: {'mode': 'PERSISTENT', 'running': True}
+                                        for name in ('VAD', 'STT', 'TTS')}
+        snapshot['health'] = {name: {'state': 'READY', 'observed_at': time.time()}
+                              for name in ('VAD', 'STT', 'TTS')}
         rows = {"LocalAI": {"state": "READY", "checked_at": time.time()},
                 "Remote": {"state": "READY", "checked_at": time.time()}}
         return snapshot, rows
@@ -57,3 +61,54 @@ class ReadinessTests(unittest.TestCase):
         snapshot["voice"]["wake_paused"] = False
         snapshot["voice"]["resource_suspended"] = True
         self.assertEqual(project_readiness(snapshot, rows)["components"]["Voice"], "SUSPENDED")
+
+    def test_worker_failure_overrides_adapter_availability(self):
+        for name in ('VAD', 'STT', 'TTS'):
+            snapshot, rows = self.ready()
+            snapshot['health'][name]['state'] = 'FAILED'
+            result = project_readiness(snapshot, rows)
+            self.assertEqual(result['components'][name], 'FAILED')
+            self.assertEqual(result['components']['Voice'], 'DEGRADED')
+            self.assertEqual(result['state'], 'PARTIAL')
+
+    def test_dead_process_overrides_fresh_ready_health_without_waiting_for_next_probe(self):
+        for name in ('VAD', 'STT', 'TTS'):
+            snapshot, rows = self.ready()
+            snapshot['voice']['workers'][name]['running'] = False
+            result = project_readiness(snapshot, rows)
+            self.assertEqual(result['components'][name], 'STOPPED')
+            self.assertEqual(result['components']['Voice'], 'DEGRADED')
+
+    def test_missing_old_and_pre_resume_worker_evidence_is_not_ready(self):
+        for name in ('VAD', 'STT', 'TTS'):
+            for stamp in (None, time.time() - 120, time.time() - 1):
+                snapshot, rows = self.ready()
+                snapshot['health'][name]['observed_at'] = stamp
+                result = project_readiness(snapshot, rows, fresh_after=time.time())
+                self.assertNotEqual(result['components'][name], 'READY')
+                self.assertNotEqual(result['components']['Voice'], 'READY')
+
+    def test_on_demand_and_disabled_components_do_not_claim_live_workers(self):
+        snapshot, rows = self.ready()
+        snapshot['voice']['workers'] = {
+            'VAD': {'mode': 'DISABLED', 'running': False},
+            'STT': {'mode': 'ON_DEMAND', 'running': False, 'available': True},
+            'TTS': {'mode': 'ON_DEMAND', 'running': False, 'available': True},
+        }
+        result = project_readiness(snapshot, rows)
+        self.assertEqual(result['components']['VAD'], 'DISABLED')
+        self.assertEqual(result['components']['STT'], 'ON_DEMAND')
+        self.assertEqual(result['components']['TTS'], 'ON_DEMAND')
+        self.assertEqual(result['components']['Voice'], 'READY')
+        snapshot['voice']['workers']['TTS']['available'] = False
+        self.assertEqual(project_readiness(snapshot, rows)['components']['Voice'], 'DEGRADED')
+
+    def test_invalid_runtime_evidence_is_unknown_and_does_not_crash_projection(self):
+        for value in (None, [], 'READY', True):
+            snapshot, rows = self.ready()
+            snapshot['voice']['workers'] = value
+            self.assertEqual(project_readiness(snapshot, rows)['components']['Voice'], 'DEGRADED')
+            snapshot['voice']['workers'] = {'VAD': value, 'STT': value, 'TTS': value}
+            self.assertEqual(project_readiness(snapshot, rows)['components']['Voice'], 'DEGRADED')
+            snapshot['health'] = value
+            self.assertEqual(project_readiness(snapshot, rows)['components']['STT'], 'UNVERIFIED')
