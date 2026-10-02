@@ -110,6 +110,15 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             None if verified else "Capture not produced",
             scope="capture_only",
         )
+    if name in {"vision.candidates", "vision.candidate.review"}:
+        accepted = (isinstance(data.get("candidates"), list) if name == "vision.candidates"
+                    else isinstance(data.get("candidate_id"), str))
+        return ExecutionResult(
+            accepted, "EXECUTED_UNVERIFIED" if accepted else "FAILED", False,
+            None if accepted else "No visual proposal returned", changed_state=False,
+            verification_hint="Highlighted historical inference does not authorize coordinates",
+            scope="visual_proposal",
+        )
     if name in {"vision.describe", "vision.inspect_window"}:
         accepted = isinstance(data.get("description"), str) and bool(data["description"].strip())
         return ExecutionResult(

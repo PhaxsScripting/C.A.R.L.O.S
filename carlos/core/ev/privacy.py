@@ -34,6 +34,8 @@ class PrivacyPolicy:
             c.settings_center.clear_undo()
         if hasattr(c, "failure_reference"):
             c.failure_reference.clear()
+        if hasattr(c, "vision"):
+            c.vision.visual_targets.clear()
 
     def tool_error(self, name):
         if self.changing:

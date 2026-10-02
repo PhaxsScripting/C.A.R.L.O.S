@@ -369,3 +369,8 @@ missing readback does not trigger another write. There is no automatic undo.
 
 
 HoloHand has an optional **Three-finger horizontal swipe** control. Enable it in the companion only after calibration; extend index, middle and ring with the pinky curled and move horizontally. One recognized swipe sends four horizontal wheel steps. Release the pose before repeating. It is off by default and does not enable other system gestures. Save calibration to persist the choice. Carlos reports `swipe_enabled` when the companion supports it; older companions report null. Pause/resume checks process identity before reporting success.
+
+
+While Minecraft Java runs, Carlos yields ambient listening and background prewarm. Use typed commands or the microphone button when needed. It resumes according to your existing wake and privacy settings after the game closes. Set `resources.yield_ambient_for_minecraft` to false to disable this behavior.
+
+Local visual proposals are available through `vision.candidates` with an exact window ID and visible text. Results contain confidence, separate duplicate candidates and a private highlighted preview. `vision.candidate.review` checks one candidate's current native identity and retained image hashes. Proposals expire after sixty seconds and are historical inference; they do not click or establish current scene truth.

@@ -29,6 +29,7 @@ class OcrLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.perception = ScreenPerception(self.root / 'captures', object(), {
             'ocr_python': str(self.worker), 'ocr_timeout_seconds': 2})
         Image.new('RGB', (120, 40), 'white').save(self.perception.capture_root / (self.capture + '.png'))
+        (self.perception.capture_root / (self.capture + '.png')).chmod(0o600)
         self.perception.status = lambda: {'ocr': True}
 
     async def wait_for_worker(self):
@@ -76,7 +77,10 @@ class OcrLifecycleTests(unittest.IsolatedAsyncioTestCase):
             core.task_journal.close()
 
     async def test_timeout_reaps_worker_and_allows_next_request(self):
-        self.perception.config['ocr_timeout_seconds'] = .1
+        import shlex
+        self.worker.write_text('#!/bin/sh\nprintf "%s" "$$" > ' + shlex.quote(str(self.ready))
+                               + '\nexec sleep 60\n')
+        self.perception.config['ocr_timeout_seconds'] = .5
         with self.assertRaisesRegex(RuntimeError, 'timed out'):
             await self.perception.ocr(self.capture)
         pid = await self.wait_for_worker()
@@ -116,6 +120,32 @@ class OcrLifecycleTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(timeout=timeout), self.assertRaises(ValueError):
                     await self.perception.ocr(self.capture)
             spawn.assert_not_awaited()
+
+    async def test_actual_worker_output_geometry_and_text_are_bound_to_private_image(self):
+        element = {'text': 'Retry', 'confidence': .95,
+                   'box': [[10, 10], [50, 10], [50, 25], [10, 25]],
+                   'center': {'x': 30, 'y': 17.5}}
+        async def output(payload):
+            return {'code': 0, 'err': '', 'out': 'EV_OCR_JSON:' + json.dumps(payload)}
+        payload = {'elements': [element], 'text': 'unrelated worker prose', 'duration_ms': 1}
+        with patch('ev.process_runner.command', new=AsyncMock(return_value=await output(payload))):
+            result = await self.perception.ocr(self.capture)
+        self.assertEqual(result['text'], 'Retry')
+        self.assertEqual((result['image_width'], result['image_height']), (120, 40))
+        for change in ({'center': {'x': 80, 'y': 17.5}},
+                       {'box': [[10, 10], [150, 10], [150, 25], [10, 25]]},
+                       {'box': [[10, 10]] * 4}, {'confidence': True}):
+            bad = {**payload, 'elements': [{**element, **change}]}
+            with self.subTest(change=change), patch(
+                'ev.process_runner.command', new=AsyncMock(return_value=await output(bad))
+            ), self.assertRaisesRegex(RuntimeError, 'geometry'):
+                await self.perception.ocr(self.capture)
+        async def changed(*args, **kwargs):
+            Image.new('RGB', (120, 40), 'blue').save(self.perception.capture_root / (self.capture + '.png'))
+            return await output(payload)
+        with patch('ev.process_runner.command', new=AsyncMock(side_effect=changed)), self.assertRaisesRegex(
+                RuntimeError, 'changed'):
+            await self.perception.ocr(self.capture)
 
     async def test_cancel_during_creation_reaps_returned_child_even_with_second_cancel(self):
         create = asyncio.create_subprocess_exec

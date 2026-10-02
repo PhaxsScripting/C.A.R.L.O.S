@@ -119,6 +119,7 @@ class VoiceManager:
         self.wake_desired = bool(config.get("wake", {}).get("enabled", False))
         self.wake_paused = False
         self.resource_suspended = False
+        self.gaming_suspended = False
         self.privacy_mode = False
         self.wake_last_feed_at = 0.0
         self.wake_test_armed_until = 0.0
@@ -269,6 +270,7 @@ class VoiceManager:
             "wake_paused": self.wake_paused,
             "privacy_mode": self.privacy_mode,
             "resource_suspended": self.resource_suspended,
+            "gaming_suspended": self.gaming_suspended,
             "wake_active": self.wake.listener_ready and microphone_live,
             "stt_available": stt_available,
             "stt_reason": stt_reason,
@@ -361,6 +363,7 @@ class VoiceManager:
             and not self.wake_paused
             and not self.privacy_mode
             and not self.resource_suspended
+            and not self.gaming_suspended
         ):
             await asyncio.sleep(interval)
             try:
@@ -390,7 +393,7 @@ class VoiceManager:
 
     async def prewarm(self) -> None:
         """Load reusable speech models without blocking core startup."""
-        if self.privacy_mode:
+        if self.privacy_mode or self.gaming_suspended:
             return
         await asyncio.gather(self.stt.prewarm(), self.tts.prewarm(), self.neural_vad.start())
         if self.config.get("partial_transcripts", False) or self.config.get("wake", {}).get(
@@ -404,6 +407,7 @@ class VoiceManager:
             and not self.wake_paused
             and not self.privacy_mode
             and not self.resource_suspended
+            and not self.gaming_suspended
         )
         if should_run and (self.wake_supervisor_task is None or self.wake_supervisor_task.done()):
             self.wake_supervisor_task = asyncio.create_task(self._wake_supervisor())
@@ -423,7 +427,8 @@ class VoiceManager:
             self.diagnostics["wake_state"] = (
                 "PRIVATE"
                 if self.privacy_mode
-                else "RESOURCE_SUSPENDED" if self.resource_suspended else "PAUSED"
+                else "RESOURCE_SUSPENDED" if self.resource_suspended
+                else "GAMING" if self.gaming_suspended else "PAUSED"
             )
 
     async def _stop_process(self, process: asyncio.subprocess.Process | None) -> None:
@@ -462,7 +467,8 @@ class VoiceManager:
             0.5, float(self.config.get("wake", {}).get("reconnect_seconds", 2.0))
         )
         try:
-            while self.wake_desired and not self.wake_paused and not self.privacy_mode:
+            while (self.wake_desired and not self.wake_paused and not self.privacy_mode
+                   and not self.resource_suspended and not self.gaming_suspended):
                 audio_task: asyncio.Task[None] | None = None
                 source_task: asyncio.Task[str] | None = None
                 try:
@@ -748,6 +754,7 @@ class VoiceManager:
             and not self.wake_paused
             and not self.privacy_mode
             and not self.resource_suspended
+            and not self.gaming_suspended
             and self.state.current == CoreState.DORMANT
             and not self.capture_active
             and not self.capture_finishing
@@ -830,7 +837,8 @@ class VoiceManager:
         return self._media_playing
 
     async def _on_wake_detected(self, message: dict[str, Any]) -> None:
-        if self.privacy_mode or self.wake_paused or not self.wake_desired:
+        if (self.privacy_mode or self.wake_paused or not self.wake_desired
+                or self.resource_suspended or self.gaming_suspended):
             return
         detected_at = time.monotonic()
         detection_latency_ms = max(0.0, (detected_at - self.wake_last_feed_at) * 1000)
@@ -1151,6 +1159,18 @@ class VoiceManager:
             "voice",
             {"mode": mode, "wake_suspended": suspended},
         )
+
+    async def set_gaming_suspended(self, suspended: bool) -> None:
+        changed = suspended != self.gaming_suspended
+        self.gaming_suspended = suspended
+        await self._refresh_wake_supervisor()
+        if not changed:
+            return
+        self.bus.publish("voice.gaming_yield_changed", "voice", {
+            "suspended": suspended,
+            "message": ("Ambient listening is paused while Minecraft is running. Typed commands and the microphone button remain available."
+                        if suspended else "Minecraft closed; ambient listening follows your existing wake/privacy settings."),
+        })
 
     def arm_wake_test(self, seconds: float = 15.0) -> dict[str, Any]:
         if not self.wake.running:

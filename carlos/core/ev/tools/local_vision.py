@@ -23,6 +23,67 @@ def register_local_vision_tools(registry):
         require_local(context)
         return await context.vision.inspect_window(arguments["window_id"], arguments["question"])
 
+    async def candidates(arguments, context):
+        require_local(context)
+        return await context.vision.visual_targets.prepare(
+            arguments["window_id"], arguments["text"], arguments.get("minimum_score", .8)
+        )
+
+    async def review(arguments, context):
+        require_local(context)
+        return await context.vision.visual_targets.review(arguments["candidate_id"])
+
+    candidate_properties = {
+        "candidate_id": {"type": "string", "pattern": "[0-9a-f]{32}"},
+        "capture_id": {"type": "string", "pattern": "[0-9a-f]{32}"},
+        "preview_id": {"type": "string", "pattern": "[0-9a-f]{32}"},
+        "preview_path": {"type": "string", "minLength": 1},
+        "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "confidence": {"type": "number", "minimum": .8, "maximum": 1},
+        "window_id": {"type": "string", "minLength": 1},
+        "window_title": {"type": ["string", "null"]},
+        "expires_in_seconds": {"type": "integer", "minimum": 0, "maximum": 60},
+    }
+    candidate_schema = object_schema(candidate_properties, list(candidate_properties))
+    registry.register(ToolSpec(
+        "vision.candidates", "VISION",
+        "Find exact visible text in one native window using local OCR and return private highlighted previews. "
+        "Labels remain uncertain historical inference, never permission to click. Duplicate labels stay separate. "
+        "Requires a local active brain, exact native identity and one-to-one image geometry.",
+        Permission.SENSITIVE,
+        object_schema({
+            "window_id": {"type": "string", "minLength": 1, "maxLength": 100},
+            "text": {"type": "string", "minLength": 1, "maxLength": 500},
+            "minimum_score": {"type": "number", "minimum": .8, "maximum": 1},
+        }, ["window_id", "text"]),
+        candidates,
+        output_schema=object_schema({
+            "candidates": {"type": "array", "maxItems": 20, "items": candidate_schema},
+            "ambiguous": {"type": "boolean"}, "matched": {"type": "integer", "minimum": 0, "maximum": 20},
+            "coordinate_actions_allowed": {"type": "boolean", "enum": [False]},
+            "scene_accuracy_verified": {"type": "boolean", "enum": [False]},
+            "local_only": {"type": "boolean", "enum": [True]},
+            "uploaded": {"type": "boolean", "enum": [False]}, "message": {"type": "string"},
+        }, ["candidates", "ambiguous", "matched", "coordinate_actions_allowed", "scene_accuracy_verified",
+            "local_only", "uploaded", "message"]),
+        offline_available=True, reversible=True, timeout_seconds=55,
+        platform_requirements=("Exact native window metadata", "Private PNG capture", "Local OCR"),
+        verification="Image geometry and process/window/output identity; label meaning remains unverified",
+        side_effects=("briefly focuses exact window for capture", "retains bounded private previews for at most sixty seconds"),
+        expected_latency_ms=3500,
+    ))
+    registry.register(ToolSpec(
+        "vision.candidate.review", "VISION",
+        "Read one existing highlighted proposal after checking exact process/window/output identity, expiry "
+        "and source/preview hashes. This does not inspect current window contents or send input.",
+        Permission.SENSITIVE,
+        object_schema({"candidate_id": candidate_properties["candidate_id"]}, ["candidate_id"]),
+        review, output_schema=candidate_schema, read_only=True,
+        offline_available=True, reversible=False, timeout_seconds=8,
+        verification="Exact native metadata and private file hashes; historical image only",
+        side_effects=(), expected_latency_ms=100,
+    ))
+
     registry.register(
         ToolSpec(
             "vision.describe",

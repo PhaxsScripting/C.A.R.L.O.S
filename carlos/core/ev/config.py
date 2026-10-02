@@ -12,6 +12,7 @@ from .paths import Paths
 
 DEFAULT_CONFIG: dict[str, Any] = {
     "version": 1,
+    "resources": {"yield_ambient_for_minecraft": True},
     "assistant": {
         "name": "Carlos",
         "wake_enabled": False,

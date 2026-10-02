@@ -149,12 +149,14 @@ class GiggleGuard:
                 and not v.privacy_mode
                 and not v.wake_paused
                 and not v.resource_suspended
+                and not getattr(v, "gaming_suspended", False)
                 and c.state.current.value == "DORMANT"
             ):
 
                 await self.check_speech_workers()
             # Pausing wake listening is not a request to disable typed local AI.
-            if not v.resource_suspended and c.state.current.value == "DORMANT":
+            if (not v.resource_suspended and not getattr(v, "gaming_suspended", False)
+                    and c.state.current.value == "DORMANT"):
                 await self.check_local_model()
             await asyncio.sleep(15)
 

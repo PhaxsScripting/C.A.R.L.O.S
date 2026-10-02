@@ -29,6 +29,9 @@ class ScreenPerception:
         )
         self.capture_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         os.chmod(self.capture_root, 0o700)
+        from .visual_targets import VisualTargets
+
+        self.visual_targets = VisualTargets(self)
         self.prune()
 
     @staticmethod
@@ -151,6 +154,9 @@ class ScreenPerception:
         if not isinstance(minimum_score, (int, float)) or isinstance(minimum_score, bool) or not math.isfinite(minimum_score) or not 0 <= minimum_score <= 1:
             raise ValueError("OCR confidence must be between zero and one")
         path = self._capture_path(capture_id)
+        from .vision_geometry import private_png, validate_element
+
+        _, (width, height), digest = private_png(path)
         status = self.status()
         if not status["ocr"]:
             raise RuntimeError("The local OCR runtime is unavailable")
@@ -187,10 +193,13 @@ class ScreenPerception:
             raise RuntimeError("local OCR returned invalid data") from error
         if not isinstance(payload, dict) or not isinstance(payload.get('elements'), list) or len(payload['elements']) > 250:
             raise RuntimeError("local OCR returned invalid data")
-        for element in payload['elements']:
-            score = element.get('confidence') if isinstance(element, dict) else None
-            if not isinstance(score, (int, float)) or isinstance(score, bool) or not math.isfinite(score) or not minimum_score <= score <= 1 or not isinstance(element.get('text'), str):
-                raise RuntimeError("local OCR returned invalid confidence or text")
+        try:
+            elements = [validate_element(element, width, height, minimum_score)
+                        for element in payload['elements']]
+        except (ValueError, UnicodeError) as error:
+            raise RuntimeError("local OCR returned invalid confidence, text or geometry") from error
+        if private_png(self._capture_path(capture_id))[2] != digest:
+            raise RuntimeError("OCR capture changed during inference")
         duration = payload.get('duration_ms', 0)
         if not isinstance(duration, (int, float)) or isinstance(duration, bool) or not math.isfinite(duration) or duration < 0:
             raise RuntimeError("local OCR returned invalid timing")
@@ -198,10 +207,13 @@ class ScreenPerception:
             "verified": True,
             "capture_id": capture_id,
             "engine": payload.get("engine", "RapidOCR"),
-            "elements": payload.get("elements", [])[:250],
-            "text": str(payload.get("text", ""))[:65536],
+            "elements": elements,
+            "text": "\n".join(element['text'] for element in elements)[:65536],
             "count": len(payload['elements']),
             "duration_ms": float(duration),
+            "image_width": width,
+            "image_height": height,
+            "capture_sha256": digest,
             "local_only": True,
             "uploaded": False,
             "capture_retained": True,
@@ -433,11 +445,14 @@ class ScreenPerception:
         ):
             raise ValueError("invalid capture id")
         existed = path.is_file()
+        self.visual_targets.forget_capture(capture_id)
         if existed:
-            path.unlink()
+            path.unlink(missing_ok=True)
         return {"verified": not path.exists(), "capture_id": capture_id, "removed": existed}
 
     def prune(self) -> int:
+        if hasattr(self, "visual_targets"):
+            self.visual_targets.prune()
         cutoff = time.time() - 600
         removed = 0
         for path in self.capture_root.glob("[0-9a-f]" * 32 + ".png"):

@@ -300,6 +300,9 @@ class CarlosCore:
         self.voice = VoiceManager(
             self.config["voice"], self.bus, self.state, self.paths.runtime_dir
         )
+        from .gaming import GamingPolicy
+
+        self.gaming = GamingPolicy(self)
         self.tools.context.media_focus = self.voice.media_focus
         from .settings_center import SettingsCenter
 
@@ -374,6 +377,8 @@ class CarlosCore:
             ("local_language_model", provider_prewarm),
         ):
             if operation is None:
+                continue
+            if getattr(self.voice, "gaming_suspended", False):
                 continue
             try:
                 await operation()
@@ -769,7 +774,7 @@ class CarlosCore:
         voice = self.voice.snapshot()
         wake_status = (
             "PAUSED"
-            if voice.get("privacy_mode") or voice.get("wake_paused")
+            if voice.get("privacy_mode") or voice.get("wake_paused") or voice.get("gaming_suspended")
             else (
                 "DISABLED"
                 if not voice.get("wake_enabled")
@@ -2740,6 +2745,7 @@ class CarlosCore:
                     {"message": str(error), "stage": "session_enable"},
                 )
         await self.kwin_bridge.start()
+        await self.gaming.refresh()
         await self.voice.start()
         self._persistence_subscriber, persistence_queue = self.bus.subscribe()
         self._persistence_task = asyncio.create_task(self._persist_events(persistence_queue))
@@ -2749,6 +2755,7 @@ class CarlosCore:
         capture_prune_task = asyncio.create_task(self._capture_prune_loop())
         reminder_task = asyncio.create_task(self._reminder_loop())
         process_watch_task = asyncio.create_task(self._process_watch_loop())
+        gaming_task = asyncio.create_task(self.gaming.run())
         self.bus.publish(
             "core.started",
             "core",
@@ -2790,6 +2797,7 @@ class CarlosCore:
                 capture_prune_task,
                 reminder_task,
                 process_watch_task,
+                gaming_task,
             ),
             self.logger,
         )

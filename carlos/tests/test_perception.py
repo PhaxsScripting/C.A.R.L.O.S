@@ -62,7 +62,7 @@ class FakeCaptureProcess:
 
 class FakeOcrCompleted:
     returncode = 0
-    stdout = 'EV_OCR_JSON:{"engine":"test","elements":[{"text":"E.V.","confidence":0.99,"box":[],"center":{"x":1,"y":2}}],"text":"E.V.","count":1,"duration_ms":12.5}\n'
+    stdout = 'EV_OCR_JSON:{"engine":"test","elements":[{"text":"E.V.","confidence":0.99,"box":[[1,1],[21,1],[21,11],[1,11]],"center":{"x":11,"y":6}}],"text":"E.V.","count":1,"duration_ms":12.5}\n'
     stderr = ""
 
 
@@ -320,6 +320,7 @@ class PerceptionTests(unittest.IsolatedAsyncioTestCase):
             root = Path(temporary)
             capture_id = "a" * 32
             Image.new("RGB", (80, 60), "navy").save(root / f"{capture_id}.png")
+            (root / f"{capture_id}.png").chmod(0o600)
             perception = ScreenPerception(root, FakeDesktop(), {"ocr_python": sys.executable})
             with (
                 patch.object(ScreenPerception, "status", return_value={"ocr": True}),
