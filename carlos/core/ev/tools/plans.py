@@ -86,6 +86,8 @@ def build_plan(arguments, planner, correlation):
                             refs(target[field])
                             target[field] = placeholder
             identities = {"window_id": "resolved-target", "path": "resolved-target"}
+            if condition.get("kind") == "window_output":
+                identities["expected"] = "resolved-output"
             if condition.get("kind") == "media_playback":
                 # Unique owners are runtime observations, not values a model
                 # should guess before submitting a plan. Only identity fields
@@ -261,7 +263,7 @@ def register_plan_tools(registry, planner, requester):
         )
 
     conditions = {"type": "array", "minItems": 1, "maxItems": 12, "items": {"type": "object"}}
-    description = "Conditions are exact objects: kind window_exists/window_absent/window_active + window_id; window_state + window_id/property(minimized,fullscreen,maximized)/expected boolean; window_geometry + window_id/geometry{x,y,width,height}; file_text + path/expected(exact UTF-8 text, including newlines); file_hash + path/sha256; file_kind + path/expected(file,directory); audio_volume/audio_muted + expected; control_state + target{window_id,process_id,window_title,path,name,role,application}/property(checked,selected,value)/expected(boolean or numeric value); control_text + target(same full control identity)/expected(exact complete text, at most 2000 characters); process_ended + pid/start_ticks/boot_id (obtain all three from system.process_lifetime; disappearance is not successful task completion). Every condition is freshly observed. Use file_text for requested text; do not invent a SHA-256 digest."
+    description = "Conditions are exact objects: kind window_exists/window_absent/window_active + window_id; window_output + window_id/expected(exact enabled output connector); window_state + window_id/property(minimized,fullscreen,maximized)/expected boolean; window_geometry + window_id/geometry{x,y,width,height}; file_text + path/expected(exact UTF-8 text, including newlines); file_hash + path/sha256; file_kind + path/expected(file,directory); audio_volume/audio_muted + expected; control_state + target{window_id,process_id,window_title,path,name,role,application}/property(checked,selected,value)/expected(boolean or numeric value); control_text + target(same full control identity)/expected(exact complete text, at most 2000 characters); process_ended + pid/start_ticks/boot_id (obtain all three from system.process_lifetime; disappearance is not successful task completion). Every condition is freshly observed. Use file_text for requested text; do not invent a SHA-256 digest."
     description += " browser_url + window_id/expected(exact HTTP(S) URL) requires a fresh visible top-level browser document URL, unchanged focus and non-busy state; it does not certify page content or login state."
     description += " media_playback + service(exact observed MPRIS bus name)/owner(unique bus owner)/expected(Playing,Paused,Stopped) verifies that same player instance's fresh transport state, not track identity or song completion."
     description += ' Inside composed plans, condition window_id/path and media_playback service/owner may reference prior step results, e.g. owner:{"$ref":"observe.result.players.0.owner"}; expected states must remain literal, never copied from the observation being verified. Resolved identities are validated again before observation.'

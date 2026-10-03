@@ -19,6 +19,7 @@ def validate_conditions(conditions):
         "window_exists": {"window_id"},
         "window_absent": {"window_id"},
         "window_active": {"window_id"},
+        "window_output": {"window_id", "expected"},
         "window_state": {"window_id", "property", "expected"},
         "window_geometry": {"window_id", "geometry"},
         "file_hash": {"path", "sha256"},
@@ -128,6 +129,8 @@ def validate_conditions(conditions):
                 not isinstance(condition[key], str) or not 1 <= len(condition[key]) <= 4096
             ):
                 raise ValidationError("Goal needs an exact target identity")
+        if kind == "window_output":
+            validate_schema(condition["expected"], {"type": "string", "minLength": 1, "maxLength": 200})
         if kind == "window_state" and (
             condition["property"] not in {"minimized", "fullscreen", "maximized"}
             or not isinstance(condition["expected"], bool)
@@ -352,6 +355,11 @@ async def verify_conditions(conditions, requester, correlation, *, cancelled=lam
                 elif kind == "window_active":
                     actual = data.get("active_window_id")
                     matched = len(matches) == 1 and actual == condition["window_id"]
+                elif kind == "window_output":
+                    actual = matches[0].get("output") if len(matches) == 1 else None
+                    outputs = data.get("outputs", [])
+                    enabled = [o for o in outputs if o.get("name") == condition["expected"] and o.get("enabled", True)] if isinstance(outputs, list) else []
+                    matched = actual == condition["expected"] and len(enabled) == 1 and not data.get("outputs_truncated")
                 elif kind == "window_geometry":
                     actual = matches[0].get("geometry", {}) if len(matches) == 1 else {}
                     matched = all(

@@ -52,6 +52,8 @@ class PlannerTests(unittest.TestCase):
             "workspaces.capture_current": Permission.LOW_RISK,
             "applications.list": Permission.SAFE,
             "applications.open": Permission.SAFE,
+            "applications.ensure_window": Permission.SAFE,
+            "desktop.window.activate": Permission.LOW_RISK,
         }
         for name, permission in names.items():
             registry.register(

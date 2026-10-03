@@ -91,6 +91,14 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             "Observe the target application's resulting state",
             None,
         )
+    if name == "applications.ensure_window":
+        verified = data.get("verified") is True and isinstance(data.get("window"), dict)
+        return ExecutionResult(
+            verified, "SUCCEEDED_VERIFIED" if verified else "FAILED", verified,
+            None if verified else "Application window presence unverified; no retry issued",
+            retryable=False, verification_hint="Fresh native window identity, not application readiness",
+            scope="native_window_presence",
+        )
     if name == "system.power":
         # A scheduled request is not evidence that the machine powered off.
         accepted = data.get("scheduled") is True and data.get("verified") is True

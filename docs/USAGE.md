@@ -44,6 +44,14 @@ Carlos can open apps, inspect the desktop, work with files, and run supported
 tasks through registered tools. Some actions need approval. Read the target and
 requested change before approving anything.
 
+`open Firefox on my laptop monitor` resolves the display before launching.
+Carlos reuses one matching native app window, or launches once and waits for
+one new window. Multiple windows need an exact choice. It then moves and focuses
+that window and checks the enabled output and focus again before completion.
+A failed or uncertain launch is never replayed automatically. This path needs
+native compositor inventory and the installed desktop entry; it does not
+infer application readiness from a window title.
+
 Use `plans` for plans, `agent-tasks` for task history, and `security` for the
 current permission settings. `stop` shuts down the core. `--help` lists the rest
 of the CLI commands.

@@ -3775,3 +3775,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             confirmation_reason="This permanently removes the selected explicit memory.",
         )
     )
+
+    from .application_windows import register_application_window_tools
+
+    register_application_window_tools(registry)

@@ -1044,52 +1044,33 @@ class TaskPlanner:
             re.IGNORECASE,
         ):
             application, output = _clean_entity(opening.group(1)), _clean_entity(opening.group(2))
+            window_id = {"$ref": "window.result.window.id"}
             steps = [
-                self._step(
-                    "application",
-                    "applications.list",
-                    {"query": application, "limit": 8, "launch_only": True},
-                    "One high-confidence desktop entry",
-                ),
-                self._step(
-                    "launch",
-                    "applications.open",
-                    {"desktop_id": {"$ref": "application.result.applications.0.desktop_id"}},
-                    "Application launch request succeeds",
-                    ["application"],
-                ),
-                self._step(
-                    "window",
-                    "desktop.window.wait",
-                    {"description": application, "timeout_seconds": 8},
-                    "Application exposes a KWin window",
-                    ["launch"],
-                ),
-                self._step(
-                    "output",
-                    "desktop.output.resolve",
-                    {"description": output},
-                    "One enabled target output",
-                ),
-                self._step(
-                    "move",
-                    "desktop.window.move_to_output",
-                    {
-                        "window_id": {"$ref": "window.result.window.id"},
-                        "output": {"$ref": "output.result.output.name"},
-                        "expected_output": {"$ref": "output.result.output"},
-                    },
-                    "Window appears on requested output",
-                    ["window", "output"],
-                ),
+                self._step("output", "desktop.output.resolve", {"description": output},
+                           "One enabled target output"),
+                self._step("application", "applications.list",
+                           {"query": application, "limit": 8, "launch_only": True},
+                           "One high-confidence desktop entry"),
+                self._step("window", "applications.ensure_window",
+                           {"desktop_id": {"$ref": "application.result.applications.0.desktop_id"},
+                            "timeout_seconds": 8},
+                           "One exact existing or newly launched application window", ["output", "application"]),
+                self._step("move", "desktop.window.move_to_output",
+                           {"window_id": window_id, "output": {"$ref": "output.result.output.name"},
+                            "expected_output": {"$ref": "output.result.output"}},
+                           "Window appears on requested output", ["window", "output"]),
+                self._step("focus", "desktop.window.activate", {"window_id": window_id},
+                           "Exact application window is active", ["move"]),
             ]
             return TaskPlan(
-                uuid.uuid4().hex,
-                correlation_id,
-                original,
-                f"Open {application} on {output}",
-                steps,
-                dry_run,
+                uuid.uuid4().hex, correlation_id, original, f"Open {application} on {output}",
+                steps, dry_run,
+                goal_conditions=[
+                    {"kind": "window_output", "window_id": window_id,
+                     "expected": {"$ref": "output.result.output.name"}},
+                    {"kind": "window_active", "window_id": window_id},
+                ],
+                goal_source="trusted_intent",
             )
 
         opening = re.fullmatch(r"(?:open|launch|start)\s+(.+)", request, re.I)
@@ -1223,6 +1204,8 @@ class TaskPlanner:
             return "MISSING_PROVIDER"
         if "unavailable" in lowered or "not supported" in lowered:
             return "MISSING_DESKTOP_BACKEND"
+        if step.tool == "applications.ensure_window" and "window presence unverified" in lowered:
+            return "UNVERIFIED_RESULT"
         if step.tool.startswith("vision.") and any(reason in lowered for reason in (
             "cannot be observed", "did not acknowledge delivery", "already satisfied",
         )):
