@@ -10,7 +10,9 @@ def register_local_vision_tools(registry):
         # Tool outputs are returned to the active reasoning model. Prevent a
         # cloud model from indirectly receiving private screen descriptions.
         active = context.config.get("providers", {}).get("active", "offline")
-        if active not in {"offline", "local_hybrid", "local_agent"}:
+        from ..execution import local_visual_execution
+
+        if active not in {"offline", "local_hybrid", "local_agent"} and not local_visual_execution.get():
             raise ValueError(
                 "Private visual descriptions require a local active brain; cloud tool-result upload is blocked"
             )

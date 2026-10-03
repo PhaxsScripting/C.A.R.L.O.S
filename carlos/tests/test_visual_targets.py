@@ -520,6 +520,9 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(replay["type"], "error")
             self.assertEqual(len(self.input_events), 2)
             self.window["fullscreen"] = False
+            core.config["providers"]["active"] = "nvidia"
+            core.brain.provider.begin = AsyncMock(side_effect=AssertionError("No cloud request is allowed"))
+            core.brain.provider.continue_with_tools = AsyncMock(side_effect=AssertionError("No cloud tool result is allowed"))
             response = await ipc("command.submit", {"text": 'visually click "Retry" expecting window to be fullscreen',
                                                      "speak": False})
             self.assertEqual(response["payload"]["status"], "confirmation_required", response)
@@ -527,11 +530,17 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(pending["tool"], "vision.click_text")
             self.assertIn("preview_url", pending["review"])
             self.assertIn("candidate_id", pending["arguments"])
+            self.assertTrue(core.permissions._pending[pending["id"]].local_visual_only)
+            self.assertNotIn("local_visual_only", pending)
             self.assertEqual(len(self.input_events), 2)
             decision = {"id": pending["id"], "approval_token": pending["approval_token"], "approved": True}
             response = await ipc("confirmation.respond", decision)
             self.assertTrue(response["payload"]["result"]["verified"], response)
             self.assertEqual(len(self.input_events), 4)
+            core.brain.provider.begin.assert_not_awaited()
+            core.brain.provider.continue_with_tools.assert_not_awaited()
+            from ev.execution import local_visual_execution
+            self.assertFalse(local_visual_execution.get())
         finally:
             writer.close()
             await writer.wait_closed()
@@ -590,3 +599,59 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["verified"])
         self.desktop.input.connect.assert_awaited_once()
         self.assertEqual(len(self.input_events), 2)
+
+    async def test_local_visual_scope_is_task_local_and_does_not_change_provider_config(self):
+        from ev.execution import local_visual_execution
+        self.context.config["providers"]["active"] = "nvidia"
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = self.ocr
+
+        async def blocked(*args):
+            entered.set()
+            await release.wait()
+            return await original(*args)
+
+        self.perception.ocr = AsyncMock(side_effect=blocked)
+
+        async def local_request():
+            token = local_visual_execution.set(True)
+            try:
+                return await self.registry.execute(self.registry.get("vision.candidates"),
+                                                   {"window_id": "exact", "text": "Retry"})
+            finally:
+                local_visual_execution.reset(token)
+
+        task = asyncio.create_task(local_request())
+        await asyncio.wait_for(entered.wait(), 2)
+        with self.assertRaisesRegex(ValueError, "cloud"):
+            await self.registry.execute(self.registry.get("vision.candidates"),
+                                        {"window_id": "exact", "text": "Retry"})
+        release.set()
+        self.assertEqual((await task)["matched"], 1)
+        self.assertFalse(local_visual_execution.get())
+        self.assertEqual(self.context.config["providers"]["active"], "nvidia")
+
+    async def test_model_callback_resets_inherited_local_scope_before_tool_validation(self):
+        from ev.execution import local_visual_execution
+        from ev.service import CarlosCore
+
+        core = CarlosCore.__new__(CarlosCore)
+        core.tools = self.registry
+        self.context.config["providers"]["active"] = "nvidia"
+        payload = {"name": "vision.click_text", "arguments": {
+            "window_id": "exact", "text": "Retry", "expected": [
+                {"kind": "window_state", "window_id": "exact", "property": "fullscreen", "expected": True}]}}
+        token = local_visual_execution.set(True)
+        try:
+            result = await core._request_model_tool(payload, "fixture")
+            self.assertEqual(result["status"], "failed")
+            self.assertIn("cloud", result["result"]["error"])
+            self.assertTrue(local_visual_execution.get())
+            core.request_tool = AsyncMock(side_effect=lambda *a, **k:
+                                          self.assertFalse(local_visual_execution.get()))
+            await core._request_model_planned_tool(payload, "fixture")
+            self.assertTrue(local_visual_execution.get())
+        finally:
+            local_visual_execution.reset(token)
+        self.assertFalse(local_visual_execution.get())
+        self.perception.capture.assert_not_awaited()

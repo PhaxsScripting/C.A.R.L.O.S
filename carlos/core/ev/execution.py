@@ -7,6 +7,10 @@ from .tools.base import ToolRegistry, ToolSpec
 from .tools.results import ExecutionResult, evaluate_result
 
 execution_correlation = ContextVar("ev_execution_correlation", default="")
+local_visual_execution = ContextVar("carlos_local_visual_execution", default=False)
+LOCAL_VISUAL_COMMAND_TOOLS = frozenset({
+    "vision.candidates", "vision.candidate.review", "vision.candidate.click", "vision.click_text",
+})
 
 
 class ExecutionController:

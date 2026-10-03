@@ -1170,14 +1170,26 @@ class CarlosCore:
     ) -> dict[str, Any]:
         """Execute a planner-owned step while rejecting lookalike IPC calls."""
 
-        return await self.request_tool(payload, request_id, _trusted_plan=True)
+        from .execution import local_visual_execution, LOCAL_VISUAL_COMMAND_TOOLS
+
+        token = local_visual_execution.set(payload.get("name") in LOCAL_VISUAL_COMMAND_TOOLS)
+        try:
+            return await self.request_tool(payload, request_id, _trusted_plan=True)
+        finally:
+            local_visual_execution.reset(token)
 
     async def _request_model_planned_tool(
         self, payload: dict[str, Any], request_id: str | None
     ) -> dict[str, Any]:
         # A model-selected plan owns the execution state, NOT the authority to
         # authorize power/privileged operations reserved for explicit requests.
-        return await self.request_tool(payload, request_id, _planner_owned=True)
+        from .execution import local_visual_execution
+
+        token = local_visual_execution.set(False)
+        try:
+            return await self.request_tool(payload, request_id, _planner_owned=True)
+        finally:
+            local_visual_execution.reset(token)
 
     async def _project_scope(self):
         if getattr(getattr(self, 'privacy', None), 'mode', None) == 'GUEST':
@@ -1231,6 +1243,17 @@ class CarlosCore:
         )
 
     async def _request_model_tool(
+        self, payload: dict[str, Any], request_id: str | None
+    ) -> dict[str, Any]:
+        from .execution import local_visual_execution
+
+        token = local_visual_execution.set(False)
+        try:
+            return await self._request_model_tool_impl(payload, request_id)
+        finally:
+            local_visual_execution.reset(token)
+
+    async def _request_model_tool_impl(
         self, payload: dict[str, Any], request_id: str | None
     ) -> dict[str, Any]:
         """Keep provider tool calls on the existing planner's execution path.
@@ -1437,8 +1460,11 @@ class CarlosCore:
             reason = review.pop("reason")
             if generation != getattr(self, "_action_generation", 0):
                 return self._cancelled_tool_result(spec, dispatched=False)
+        from .execution import local_visual_execution
+
         pending = self.permissions.create(
-            spec.name, validated, spec.permission, reason, correlation_id, review=review
+            spec.name, validated, spec.permission, reason, correlation_id, review=review,
+            local_visual_only=local_visual_execution.get() and review is not None,
         )
         await asyncio.to_thread(
             self.memory.record_permission,
@@ -1523,10 +1549,16 @@ class CarlosCore:
                 self.task_journal.finish, pending.correlation_id, continuation or result
             )
             return {**result, "command": continuation} if continuation is not None else result
-        spec, validated = self.tools.validate(pending.tool_name, pending.arguments)
-        if self.permissions.arguments_hash(spec.name, validated) != pending.arguments_hash:
-            raise ValueError("confirmed arguments changed")
-        result = await self.execute_tool(spec, validated, pending.correlation_id)
+        from .execution import local_visual_execution
+
+        token = local_visual_execution.set(pending.local_visual_only)
+        try:
+            spec, validated = self.tools.validate(pending.tool_name, pending.arguments)
+            if self.permissions.arguments_hash(spec.name, validated) != pending.arguments_hash:
+                raise ValueError("confirmed arguments changed")
+            result = await self.execute_tool(spec, validated, pending.correlation_id)
+        finally:
+            local_visual_execution.reset(token)
         result = self.planner.record_external_confirmation(pending.id, result)
         planned = await self.planner.resume_confirmation(pending.id, result)
         if planned is not None:
@@ -2605,8 +2637,14 @@ class CarlosCore:
                 return {"status": "denied", "error": "Privacy settings changed; retry the observation"}
             return result
         if request_type == "tool.call":
-            await self._prepare_interactive_request(str(request.get("id") or uuid.uuid4().hex))
-            return await self.request_tool(payload, request.get("id"))
+            from .execution import local_visual_execution, LOCAL_VISUAL_COMMAND_TOOLS
+
+            token = local_visual_execution.set(payload.get("name") in LOCAL_VISUAL_COMMAND_TOOLS)
+            try:
+                await self._prepare_interactive_request(str(request.get("id") or uuid.uuid4().hex))
+                return await self.request_tool(payload, request.get("id"))
+            finally:
+                local_visual_execution.reset(token)
         if request_type == "confirmation.list":
             return {"confirmations": self.permissions.list_for_local_client()}
         if request_type == "confirmation.respond":

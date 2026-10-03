@@ -33,6 +33,7 @@ class PendingPermission:
     created_monotonic: float
     expires_monotonic: float
     review: dict[str, Any] | None = None
+    local_visual_only: bool = False
 
     def public(self, include_token: bool = True) -> dict[str, Any]:
         result = {
@@ -71,6 +72,7 @@ class PermissionBroker:
         reason: str,
         correlation_id: str,
         *, review: dict[str, Any] | None = None,
+        local_visual_only: bool = False,
     ) -> PendingPermission:
         pending_id = uuid.uuid4().hex
         now = time.monotonic()
@@ -86,6 +88,7 @@ class PermissionBroker:
             created_monotonic=now,
             expires_monotonic=now + self.timeout_seconds,
             review=deepcopy(review),
+            local_visual_only=local_visual_only,
         )
         self._pending[pending_id] = pending
         return pending
