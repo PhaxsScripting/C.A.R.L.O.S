@@ -404,3 +404,7 @@ You can request visual targets without handling identifiers:
 Labels must be quoted. Named window resolution uses native metadata first. Matching labels require an ordinal when there is more than one, ordered from top to bottom, then left to right. Click commands require a declared window change: close, be minimized, be maximized, be fullscreen or exit fullscreen. Carlos creates the preview before requesting approval. Native input consent may also be needed; expiration or any target/image change stops the action. `preview visually click ...` remains a dry run with no capture or input. Regular semantic-control click commands still use accessibility.
 
 Direct desktop commands and authenticated local calls for visual targets/clicks remain local even when a cloud conversation provider is selected. They do not invoke that provider or change its settings. Model-engine tool callbacks cannot inherit this local execution scope; cloud models remain blocked from private visual tool results. The server records the local origin on its pending confirmation internally, then rechecks it when resolving the single-use approval.
+
+Local clients can send `speak: false` on `command.submit` and on its later
+`confirmation.respond` to keep both request stages silent. Each request scopes
+its own speech policy; a normal desktop confirmation retains the default reply.

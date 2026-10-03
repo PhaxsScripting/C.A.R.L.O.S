@@ -2652,9 +2652,15 @@ class CarlosCore:
             return {"confirmations": self.permissions.list_for_local_client()}
         if request_type == "confirmation.respond":
             await self._prepare_interactive_request(str(request.get("id") or uuid.uuid4().hex))
-            result = await self.resolve_confirmation(payload)
+            from .voice.reply_stream import desktop_speech
+
+            token = desktop_speech.set(payload.get("speak", True) is not False)
+            try:
+                result = await self.resolve_confirmation(payload)
+            finally:
+                desktop_speech.reset(token)
             continuation = result.get("command")
-            if isinstance(continuation, dict):
+            if isinstance(continuation, dict) and payload.get("speak", True) is not False:
                 self._schedule_response_speech(continuation)
             return result
         if request_type == "memory.list":
