@@ -19,6 +19,7 @@ import aiohttp
 
 from .base import Provider, ProviderError, ProviderTurn, ToolCall, ProviderResourceError
 from .offline import OfflineProvider
+from ..personality import delivery_instructions
 from .tool_context import encode_tool_result
 
 SYSTEM_INSTRUCTIONS = """You are Carlos (C.A.R.L.O.S., Crackhead Artificial Robot Living On Shitbox), the user's local Gentoo KDE desktop assistant.
@@ -375,7 +376,8 @@ class LocalLlamaProvider(Provider):
                 "Never invent an action, result or remembered fact."
             )
         return "\n".join(
-            (instructions, length_instruction, tone_instruction, technical_instruction)
+            (instructions, length_instruction, tone_instruction, technical_instruction,
+             *delivery_instructions(self.personality))
         )
 
     @property

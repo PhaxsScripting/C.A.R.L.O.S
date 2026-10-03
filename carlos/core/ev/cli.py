@@ -93,6 +93,10 @@ def parser() -> argparse.ArgumentParser:
             "acknowledgements",
             "technical_language",
             "voice_expressiveness",
+            "humor",
+            "sarcasm",
+            "name_usage",
+            "speaking_rate",
         ),
     )
     personality.add_argument("value")
@@ -138,12 +142,12 @@ async def async_main(arguments: argparse.Namespace) -> int:
     personality_payload: dict[str, Any] = {}
     if arguments.command == "personality":
         value: Any = arguments.value
-        if arguments.key == "voice_expressiveness":
+        if arguments.key in {"voice_expressiveness", "speaking_rate"}:
             try:
                 value = float(value)
             except ValueError as error:
                 raise SystemExit(
-                    "voice_expressiveness must be a number between 0.1 and 1.0"
+                    f"{arguments.key} must be a number"
                 ) from error
         personality_payload = {arguments.key: value}
     mapping = {

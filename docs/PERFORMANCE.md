@@ -13,7 +13,7 @@ benchmark and cannot establish the requested whole-desktop RAM target.
 | Interval CPU | 29.691% of one logical CPU | Identity-stable sample, including measurement overhead; completeness: True |
 | Core health | DORMANT, healthy | Observation after checked deployments |
 | Runtime readiness | FULLY_READY | Current component subset; does not certify full specification acceptance |
-| Full Python suite | 1,562 tests, 115.144 seconds | One low-priority CPU, development run |
+| Full Python suite | 1,568 tests, 121.827 seconds | One low-priority CPU, development run |
 
 The resource sample includes whichever ambient/model workers were alive; it
 is not a model-only or quiescent-idle measurement. Source/import/container
@@ -45,3 +45,8 @@ timing/native-capture failures. Cancelling that exact owned scan reduced sampled
 CPU load; the same eleven checks passed in 2.917 seconds without test or runtime
 changes. The complete suite then passed as listed above. The earlier Core memory
 sample is unchanged; this does not establish quiescent idle or acoustic latency.
+
+The installed-source delivery fixture synthesized the same generated phrase at
+0.85x and 1.30x in one owned persistent Piper worker. PCM durations were 3.8893
+and 2.9605 seconds. These are audio lengths, not synthesis latency, playback
+quality or room response latency. The worker was reaped; no audio played.

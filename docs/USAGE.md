@@ -559,3 +559,33 @@ prevents the stale occurrence from being spoken. Repeated claims for the same
 reminder replace its older queued occurrence. A privacy change during the
 readback still discards the old speech. This observes database state before
 speech dispatch; subsequent changes can race with speech already in progress.
+
+## Conversation controls
+
+Settings includes Humor (off/light/normal), Sarcasm (off/light), Use my name
+(rare/normal/often) and Speaking rate. Humor, name frequency and working chatter
+change the local prompt; they do not let Carlos invent names or claim actions.
+Speaking rate changes the next speech request without restarting Piper. The
+existing rate is preserved when another personality setting changes. Response
+length, tone, technical language, acknowledgements and voice color remain.
+
+The same settings are available through `evctl personality`, for example:
+
+```sh
+evctl personality humor light
+evctl personality sarcasm off
+evctl personality name_usage rare
+evctl personality speaking_rate 1.15
+```
+
+Rates accept numeric values from 0.65 through 1.50. Invalid mixed updates leave
+settings unchanged. Persistent personality changes are refused during Private
+Session, Guest mode and privacy transitions. Greeting frequency is controlled
+separately in Presence settings. Proactive speech threshold controls remain
+unfinished.
+
+For a silent native check with installed Piper/model dependencies, run
+`python3 carlos/scripts/check-personality-delivery.py`. It uses private Core IPC,
+a real numeric CLI request, temporary settings and two generated PCM samples;
+it does not play audio or open a microphone. `--core-dir` selects an installed
+Core tree; `--config` selects the configuration providing TTS dependency paths.

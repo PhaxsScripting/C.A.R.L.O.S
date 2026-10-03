@@ -31,6 +31,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "acknowledgements": "important_only",
         "technical_language": "balanced",
         "voice_expressiveness": 0.62,
+        "humor": "light",
+        "sarcasm": "off",
+        "name_usage": "rare",
     },
     "telemetry": {
         "idle_interval_seconds": 3.0,

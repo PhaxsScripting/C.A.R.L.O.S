@@ -1,13 +1,13 @@
 # Current acceptance
 
-Updated October 3, 2026 after the file-transfer readbacks. This is a progress
+Updated October 3, 2026 after personality controls and privacy guards. This is a progress
 matrix, not a declaration that the entire specification is complete. WORKING
 means tested in the stated scope; PARTIAL names the remaining work; BLOCKED
 names the observed blocker. Component availability and FULLY_READY diagnostics
 are runtime readiness observations, not acceptance of this whole matrix.
 
 Evidence and test boundaries are recorded in [VALIDATION.md](VALIDATION.md).
-The latest full suite passed 1,562 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
+The latest full suite passed 1,568 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
 silent mocked speech sink. File checks use owned temporary files, native
 permissions and installed-source private IPC; no host personal content is read.
 The installed catalogue contains 257 tools and 181 incomplete declarations.
@@ -70,5 +70,10 @@ The installed catalogue contains 257 tools and 181 incomplete declarations.
 | Security Monitoring | PARTIAL | Local inspection and scoped observations exist. Complete exposure, retention and remote-device audit remain. |
 | Boot Integration | PARTIAL | Installer/startup and explicit runtime restart are checked. Fresh boot/login and resume-to-all-ready measurements remain. |
 | Daily Stability | PARTIAL | Regression and owned recovery fixtures pass. A full daily-session soak has not been performed. |
+
+Personality settings now include humor, sarcasm, name frequency and speaking
+rate. Native controls, private IPC/CLI persistence and actual silent Piper rate
+changes passed. Prompt preferences do not establish subjective conversational
+quality; proactive speech thresholds remain unfinished.
 
 See [PERFORMANCE.md](PERFORMANCE.md) for measured values and missing measurements.

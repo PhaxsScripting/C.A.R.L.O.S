@@ -62,6 +62,7 @@ TestCase {
         function steerTask(id,text) { calls = calls.concat([{task_id:id,text:text}]) }
         function callTool(name,args) { calls = calls.concat([{name:name,args:args}]) }
         function stopSpeaking() {}
+        function updatePersonality(key,value) { calls = calls.concat([{personality:key,value:value}]) }
     }
     Component { id: appComponent; EV.Main { width:1080; height:680 } }
     function init() {
@@ -78,6 +79,35 @@ TestCase {
         waitForRendering(ui.contentItem)
     }
     function cleanup() { ui.close() }
+    function test_personality_controls_send_typed_choices_and_disable_offline() {
+        mock.personality={humor:"light",sarcasm:"off",name_usage:"rare",speaking_rate:1.18}
+        click("nav-9")
+        waitForRendering(ui.contentItem)
+        const rate=item("personality-speaking-rate")
+        let scroll=rate.parent
+        while(scroll && scroll.contentY === undefined) scroll=scroll.parent
+        verify(scroll !== null)
+        scroll.contentY=Math.max(0,rate.mapToItem(scroll.contentItem,0,0).y-70)
+        waitForRendering(ui.contentItem)
+        verify(rate.text.indexOf("1.18x") >= 0)
+        click("personality-humor")
+        compare(mock.calls[mock.calls.length-1].personality,"humor")
+        compare(mock.calls[mock.calls.length-1].value,"normal")
+        click("personality-sarcasm")
+        compare(mock.calls[mock.calls.length-1].value,"light")
+        click("personality-name-usage")
+        compare(mock.calls[mock.calls.length-1].value,"normal")
+        click("personality-speaking-rate")
+        compare(typeof mock.calls[mock.calls.length-1].value,"number")
+        const controls=item("personality-controls")
+        verify(rate.mapToItem(controls,0,0).y + rate.height <= controls.height)
+        verify(rate.contentItem.implicitWidth <= rate.availableWidth)
+        mock.connected=false
+        tryCompare(rate,"enabled",false)
+        verify(!item("personality-humor").enabled)
+        verify(!item("personality-sarcasm").enabled)
+        verify(!item("personality-name-usage").enabled)
+    }
     function test_settings_undo_and_controls_wait_for_pending_response() {
         mock.daily={settings:{undo_available:true,fields:[{key:"media_ducking",section:"Voice",label:"Lower media volume",value:false}],choices:[{key:"operating_mode",section:"General",label:"Mode",value:"DAILY",choices:[{value:"DAILY",label:"Daily"},{value:"DEV",label:"Development"}]}]}}
         click("nav-9")

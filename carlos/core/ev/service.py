@@ -53,6 +53,7 @@ from .voice import VoiceManager, is_conversation_stop
 from .vision import ScreenPerception
 from .identity import identity
 from .privacy import PrivacyPolicy
+from .personality import snapshot as personality_snapshot, update_values as personality_update
 
 
 class AlreadyRunningError(RuntimeError):
@@ -670,7 +671,7 @@ class CarlosCore:
             "planner": self.planner.snapshot(),
             "activity": self.activity.snapshot(),
             "insights": self.insights.snapshot(),
-            "personality": dict(self.config.get("personality", {})),
+            "personality": personality_snapshot(self.config),
             "tools": {
                 "registered": len(self.tools.catalog()),
                 "pending_confirmations": self.permissions.list_public(),
@@ -912,38 +913,14 @@ class CarlosCore:
         }
 
     def update_personality(self, payload: dict[str, Any]) -> dict[str, Any]:
-        choices = {
-            "response_length": {"minimal", "normal", "detailed"},
-            "tone": {"calm", "natural", "professional", "custom"},
-            "working_verbosity": {"silent", "minimal", "conversational"},
-            "acknowledgements": {"off", "important_only", "normal"},
-            "technical_language": {"simple", "balanced", "technical"},
-        }
-        permitted = set(choices) | {"voice_expressiveness"}
-        unknown = set(payload) - permitted
-        if unknown or not payload:
-            raise ValueError(
-                f"invalid personality setting: {', '.join(sorted(unknown)) or 'none supplied'}"
-            )
-        updated = dict(self.config.get("personality", {}))
-        for key, value in payload.items():
-            if key == "voice_expressiveness":
-                if (
-                    isinstance(value, bool)
-                    or not isinstance(value, (int, float))
-                    or not 0.1 <= float(value) <= 1.0
-                ):
-                    raise ValueError("voice_expressiveness must be between 0.1 and 1.0")
-                updated[key] = round(float(value), 2)
-            else:
-                normalized = str(value).casefold()
-                if normalized not in choices[key]:
-                    raise ValueError(f"invalid {key} value")
-                updated[key] = normalized
+        if self.privacy.ephemeral or self.privacy.changing:
+            raise ValueError("Persistent personality settings cannot change during private or guest sessions or privacy transitions")
+        updated = personality_update(self.config, payload)
         expressiveness = float(updated.get("voice_expressiveness", 0.62))
         persisted_config = json.loads(json.dumps(self.config))
         persisted_config["personality"] = updated
         persisted_config["voice"]["tts"]["noise_scale"] = expressiveness
+        persisted_config["voice"]["tts"]["speaking_rate"] = updated["speaking_rate"]
 
         temporary = self.paths.config_file.with_name(".config.json.tmp")
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -960,6 +937,8 @@ class CarlosCore:
         self.config["personality"] = updated
         self.config["voice"]["tts"]["noise_scale"] = expressiveness
         self.voice.tts.config["noise_scale"] = expressiveness
+        self.config["voice"]["tts"]["speaking_rate"] = updated["speaking_rate"]
+        self.voice.tts.config["speaking_rate"] = updated["speaking_rate"]
         provider_update = getattr(self.brain.provider, "set_personality", None)
         if provider_update is not None:
             provider_update(updated)

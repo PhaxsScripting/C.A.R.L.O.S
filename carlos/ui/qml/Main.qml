@@ -989,8 +989,10 @@ ApplicationWindow {
                             TitleText { text: "PERSONALITY // LIVE DELIVERY" }
                             SectionPanel {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 205
+                                Layout.preferredHeight: personalityControls.implicitHeight + 32
                                 ColumnLayout {
+                                    id: personalityControls
+                                    objectName: "personality-controls"
                                     anchors.fill: parent
                                     anchors.margins: 16
                                     spacing: 10
@@ -1039,6 +1041,40 @@ ApplicationWindow {
                                                 const next = current < 0.45 ? 0.5 : current < 0.58 ? 0.62 : current < 0.72 ? 0.8 : 0.35
                                                 evClient.updatePersonality("voice_expressiveness", next)
                                             }
+                                        }
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        HudButton {
+                                            objectName: "personality-humor"
+                                            Layout.fillWidth: true
+                                            enabled: evClient.connected
+                                            text: "HUMOR // " + String(get(evClient.personality, "humor", "light")).toUpperCase()
+                                            onClicked: evClient.updatePersonality("humor", appWindow.nextChoice(get(evClient.personality, "humor", "light"), ["off", "light", "normal"]))
+                                        }
+                                        HudButton {
+                                            objectName: "personality-sarcasm"
+                                            Layout.fillWidth: true
+                                            enabled: evClient.connected
+                                            text: "SARCASM // " + String(get(evClient.personality, "sarcasm", "off")).toUpperCase()
+                                            onClicked: evClient.updatePersonality("sarcasm", appWindow.nextChoice(get(evClient.personality, "sarcasm", "off"), ["off", "light"]))
+                                        }
+                                    }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        HudButton {
+                                            objectName: "personality-name-usage"
+                                            Layout.fillWidth: true
+                                            enabled: evClient.connected
+                                            text: "USE MY NAME // " + String(get(evClient.personality, "name_usage", "rare")).toUpperCase()
+                                            onClicked: evClient.updatePersonality("name_usage", appWindow.nextChoice(get(evClient.personality, "name_usage", "rare"), ["rare", "normal", "often"]))
+                                        }
+                                        HudButton {
+                                            objectName: "personality-speaking-rate"
+                                            Layout.fillWidth: true
+                                            enabled: evClient.connected
+                                            text: "SPEAKING RATE // " + Number(get(evClient.personality, "speaking_rate", 1)).toFixed(2) + "x"
+                                            onClicked: evClient.updatePersonality("speaking_rate", appWindow.nextChoice(Number(get(evClient.personality, "speaking_rate", 1)), [0.85, 1, 1.15, 1.3]))
                                         }
                                     }
                                 }
