@@ -11,6 +11,7 @@ import psutil
 
 from .events import PhaxEventBus
 from .hardware_metrics import HardwareMetrics, entries, read_int, read_text
+from .priority import priority_for
 
 
 def read_temperature(hwmon_root: Path | None = None) -> dict[str, Any]:
@@ -63,7 +64,8 @@ class TelemetrySampler:
         self.process = psutil.Process(os.getpid())
         self._last_network = psutil.net_io_counters()
         self._last_network_time = time.monotonic()
-        self._last_thermal_warning = 0.0
+        self._last_thermal_warning: float | None = None
+        self._thermal_warning_times: dict[str, float] = {}
         self._resource_mode = "NORMAL"
         self._last_link = None
         self._last_power = None
@@ -144,6 +146,45 @@ class TelemetrySampler:
                                  "observed_at": time.time(), "poll_interval_seconds": self.interval})
         self._last_link, self._last_power = link, power
 
+    def observe_thermal(self, temperature: Any, now: float | None = None) -> None:
+        try:
+            valid = isinstance(temperature, (int, float)) and not isinstance(temperature, bool) and math.isfinite(temperature)
+        except OverflowError:
+            valid = False
+        if not valid:
+            return
+        try:
+            if isinstance(self.config.get("warning_temperature_celsius"), bool):
+                raise ValueError("Invalid warning threshold")
+            threshold = float(self.config.get("warning_temperature_celsius", 90.0))
+            if not math.isfinite(threshold):
+                raise ValueError("Invalid warning threshold")
+        except (TypeError, ValueError, OverflowError):
+            threshold = 90.0
+        try:
+            if isinstance(self.config.get("warning_repeat_seconds"), bool):
+                raise ValueError("Invalid warning interval")
+            repeat = float(self.config.get("warning_repeat_seconds", 120.0))
+            if not math.isfinite(repeat):
+                raise ValueError("Invalid warning interval")
+            repeat = max(0.0, repeat)
+        except (TypeError, ValueError, OverflowError):
+            repeat = 120.0
+        if temperature < threshold:
+            return
+        now = time.monotonic() if now is None else now
+        priority = priority_for("system.warning", "telemetry", {"kind": "thermal", "celsius": temperature})
+        previous = self._thermal_warning_times.get(priority)
+        if previous is not None and now - previous < repeat:
+            return
+        self.bus.publish(
+            "system.warning", "telemetry",
+            {"kind": "thermal", "message": f"Reported CPU sensor temperature is {temperature:.0f} degrees",
+             "celsius": temperature, "threshold": threshold},
+        )
+        self._thermal_warning_times[priority] = now
+        self._last_thermal_warning = now
+
     async def run(self, stop_event: asyncio.Event) -> None:
         while not stop_event.is_set():
             started = time.perf_counter()
@@ -169,26 +210,7 @@ class TelemetrySampler:
                             "available_bytes": sample["memory"]["available_bytes"],
                         },
                     )
-                temperature = sample["cpu_temperature"].get("celsius")
-                threshold = float(self.config.get("warning_temperature_celsius", 90.0))
-                repeat = float(self.config.get("warning_repeat_seconds", 120.0))
-                now = time.monotonic()
-                if (
-                    temperature is not None
-                    and temperature >= threshold
-                    and now - self._last_thermal_warning >= repeat
-                ):
-                    self.bus.publish(
-                        "system.warning",
-                        "telemetry",
-                        {
-                            "kind": "thermal",
-                            "message": f"Reported CPU sensor temperature is {temperature:.0f} degrees",
-                            "celsius": temperature,
-                            "threshold": threshold,
-                        },
-                    )
-                    self._last_thermal_warning = now
+                self.observe_thermal(sample["cpu_temperature"].get("celsius"))
             except Exception as error:
                 self.bus.publish("system.error", "telemetry", {"message": str(error)})
             try:
