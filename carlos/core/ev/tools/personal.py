@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from .base import ToolRegistry, ToolSpec
+from .personal_contracts import PERSONAL_OBSERVATION_SCHEMAS
 from .builtin import object_schema, resolve_allowed, clipboard_read, clipboard_write
 from ..permissions import Permission
 from ..utilities import calculate, convert, world_clock, text_stats
@@ -161,6 +162,10 @@ def register_personal_tools(registry: ToolRegistry):
     identify = object_schema({"identifier": text}, ["identifier"])
 
     def reg(name, description, schema, executor, permission=Permission.LOW_RISK, **kw):
+        if name in PERSONAL_OBSERVATION_SCHEMAS:
+            kw.update(read_only=True, offline_available=True, reversible=False,
+                      output_schema=PERSONAL_OBSERVATION_SCHEMAS[name],
+                      verification="Read-only local result; listing titles does not authorize full content or an action")
         registry.register(
             ToolSpec(name, "PRODUCTIVITY", description, permission, schema, executor, **kw)
         )

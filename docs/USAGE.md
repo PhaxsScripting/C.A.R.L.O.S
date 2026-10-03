@@ -505,3 +505,9 @@ STT, preview-STT and VAD workers, verifies they and the recorder exit on mute,
 checks capture refusal, then verifies Normal mode creates new ambient workers.
 It needs the local models and PipeWire/Pulse tools. Host microphone, playback
 routes and Carlos settings are not changed; this is not a room-acoustic test.
+
+Saved note/task/bookmark/snippet list and read results validate their fields
+and item kind. List item schemas reject a full-content field; reading content
+uses the explicit read tool. The calculator, unit converter, world clock,
+clipboard counts, recent-file list and expired-selection response also validate
+their returned fields. Existing save/archive/append/copy permissions are unchanged.
