@@ -29,6 +29,8 @@ from .base import ToolContext, ToolRegistry, ToolSpec, ValidationError
 from .media import control_media
 from . import audio_undo, window_undo
 from .system_contracts import SYSTEM_OBSERVATION_SCHEMAS
+from .file_contracts import FILE_OBSERVATION_SCHEMAS
+from . import file_inventory
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 _AUDIO_STATE_PROPERTIES = {
@@ -1257,40 +1259,7 @@ def mpris(arguments: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
 
 
 def find_file(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-    query = arguments["query"].casefold()
-    root = resolve_allowed(arguments.get("root", str(Path.home() / "Downloads")), context)
-    limit = int(arguments.get("limit", 50))
-    include_hidden = bool(arguments.get("include_hidden", False))
-    results: list[dict[str, Any]] = []
-    visited = 0
-    for current, directories, files in os.walk(root, followlinks=False):
-        directories[:] = [
-            name
-            for name in directories
-            if name not in {".git", "node_modules", "build", "target"}
-            and (include_hidden or not name.startswith("."))
-        ]
-        for name in files:
-            visited += 1
-            if not include_hidden and name.startswith("."):
-                continue
-            if query in name.casefold():
-                path = Path(current) / name
-                try:
-                    stat = path.stat()
-                except OSError:
-                    continue
-                results.append(
-                    {
-                        "name": name,
-                        "path": str(path),
-                        "size_bytes": stat.st_size,
-                        "modified_epoch": stat.st_mtime,
-                    }
-                )
-                if len(results) >= limit:
-                    return {"results": results, "visited_files": visited, "truncated": True}
-    return {"results": results, "visited_files": visited, "truncated": False}
+    return file_inventory.find_file(arguments, context, resolve_allowed)
 
 
 def get_file_info(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -1342,38 +1311,7 @@ def open_file(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]
 
 
 def list_directory(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
-    path = resolve_allowed(arguments["path"], context)
-    if not path.is_dir():
-        raise ValidationError("path is not a directory")
-    include_hidden = bool(arguments.get("include_hidden", False))
-    limit = int(arguments.get("limit", 100))
-    entries: list[dict[str, Any]] = []
-    for child in sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.casefold())):
-        if not include_hidden and child.name.startswith("."):
-            continue
-        try:
-            stat = child.lstat()
-        except OSError:
-            continue
-        entries.append(
-            {
-                "name": child.name,
-                "path": str(child),
-                "is_file": child.is_file(),
-                "is_directory": child.is_dir(),
-                "is_symlink": child.is_symlink(),
-                "size_bytes": stat.st_size,
-                "modified_epoch": stat.st_mtime,
-            }
-        )
-        if len(entries) >= limit:
-            break
-    return {
-        "path": str(path),
-        "entries": entries,
-        "count": len(entries),
-        "truncated": len(entries) >= limit,
-    }
+    return file_inventory.list_directory(arguments, context, resolve_allowed)
 
 
 def create_directory(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -2746,6 +2684,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 ["query"],
             ),
             find_file,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=FILE_OBSERVATION_SCHEMAS['files.find'],
+            verification="Local allowed-path observation; partial scans are not complete inventories",
             timeout_seconds=40,
         )
     )
@@ -2757,6 +2698,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             object_schema({"path": root_property}, ["path"]),
             get_file_info,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=FILE_OBSERVATION_SCHEMAS['files.info'],
+            verification="Local allowed-path observation; partial scans are not complete inventories",
         )
     )
     register(
@@ -2774,6 +2718,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 ["path"],
             ),
             list_directory,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=FILE_OBSERVATION_SCHEMAS['files.list'],
+            verification="Local allowed-path observation; partial scans are not complete inventories",
         )
     )
     register(
@@ -2800,6 +2747,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 ["path"],
             ),
             read_file,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=FILE_OBSERVATION_SCHEMAS['files.read'],
+            verification="Local allowed-path observation; partial scans are not complete inventories",
             normalizer=normalize_path_argument("path"),
             confirmation_reason="File contents may be private and will be shared with the active reasoning request.",
         )
@@ -2839,6 +2789,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             object_schema({"path": root_property}, ["path"]),
             hash_file,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=FILE_OBSERVATION_SCHEMAS['files.hash'],
+
             verification="Stream the complete file into SHA-256",
             side_effects=(),
         )

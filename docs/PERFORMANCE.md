@@ -13,7 +13,7 @@ benchmark and cannot establish the requested whole-desktop RAM target.
 | Interval CPU | 29.691% of one logical CPU | Identity-stable sample, including measurement overhead; completeness: True |
 | Core health | DORMANT, healthy | Observation after checked deployments |
 | Runtime readiness | FULLY_READY | Current component subset; does not certify full specification acceptance |
-| Full Python suite | 1,545 tests, 117.046 seconds | One low-priority CPU, development run |
+| Full Python suite | 1,555 tests, 116.621 seconds | One low-priority CPU, development run |
 
 The resource sample includes whichever ambient/model workers were alive; it
 is not a model-only or quiescent-idle measurement. Source/import/container
@@ -38,3 +38,10 @@ The unknown measurements above are gaps, not zeroes or claims that the goals
 are impossible. Earlier scoped experiments are described in
 [VALIDATION.md](VALIDATION.md); they should not be relabelled as current room,
 physical device or clean-idle results.
+
+October 3 regression timing follow-up: an unrelated editor file-listing process
+had saturated all eight CPUs for almost an hour. The initial suite had three
+timing/native-capture failures. Cancelling that exact owned scan reduced sampled
+CPU load; the same eleven checks passed in 2.917 seconds without test or runtime
+changes. The complete suite then passed as listed above. The earlier Core memory
+sample is unchanged; this does not establish quiescent idle or acoustic latency.

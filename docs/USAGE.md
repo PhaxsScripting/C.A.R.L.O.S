@@ -331,6 +331,20 @@ or truncated inventory returns null with an unavailable reason, while a
 successful empty inventory returns an empty list. Partial results keep the
 readings that succeeded and remain unverified; all failed backends fail the tool.
 
+File search, listing, metadata, text reading and SHA-256 hashing validate their
+returned fields. Search skips symlinks and excludes hidden entries unless asked;
+`.git`, `node_modules`, `build` and `target` directories remain excluded. Searches
+stop after 20,000 inspected entries, 2,000 directories or a five-second elapsed
+budget. Listings keep only the requested number of sorted rows plus one while
+scanning, with the same entry/time budgets. The time budget is checked between
+filesystem calls; it cannot interrupt a blocked filesystem call.
+
+A `truncated` result keeps available rows and reports `stop_reason` and
+`scan_errors`; Carlos does not verify it as a complete inventory. Reaching the
+requested row limit exactly is complete if the scan finishes without another
+match. Listed symlinks describe the link itself, not its target. These readings
+are observations of a changing filesystem, not an atomic snapshot or sandbox.
+
 Say `undo volume`, `undo mute`, or `undo the audio change` to reverse Carlos's
 most recent output-volume or mute adjustment. The undo history stays in memory,
 holds up to 32 changes, and expires after ten minutes. It restores exact channel
