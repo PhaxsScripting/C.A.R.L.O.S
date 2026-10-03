@@ -63,6 +63,13 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             changed,
         )
 
+    if name == "system.devices" and data.get("complete") is False:
+        return ExecutionResult(
+            True, "EXECUTED_UNVERIFIED", False, changed_state=False,
+            verification_hint="Partial local inventory; unavailable backends remain unknown",
+            scope="partial_device_inventory",
+        )
+
     # Native launch/dispatch acknowledgements cannot verify application state.
     accepted_fields = {
         "applications.open": "launched",

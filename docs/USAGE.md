@@ -324,6 +324,12 @@ The local clock, CPU, memory, temperature, disk, battery, system identity and
 mount tools validate their returned fields before reporting a result. Missing
 temperature and battery sensors remain unknown or absent. These observations
 work offline and do not change settings; they do not verify a later action.
+Process, interface, audio-device and OpenRC inventories also validate their
+returned fields. Interface state does not establish Internet connectivity.
+`system.devices` reports each USB/Bluetooth/audio inventory separately: a failed
+or truncated inventory returns null with an unavailable reason, while a
+successful empty inventory returns an empty list. Partial results keep the
+readings that succeeded and remain unverified; all failed backends fail the tool.
 
 Say `undo volume`, `undo mute`, or `undo the audio change` to reverse Carlos's
 most recent output-volume or mute adjustment. The undo history stays in memory,

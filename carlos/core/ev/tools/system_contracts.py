@@ -26,6 +26,18 @@ MOUNT = record({'device': text(), 'mountpoint': text(), 'filesystem': text(),
 CELL = record({'status': text(), 'power_watts': number(True), 'power_source': text(True),
                'temperature_celsius': number(True)})
 
+AUDIO_ENDPOINT = record({'index': integer(), 'name': text(), 'description': text(),
+                         'state': text(), 'muted': {'type': 'boolean'}, 'percent': integer(True),
+                         'device_bus': text(), 'device_description': text()})
+AUDIO_DEVICES = record({'backend': text(), 'default_input': text(), 'default_output': text(),
+                        'inputs': series(AUDIO_ENDPOINT), 'outputs': series(AUDIO_ENDPOINT)})
+INVENTORY_STATE = record({'available': {'type': 'boolean'}, 'detail': text()})
+PROCESS = record({'pid': integer(), 'ppid': integer(), 'name': text(), 'username': text(True),
+                  'rss_bytes': integer(), 'cpu_percent': number(), 'started_at_epoch': number()})
+INTERFACE = record({'name': text(), 'up': {'type': 'boolean'}, 'speed_mbps': integer(),
+                    'addresses': series(text())})
+
+
 SYSTEM_OBSERVATION_SCHEMAS = {
     'system.clock': record({'iso8601': text(), 'local_time': text(), 'local_date': text(),
                             'timezone': text(True), 'source': {'type': 'string', 'enum': ['operating_system_clock']}}),
@@ -47,4 +59,18 @@ SYSTEM_OBSERVATION_SCHEMAS = {
     'system.identity': record({key: text() for key in ('operating_system', 'kernel', 'architecture',
                                                      'hostname', 'desktop', 'session_type')}),
     'system.mounts': record({'mounts': series(MOUNT), 'count': integer()}),
+    'system.get_processes': record({'processes': series(PROCESS), 'inspected': integer(),
+                                    'sort': {'type': 'string', 'enum': ['cpu', 'memory']}}),
+    'system.get_network_status': record({'interfaces': series(INTERFACE),
+                                        'bytes_sent': integer(), 'bytes_received': integer()}),
+    'audio.devices': AUDIO_DEVICES,
+    'system.devices': record({'ok': {'type': 'boolean'}, 'complete': {'type': 'boolean'},
+                              'usb': {'type': ['array', 'null'], 'items': text()},
+                              'bluetooth': {'type': ['array', 'null'], 'items': text()},
+                              'audio': {**AUDIO_DEVICES, 'type': ['object', 'null']},
+                              'inventories': record({key: INVENTORY_STATE for key in ('usb', 'bluetooth', 'audio')}),
+                              'limitations': series(text())}),
+    'system.openrc_services': record({'ok': {'type': 'boolean'},
+                                      'services': series(record({key: text() for key in ('name', 'status', 'runlevel')})),
+                                      'count': integer(), 'detail': text()}),
 }

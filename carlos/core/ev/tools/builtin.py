@@ -1089,21 +1089,40 @@ def get_mounts(_arguments: dict[str, Any], _context: ToolContext) -> dict[str, A
 
 
 def get_connected_devices(_arguments: dict[str, Any], _context: ToolContext) -> dict[str, Any]:
-    usb = run_command([_platform_executable("/usr/bin/lsusb")], timeout=5)
-    bluetooth = run_command(
-        [_platform_executable("/usr/bin/bluetoothctl"), "devices", "Connected"], timeout=5
-    )
+    def inventory(command):
+        try:
+            result = run_command(command, timeout=5)
+            available = result['ok'] and not result.get('truncated', False)
+            detail = '' if available else (result['stderr'].strip() or 'Device inventory unavailable or truncated')
+            return result['stdout'] if available else None, {'available': available, 'detail': detail[:500]}
+        except (OSError, subprocess.TimeoutExpired) as error:
+            return None, {'available': False, 'detail': str(error)[:500]}
+
+    usb, usb_state = inventory([_platform_executable("/usr/bin/lsusb")])
+    bluetooth, bluetooth_state = inventory(
+        [_platform_executable("/usr/bin/bluetoothctl"), "devices", "Connected"])
+    try:
+        audio = get_audio_devices({}, _context)
+        audio_state = {'available': True, 'detail': ''}
+    except (OSError, subprocess.TimeoutExpired, RuntimeError) as error:
+        audio = None
+        audio_state = {'available': False, 'detail': str(error)[:500]}
+    inventories = {'usb': usb_state, 'bluetooth': bluetooth_state, 'audio': audio_state}
     return {
-        "usb": [line.strip() for line in usb["stdout"].splitlines() if line.strip()],
+        "ok": any(value['available'] for value in inventories.values()),
+        "complete": all(value['available'] for value in inventories.values()),
+        "inventories": inventories,
+        "usb": [line.strip() for line in usb.splitlines() if line.strip()] if usb is not None else None,
         "bluetooth": [
             line.removeprefix("Device ").strip()
-            for line in bluetooth["stdout"].splitlines()
+            for line in bluetooth.splitlines()
             if line.startswith("Device ")
-        ],
-        "audio": get_audio_devices({}, _context),
+        ] if bluetooth is not None else None,
+        "audio": audio,
         "limitations": [
             "USB entries identify buses and products, not trust",
             "Bluetooth reports current BlueZ connections",
+            "Unavailable inventories are unknown, not proof that no devices are connected",
         ],
     }
 
@@ -2405,6 +2424,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 }
             ),
             get_processes,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.get_processes'],
+            verification="Read-only local process inventory with sampled CPU; not application responsiveness",
         )
     )
     register(
@@ -2415,6 +2437,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_network_status,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.get_network_status'],
+            verification="Read-only interface state and byte counters; not DNS or Internet connectivity",
         )
     )
     register(
@@ -2464,6 +2489,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_connected_devices,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.devices'],
+            verification="Per-backend local device inventory; failed or truncated readings stay unknown",
             timeout_seconds=20,
         )
     )
@@ -2475,6 +2503,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_openrc_services,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.openrc_services'],
+            verification="Read-only OpenRC status inventory; no service transition requested",
         )
     )
 
@@ -2650,6 +2681,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_audio_devices,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['audio.devices'],
             verification="pactl JSON observation",
             side_effects=(),
         )
