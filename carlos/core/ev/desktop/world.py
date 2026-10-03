@@ -99,8 +99,13 @@ class DesktopWorldModel:
     def peek_window_restore(self) -> dict[str, Any] | None:
         return deepcopy(self._window_history[-1]) if self._window_history else None
 
-    def consume_window_restore(self) -> dict[str, Any] | None:
-        return deepcopy(self._window_history.pop()) if self._window_history else None
+    def consume_window_restore(self, expected: dict[str, Any] | None = None) -> dict[str, Any] | None:
+        if expected is None:
+            return deepcopy(self._window_history.pop()) if self._window_history else None
+        for index in range(len(self._window_history) - 1, -1, -1):
+            if self._window_history[index] == expected:
+                return deepcopy(self._window_history.pop(index))
+        return None
 
     async def _merge_kscreen(self, data: dict[str, Any]) -> None:
         try:

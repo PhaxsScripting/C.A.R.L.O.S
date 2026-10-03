@@ -3352,6 +3352,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 "expected": {"type": "object"}, "window": {"type": ["object", "null"]},
                 "output_identity_guarded": {"type": "boolean"},
                 "output_identity_verified": {"type": ["boolean", "null"]},
+                "discarded": {"type": "boolean"}, "history_consumed": {"type": "boolean"},
+                "message": {"type": "string"},
             }, ["verified"]),
             platform_requirements=kwin_requirements,
             verification="Restore and re-read geometry, output, workspace, and state",

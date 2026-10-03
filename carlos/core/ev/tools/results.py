@@ -99,6 +99,13 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             retryable=False, verification_hint="Fresh native window identity, not application readiness",
             scope="native_window_presence",
         )
+    if name == "desktop.window.undo_last":
+        verified = data.get("verified") is True
+        return ExecutionResult(
+            verified, "SUCCEEDED_VERIFIED" if verified else "FAILED", verified,
+            None if verified else str(data.get("message") or data.get("reason") or "Window restoration unverified"),
+            retryable=False, changed_state=True if verified else None, scope="window_restore",
+        )
     if name == "system.power":
         # A scheduled request is not evidence that the machine powered off.
         accepted = data.get("scheduled") is True and data.get("verified") is True

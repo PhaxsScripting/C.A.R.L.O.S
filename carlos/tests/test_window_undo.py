@@ -3,6 +3,7 @@ import logging
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -166,6 +167,88 @@ class WindowUndoTests(unittest.IsolatedAsyncioTestCase):
         self.model.snapshot.assert_not_awaited()
         self.model.bridge.request.assert_not_awaited()
         self.assertIsNotNone(self.model.peek_window_restore())
+
+    async def test_closed_window_discards_only_that_record_without_replaying_an_older_change(self):
+        older = self.model.remember_window({**self.previous, 'id': 'older-window'}, 'move')
+        self.remember()
+        self.world.update(windows=[], captured_at_monotonic=time.monotonic())
+        result = await desktop_undo_window_change({}, self.context)
+        self.assertFalse(result['verified'])
+        self.assertTrue(result['discarded'])
+        self.assertEqual(self.model.peek_window_restore(), older)
+        self.model.bridge.request.assert_not_awaited()
+
+    async def test_animation_deleted_window_can_be_discarded_but_hidden_special_or_incomplete_evidence_cannot(self):
+        for fields in ({'deleted': True}, {'normal': False}, {'special': True}):
+            self.model._window_history.clear()
+            self.remember()
+            self.world.update(windows=[{**self.previous, **fields}], captured_at_monotonic=time.monotonic())
+            result = await desktop_undo_window_change({}, self.context)
+            self.assertEqual(result['discarded'], fields == {'deleted': True})
+            self.model.bridge.request.assert_not_awaited()
+        for data in ({'windows': []}, {'windows': [], 'windows_truncated': True, 'captured_at_monotonic': time.monotonic()},
+                     {'windows': [], 'captured_at_monotonic': time.monotonic()-3}):
+            self.model._window_history.clear()
+            self.remember()
+            self.world = {**self.world, **data}
+            if 'captured_at_monotonic' not in data:
+                self.world.pop('captured_at_monotonic', None)
+            result = await desktop_undo_window_change({}, self.context)
+            self.assertFalse(result['discarded'])
+            self.assertIsNotNone(self.model.peek_window_restore())
+            self.model.bridge.request.assert_not_awaited()
+
+    async def test_success_consumes_its_own_record_and_preserves_a_newer_action(self):
+        self.remember()
+        newer = None
+        async def concurrent_action(*_args):
+            nonlocal newer
+            if newer is None:
+                newer = self.model.remember_window({**self.previous, 'id': 'newer-window'}, 'move')
+            return {}
+        self.model.bridge.request.side_effect = concurrent_action
+        with patch('ev.tools.builtin.asyncio.sleep', new=AsyncMock()):
+            result = await desktop_undo_window_change({}, self.context)
+        self.assertTrue(result['verified'])
+        self.assertTrue(result['history_consumed'])
+        self.assertEqual(self.model.peek_window_restore(), newer)
+        self.assertEqual(len(self.model._window_history), 1)
+
+    async def test_discard_after_observation_preserves_a_newer_action_and_no_target_guard_is_bypassed(self):
+        self.remember()
+        newer = None
+        async def concurrent_observation(**_args):
+            nonlocal newer
+            newer = self.model.remember_window({**self.previous, 'id': 'newer-window'}, 'move')
+            return {**self.world, 'windows': [], 'captured_at_monotonic': time.monotonic()}
+        self.model.snapshot.side_effect = concurrent_observation
+        result = await desktop_undo_window_change({'window_id': self.previous['id']}, self.context)
+        self.assertTrue(result['discarded'])
+        self.assertEqual(self.model.peek_window_restore(), newer)
+        self.assertEqual(len(self.model._window_history), 1)
+        self.model.bridge.request.assert_not_awaited()
+
+    def test_consuming_an_absent_or_changed_record_never_pops_the_current_head(self):
+        self.remember()
+        expected = self.model.peek_window_restore()
+        expected['action'] = 'different'
+        self.assertIsNone(self.model.consume_window_restore(expected))
+        self.assertIsNotNone(self.model.peek_window_restore())
+
+    def test_absent_window_failure_guidance_keeps_the_concrete_reason_and_disables_repair(self):
+        from ev.planner import TaskPlanner, PlanStep
+        from ev.tools.results import evaluate_result
+
+        evidence = {'verified': False, 'discarded': True,
+                    'message': "Removed that closed window's undo record; no other window moved."}
+        result = evaluate_result('desktop.window.undo_last', evidence)
+        self.assertEqual(result.error, evidence['message'])
+        self.assertFalse(result.ok)
+        self.assertFalse(result.retryable)
+        planner = TaskPlanner.__new__(TaskPlanner)
+        step = PlanStep('undo', 'desktop.window.undo_last', {}, permission_class='LOW_RISK')
+        self.assertEqual(planner._failure_type(step, result.error), 'STALE_TARGET')
+        self.assertFalse(planner.capability_gap(step.tool, result.error, 'STALE_TARGET')['engineering_task_available'])
 
 
 class BridgeUndoTests(unittest.TestCase):

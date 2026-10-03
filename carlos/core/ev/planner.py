@@ -1183,6 +1183,11 @@ class TaskPlanner:
             return "PRIVACY_RESTRICTION"
         if step.tool == "desktop.window.resolve" and "previously selected window is no longer available" in lowered:
             return "STALE_TARGET"
+        if step.tool == "desktop.window.undo_last":
+            if "closed window" in lowered or "window no longer exists" in lowered:
+                return "STALE_TARGET"
+            if "no reversible window change" in lowered or "different window" in lowered:
+                return "UNVERIFIED_RESULT"
         if step.tool.startswith("vision.") and any(reason in lowered for reason in (
             "candidate changed", "candidate is missing or expired", "candidate expired",
             "candidate was revoked", "candidate was already consumed", "proposals expired",

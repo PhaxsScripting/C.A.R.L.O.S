@@ -416,3 +416,8 @@ Direct desktop commands and authenticated local calls for visual targets/clicks 
 Local clients can send `speak: false` on `command.submit` and on its later
 `confirmation.respond` to keep both request stages silent. Each request scopes
 its own speech policy; a normal desktop confirmation retains the default reply.
+
+Window undo checks its exact saved record. If fresh, complete native evidence
+shows that window has closed, Carlos removes that record without moving an
+older window. Request undo again for the preceding change. Incomplete or stale
+evidence keeps the record; a newer action's history is preserved during undo.

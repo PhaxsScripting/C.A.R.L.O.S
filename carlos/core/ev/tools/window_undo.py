@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from .base import ToolContext
@@ -23,10 +24,20 @@ async def undo_window_change(
     current = next((item for item in model.visible_windows(world)
                     if str(item.get('id')) == window_id), None)
     if current is None:
+        windows = world.get('windows')
+        captured = world.get('captured_at_monotonic')
+        complete = isinstance(windows, list) and not world.get('windows_truncated')
+        fresh = type(captured) in (int, float) and 0 <= time.monotonic() - captured <= 2
+        matches = [item for item in windows if str(item.get('id')) == window_id] if complete else []
+        absent = complete and fresh and (not matches or all(item.get('deleted') is True for item in matches))
+        discarded = absent and model.consume_window_restore(restore) is not None
         return {
             "verified": False,
             "reason": "The changed window no longer exists",
             "window_id": window_id,
+            "discarded": bool(discarded),
+            "message": "Removed that closed window's undo record; no other window moved. Request undo again for the preceding change."
+            if discarded else "Window restoration unavailable; the undo record was retained without moving another window.",
         }
     for key in ('pid', 'app_id', 'resource_class'):
         if previous.get(key) and current.get(key) != previous[key]:
@@ -112,10 +123,10 @@ async def undo_window_change(
     window_identity_ok = bool(actual) and all(not previous.get(key) or actual.get(key) == previous[key]
                                             for key in ('pid', 'app_id', 'resource_class'))
     verified = state_ok and placement_ok and desktop_ok and output_identity_ok and window_identity_ok
-    if verified:
-        model.consume_window_restore()
+    consumed = model.consume_window_restore(restore) is not None if verified else False
     return {
         "verified": verified,
+        "history_consumed": consumed,
         "restored_action": restore["action"],
         "expected": previous,
         "window": actual,
