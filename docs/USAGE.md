@@ -442,3 +442,10 @@ PipeWire/Pulse command tools and creates its own temporary audio servers, clock,
 null sink and explicit link. It never captures the host microphone or plays
 through your speakers. A successful exit confirms child cleanup and a completed
 private playback stream; it does not establish acoustic voice quality.
+
+`python3 carlos/tests/fixtures/recognition_recovery_live.py` checks persistent
+whisper.cpp listener ownership and recovery using generated audio and an
+available loopback port. It refuses an unrelated listener, kills only its own
+worker and checks replacement recognition. It needs your configured local
+Piper/Whisper models and ffmpeg. It never records the microphone, plays audio or
+submits a desktop command; temporary files and owned workers are removed.
