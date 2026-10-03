@@ -3,6 +3,7 @@
 import asyncio
 from ..permissions import Permission
 from .base import ToolRegistry, ToolSpec
+from .history_contracts import HISTORY_OUTPUT, TASK_STATUS_OUTPUT
 from .builtin import object_schema
 
 
@@ -44,6 +45,9 @@ def register_task_history_tools(registry: ToolRegistry) -> None:
             object_schema({"limit": {"type": "integer", "minimum": 1, "maximum": 20}}, []),
             recent,
             read_only=True,
+            offline_available=True, reversible=False,
+            output_schema=HISTORY_OUTPUT,
+            verification="Project-scoped historical receipts; not fresh state or reusable permission",
         )
     )
     registry.register(
@@ -67,5 +71,8 @@ def register_task_history_tools(registry: ToolRegistry) -> None:
             ),
             detail,
             read_only=True,
+            offline_available=True, reversible=False,
+            output_schema=TASK_STATUS_OUTPUT,
+            verification="Project-scoped historical receipts; not fresh state or reusable permission",
         )
     )

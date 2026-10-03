@@ -511,3 +511,9 @@ and item kind. List item schemas reject a full-content field; reading content
 uses the explicit read tool. The calculator, unit converter, world clock,
 clipboard counts, recent-file list and expired-selection response also validate
 their returned fields. Existing save/archive/append/copy permissions are unchanged.
+
+Execution-history responses validate separate success and missing-task shapes.
+History remains project-scoped and explicitly historical; saved approvals stay
+unusable and further actions require fresh observations. Paged running steps
+retain a null finish time rather than appearing completed. The schema validator
+supports `oneOf` for exactly one allowed shape and rejects conflicting variants.

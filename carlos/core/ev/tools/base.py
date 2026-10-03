@@ -119,6 +119,20 @@ def validate_schema(value: Any, schema: dict[str, Any], path: str = "arguments")
     expected = schema.get("type")
     if expected and not _type_matches(value, expected):
         raise ValidationError(f"{path} must be {expected}")
+    if "oneOf" in schema:
+        alternatives = schema["oneOf"]
+        if not isinstance(alternatives, list) or not alternatives or not all(
+                isinstance(choice, dict) for choice in alternatives):
+            raise ValidationError(f"{path} has an invalid oneOf schema")
+        matched = 0
+        for choice in alternatives:
+            try:
+                validate_schema(value, choice, path)
+            except ValidationError:
+                continue
+            matched += 1
+        if matched != 1:
+            raise ValidationError(f"{path} must match exactly one allowed shape")
     if "enum" in schema and value not in schema["enum"]:
         raise ValidationError(f"{path} must be one of {schema['enum']}")
     if isinstance(value, str):
