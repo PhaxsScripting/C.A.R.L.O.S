@@ -154,10 +154,13 @@ ApplicationWindow {
                 return steps[i]
         }
         const gaps = get(plan, "capability_gaps", [])
-        return gaps.length > 0 ? {
+        const repairGaps = gaps.filter(function(gap) {
+            return get(gap, "engineering_task_available", ["BUG", "MISSING_TOOL"].indexOf(get(gap, "type", "")) >= 0)
+        })
+        return repairGaps.length > 0 ? {
             "status": "NOT_CREATED",
-            "possible_solution": get(gaps[0], "possible_solution", "—"),
-            "requires_user_approval": get(gaps[0], "requires_user_approval", true)
+            "possible_solution": get(repairGaps[0], "possible_solution", "—"),
+            "requires_user_approval": get(repairGaps[0], "requires_user_approval", true)
         } : null
     }
     function planEvidence(plan) {

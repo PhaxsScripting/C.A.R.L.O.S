@@ -140,13 +140,27 @@ class TaskPlanner:
                 "possible_solution": "Reconnect Spotify in Phaxity Audio and check the Spotify developer app's allowed users and account eligibility. Changing E.V. computer permissions will not fix Spotify's rejection.",
                 "requires_user_approval": False,
                 "requires_external_account_action": True,
+                "engineering_task_available": False,
             }
+        guidance = {
+            "AMBIGUOUS_REQUEST": "Name one exact application, window or control. Review duplicate labels before selecting one.",
+            "MISSING_PERMISSION": "Use the existing permission or desktop authorization flow for this action. A coding repair cannot grant permission.",
+            "MISSING_AUTHORIZATION": "Connect desktop input and approve the operating system's native authorization dialog. No input will be sent without its grant.",
+            "PRIVACY_RESTRICTION": "Use a tool and local provider allowed by the current privacy policy. Carlos will keep that policy in place.",
+            "STALE_TARGET": "Inspect the current window again and review a fresh target. The old target will not be replayed.",
+            "UNVERIFIED_RESULT": "Inspect the current state before deciding what to do next. Delivery or the expected result was not verified; Carlos will not replay it automatically.",
+            "MISSING_PROVIDER": "Check the configured provider and its readiness. A provider being offline does not establish a code defect.",
+            "MISSING_DEPENDENCY": "Check the named runtime dependency and its installation before retrying this capability.",
+            "MISSING_DESKTOP_BACKEND": "Check support and readiness for this desktop backend. Carlos cannot substitute a screenshot for an operating-system grant.",
+        }
+        repair_available = gap_type in {"BUG", "MISSING_TOOL"}
         return {
             "required": required,
             "type": gap_type,
             "reason": reason,
-            "possible_solution": "Create a checkpointed E.V. engineering task for review",
-            "requires_user_approval": True,
+            "possible_solution": guidance.get(gap_type, "Inspect the failure evidence before deciding whether a coding repair is needed."),
+            "requires_user_approval": repair_available,
+            "engineering_task_available": repair_available,
         }
 
     def _settle_terminal_state(self, detail: str, correlation_id: str) -> None:
@@ -1179,7 +1193,49 @@ class TaskPlanner:
         return execution["ok"], {**execution, "reason": execution.get("error"), "evidence": payload}
 
     @staticmethod
-    def _retryable(step: PlanStep) -> bool:
+    def _failure_type(step: PlanStep, error: str) -> str:
+        lowered = error.casefold()
+        if any(reason in lowered for reason in (
+            "privacy policy", "privacy mode", "guest mode restricts",
+            "cloud tool-result upload is blocked",
+        )):
+            return "PRIVACY_RESTRICTION"
+        if step.tool == "desktop.window.resolve" and "previously selected window is no longer available" in lowered:
+            return "STALE_TARGET"
+        if step.tool.startswith("vision.") and any(reason in lowered for reason in (
+            "candidate changed", "candidate is missing or expired", "candidate expired",
+            "candidate was revoked", "candidate was already consumed", "proposals expired",
+            "window image changed", "window or capture changed", "proposals were cleared",
+        )):
+            return "STALE_TARGET"
+        if (
+            "ambiguous" in lowered or "multiple" in lowered
+            or ("no " in lowered and " match" in lowered)
+        ):
+            return "AMBIGUOUS_REQUEST"
+        if "permission" in lowered or "denied" in lowered:
+            return "MISSING_PERMISSION"
+        if "authorization" in lowered or "not authorized" in lowered:
+            return "MISSING_AUTHORIZATION"
+        if "unknown tool:" in lowered:
+            return "MISSING_TOOL"
+        if "provider" in lowered or "model" in lowered:
+            return "MISSING_PROVIDER"
+        if "unavailable" in lowered or "not supported" in lowered:
+            return "MISSING_DESKTOP_BACKEND"
+        if step.tool.startswith("vision.") and any(reason in lowered for reason in (
+            "cannot be observed", "did not acknowledge delivery", "already satisfied",
+        )):
+            return "UNVERIFIED_RESULT"
+        return "BUG"
+
+    @staticmethod
+    def _retryable(step: PlanStep, error: str = "") -> bool:
+        if error and TaskPlanner._failure_type(step, error) in {
+            "AMBIGUOUS_REQUEST", "MISSING_PERMISSION", "MISSING_AUTHORIZATION",
+            "PRIVACY_RESTRICTION", "STALE_TARGET", "MISSING_TOOL", "UNVERIFIED_RESULT",
+        }:
+            return False
         # Opt in known idempotent primitives. A new SAFE tool may still mutate
         # state and must not acquire automatic replay by default.
         return step.permission_class in {"SAFE", "LOW_RISK"} and step.tool in (
@@ -1299,7 +1355,7 @@ class TaskPlanner:
                         return self._response(plan, "Stopped.")
                     # One bounded retry is allowed only for non-destructive,
                     # idempotent observation/low-risk actions.
-                    if self._retryable(step) and step.attempts < 2:
+                    if self._retryable(step, str(error)) and step.attempts < 2:
                         step.attempts += 1
                         recovery = {
                             "step": step.id,
@@ -1358,7 +1414,7 @@ class TaskPlanner:
                 step.actual_result = result
                 ok, verification = self._verified(step, result)
                 step.verification = verification
-                if not ok and self._retryable(step) and step.attempts < 2:
+                if not ok and self._retryable(step, str(verification.get("reason") or "")) and step.attempts < 2:
                     step.attempts += 1
                     recovery = {
                         "step": step.id,
@@ -1667,21 +1723,7 @@ class TaskPlanner:
             observed = step.actual_result.get("result")
             if isinstance(observed, dict):
                 plan.world_state_used.setdefault(step.id, observed)
-        lowered = error.casefold()
-        if (
-            "ambiguous" in lowered
-            or "multiple" in lowered
-            or ("no " in lowered and " match" in lowered)
-        ):
-            gap_type = "AMBIGUOUS_REQUEST"
-        elif "permission" in lowered or "denied" in lowered:
-            gap_type = "MISSING_PERMISSION"
-        elif "provider" in lowered or "model" in lowered:
-            gap_type = "MISSING_PROVIDER"
-        elif "unavailable" in lowered or "not supported" in lowered:
-            gap_type = "MISSING_DESKTOP_BACKEND"
-        else:
-            gap_type = "BUG"
+        gap_type = self._failure_type(step, error)
         gap = self.capability_gap(step.tool, error, gap_type)
         plan.capability_gaps.append(gap)
         plan.failure_report = {

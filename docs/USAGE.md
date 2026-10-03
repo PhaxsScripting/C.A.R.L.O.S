@@ -48,6 +48,13 @@ Use `plans` for plans, `agent-tasks` for task history, and `security` for the
 current permission settings. `stop` shuts down the core. `--help` lists the rest
 of the CLI commands.
 
+Missing permission, privacy restrictions, ambiguous targets and expired visual
+previews are setup or targeting problems. Carlos reports the blocking evidence
+and stops without replaying them or proposing a coding repair. Native desktop
+authorization still uses the operating system's dialog. A temporary disconnect
+may get one retry for an explicitly audited idempotent tool. Unexpected defects
+and missing tools can still be reviewed for an explicit engineering task.
+
 ## Keep your stuff local
 
 Don't put keys, recordings, screenshots, memory databases or private logs in this

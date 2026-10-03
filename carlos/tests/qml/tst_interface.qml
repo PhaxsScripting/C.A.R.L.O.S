@@ -156,6 +156,19 @@ TestCase {
         compare(ui.voiceStatus(), "CHECK MIC / LOUD INPUT WITHOUT CLEAR SPEECH")
         mock.voice = {wake_active:true,diagnostics:{}}
     }
+    function test_setup_gaps_do_not_create_an_engineering_task() {
+        for (const kind of ["MISSING_PERMISSION", "MISSING_AUTHORIZATION", "PRIVACY_RESTRICTION", "STALE_TARGET", "AMBIGUOUS_REQUEST", "MISSING_DEPENDENCY"]) {
+            compare(ui.codingAgentTask({capability_gaps:[{type:kind,engineering_task_available:false}]}), null)
+            compare(ui.codingAgentTask({capability_gaps:[{type:kind}]}), null)
+        }
+        const plan = {capability_gaps:[{type:"MISSING_PERMISSION",engineering_task_available:false},
+                                     {type:"BUG",engineering_task_available:true,possible_solution:"Inspect the protocol"}]}
+        compare(ui.codingAgentTask(plan).status, "NOT_CREATED")
+        compare(ui.codingAgentTask(plan).possible_solution, "Inspect the protocol")
+        const existing = {tool:"development.coding_agent_status",status:"SUCCEEDED"}
+        plan.steps = [existing]
+        compare(ui.codingAgentTask(plan), existing)
+    }
     function test_busy_status_survives_paused_microphone_and_approval_wait() {
         mock.voice = {privacy_mode:true,wake_paused:true,resource_suspended:true}
         mock.state = "THINKING"
