@@ -20,3 +20,15 @@ FILE_OBSERVATION_SCHEMAS = {
     'files.hash': record({'path': text(), 'algorithm': {'type': 'string', 'enum': ['sha256']},
                          'sha256': {'type': 'string', 'pattern': '^[a-f0-9]{64}$'}, 'size_bytes': integer()}),
 }
+
+TRANSFER_FIELDS = {
+    'verified': BOOLEAN,
+    'verification_scope': {'type': 'string', 'enum': ['filesystem_content_readback']},
+    'source': text(), 'destination': text(),
+    'kind': {'type': 'string', 'enum': ['file', 'directory']},
+    'sha256': {'type': 'string', 'pattern': '^(?:[a-f0-9]{64})?$'},
+}
+FILE_TRANSFER_SCHEMAS = {
+    'files.copy': record(TRANSFER_FIELDS),
+    'files.move': record({**TRANSFER_FIELDS, 'recoverable': {'type': 'boolean', 'const': False}}),
+}

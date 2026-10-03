@@ -345,6 +345,15 @@ requested row limit exactly is complete if the scan finishes without another
 match. Listed symlinks describe the link itself, not its target. These readings
 are observations of a changing filesystem, not an atomic snapshot or sandbox.
 
+Copy and move compare destination type, byte size and SHA-256 content against a
+preflight inventory, including empty and hidden directories. Moves also require
+source absence. Unreadable directories, links, special files and trees over
+10,000 entries refuse preflight; an allowed-root directory cannot be moved.
+A failed readback leaves available paths for inspection and does not replay,
+delete a later edit or automatically restore the source. These tools do not
+provide automatic undo. Filesystem changes during dispatch/readback are still
+possible; this is content observation, not an atomic filesystem transaction.
+
 Say `undo volume`, `undo mute`, or `undo the audio change` to reverse Carlos's
 most recent output-volume or mute adjustment. The undo history stays in memory,
 holds up to 32 changes, and expires after ten minutes. It restores exact channel

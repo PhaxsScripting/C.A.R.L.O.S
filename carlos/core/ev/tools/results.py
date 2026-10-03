@@ -183,6 +183,16 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             None if verified else "Project command did not exit successfully",
             scope="process_exit_only",
         )
+    if name in {'files.copy', 'files.move'}:
+        verified = (data.get('verified') is True
+                    and data.get('verification_scope') == 'filesystem_content_readback')
+        return ExecutionResult(
+            verified, 'SUCCEEDED_VERIFIED' if verified else 'FAILED', verified,
+            None if verified else 'File transfer readback did not match; inspect both paths',
+            retryable=False, changed_state=True if verified else None,
+            verification_hint='Type and content matched after transfer; this is not an atomic snapshot',
+            scope='filesystem_content_readback',
+        )
     if name in PERSONAL_MUTATION_SCHEMAS:
         verified = (data.get("verified") is True
                     and data.get("verification_scope") == "committed_sqlite_readback"

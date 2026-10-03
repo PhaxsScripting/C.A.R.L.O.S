@@ -29,8 +29,8 @@ from .base import ToolContext, ToolRegistry, ToolSpec, ValidationError
 from .media import control_media
 from . import audio_undo, window_undo
 from .system_contracts import SYSTEM_OBSERVATION_SCHEMAS
-from .file_contracts import FILE_OBSERVATION_SCHEMAS
-from . import file_inventory
+from .file_contracts import FILE_OBSERVATION_SCHEMAS, FILE_TRANSFER_SCHEMAS
+from . import file_inventory, file_transfer
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 _AUDIO_STATE_PROPERTIES = {
@@ -1379,43 +1379,22 @@ def copy_path(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]
     if source.is_dir():
         if destination.is_relative_to(source):
             raise ValidationError("destination cannot be inside the source directory")
-        # Preflight links and special files before creating any destination.
-        # Preserve links if a source races after preflight; never dereference
-        # a newly introduced link into an arbitrary external directory.
-        manifest = {}
-        for current, directories, files in os.walk(source, followlinks=False):
-            for name in [*directories, *files]:
-                entry = Path(current) / name
-                if entry.is_symlink() or not (entry.is_dir() or entry.is_file()):
-                    raise ValidationError("directory copy contains a symbolic link or special file")
-                relative = str(entry.relative_to(source))
-                manifest[relative] = None if entry.is_dir() else _sha256(entry)
-                if len(manifest) > 10000:
-                    raise ValidationError(
-                        "directory copy exceeds the 10000-entry verification limit"
-                    )
+        expected = file_transfer.manifest(source, _sha256)
         shutil.copytree(source, destination, symlinks=True)
-        actual = {}
-        for current, directories, files in os.walk(destination, followlinks=False):
-            for name in [*directories, *files]:
-                entry = Path(current) / name
-                relative = str(entry.relative_to(destination))
-                actual[relative] = (
-                    "SYMLINK" if entry.is_symlink() else None if entry.is_dir() else _sha256(entry)
-                )
-        verified = destination.is_dir() and actual == manifest
+        verified = file_transfer.matches(destination, expected, _sha256)
         kind = "directory"
         checksum = ""
     elif source.is_file():
-        source_hash = _sha256(source)
+        expected = file_transfer.manifest(source, _sha256)
         shutil.copy2(source, destination)
-        checksum = _sha256(destination)
-        verified = destination.is_file() and checksum == source_hash
+        verified = file_transfer.matches(destination, expected, _sha256)
+        checksum = expected[''][1] if verified else ""
         kind = "file"
     else:
         raise ValidationError("source is not a regular file or directory")
     return {
         "verified": verified,
+        "verification_scope": "filesystem_content_readback",
         "source": str(source),
         "destination": str(destination),
         "kind": kind,
@@ -1424,17 +1403,30 @@ def copy_path(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]
 
 
 def move_path(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+    if Path(arguments["source"]).expanduser().is_symlink():
+        raise ValidationError("moving symbolic links is not supported")
     source = resolve_allowed(arguments["source"], context)
     destination = resolve_destination(arguments["destination"], context)
+    if source in allowed_roots(context):
+        raise ValidationError("refusing to move an allowed-root directory")
     if destination.exists() or destination.is_symlink():
         raise ValidationError("destination already exists; E.V. will not overwrite it")
     if source == destination:
         raise ValidationError("source and destination are the same")
+    if source.is_dir() and destination.is_relative_to(source):
+        raise ValidationError("destination cannot be inside the source directory")
+    expected = file_transfer.manifest(source, _sha256)
     shutil.move(str(source), str(destination))
+    verified = (not source.exists() and not source.is_symlink()
+                and file_transfer.matches(destination, expected, _sha256))
+    kind = expected[''][0]
     return {
-        "verified": destination.exists() and not source.exists(),
+        "verified": verified,
+        "verification_scope": "filesystem_content_readback",
         "source": str(source),
         "destination": str(destination),
+        "kind": kind,
+        "sha256": expected[''][1] if verified and kind == 'file' else "",
         "recoverable": False,
     }
 
@@ -2807,7 +2799,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SENSITIVE,
             transfer_schema,
             copy_path,
-            verification="Destination existence and SHA-256 for regular files",
+            read_only=False, offline_available=True, reversible=False,
+            output_schema=FILE_TRANSFER_SCHEMAS['files.copy'],
+            verification="Exact destination type/content inventory compared with the source",
             side_effects=("creates a file or directory tree",),
             timeout_seconds=120,
         )
@@ -2820,7 +2814,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SENSITIVE,
             transfer_schema,
             move_path,
-            verification="Destination exists and source no longer exists",
+            read_only=False, offline_available=True, reversible=False,
+            output_schema=FILE_TRANSFER_SCHEMAS['files.move'],
+            verification="Exact destination type/content inventory and source absence",
             side_effects=("moves or renames a file or directory",),
             timeout_seconds=120,
         )

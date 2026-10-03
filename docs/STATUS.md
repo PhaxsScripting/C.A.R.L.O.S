@@ -1,25 +1,25 @@
 # Current acceptance
 
-Updated October 3, 2026 after the bounded file-inventory changes. This is a progress
+Updated October 3, 2026 after the file-transfer readbacks. This is a progress
 matrix, not a declaration that the entire specification is complete. WORKING
 means tested in the stated scope; PARTIAL names the remaining work; BLOCKED
 names the observed blocker. Component availability and FULLY_READY diagnostics
 are runtime readiness observations, not acceptance of this whole matrix.
 
 Evidence and test boundaries are recorded in [VALIDATION.md](VALIDATION.md).
-The latest full suite passed 1,555 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
+The latest full suite passed 1,562 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
 silent mocked speech sink. File checks use owned temporary files, native
 permissions and installed-source private IPC; no host personal content is read.
-The installed catalogue contains 257 tools and 183 incomplete declarations.
+The installed catalogue contains 257 tools and 181 incomplete declarations.
 
 | Feature | Status | Evidence and remaining scope |
 | --- | --- | --- |
-| Carlos Core | WORKING | Earlier installed Core health/IPC checks passed; latest installed file checks used an isolated instance and preserved the stopped host Core. Other-machine boot and long-run acceptance remain separate. |
+| Carlos Core | WORKING | Earlier installed Core health/IPC checks passed; latest installed file/transfer checks used an isolated instance and preserved the stopped host Core. Other-machine boot and long-run acceptance remain separate. |
 | Event Fabric | WORKING | Actual private Core event subscriptions and Unix IPC passed reminder privacy and stop checks; this is local transport evidence. |
-| Capability Registry | PARTIAL | 257 registered tools; 183 declarations still have contract gaps. Registration and live availability do not prove an action succeeded. |
+| Capability Registry | PARTIAL | 257 registered tools; 181 declarations still have contract gaps. Registration and live availability do not prove an action succeeded. |
 | Planner | PARTIAL | Deterministic plans and bounded no-replay recovery pass regressions; unrestricted natural requests and room conversation need broader acceptance. |
 | Executor | WORKING | Shared execution path passed owned-window actions and actual private SQLite mutations. Tool-specific limits still apply. |
-| Verifier | PARTIAL | Exact window/database readbacks and scoped receipts pass; input delivery, inference and OS power dispatch cannot prove their final effect. |
+| Verifier | PARTIAL | Exact window/database and file-content readbacks and scoped receipts pass; input delivery, inference and OS power dispatch cannot prove their final effect. |
 | Permission System | WORKING | Local permission tokens, argument binding and strict action boundaries are tested. Remote passkey/device acceptance is separate. |
 | Cancellation | WORKING | Owned IPC stop, waiting actions and private speech-worker cleanup were exercised; an already dispatched OS action can still finish. |
 | Wake Detection | PARTIAL | Native generated-speech and worker lifecycle checks pass. Normal-distance wake and false activations per hour are not measured. |
