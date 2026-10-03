@@ -200,6 +200,9 @@ class CarlosCore:
         from .core_resources import register_core_resources
 
         register_core_resources(self.tools)
+        from .tools.network import register_network_tools
+
+        register_network_tools(self.tools)
         from .recording import ScreenRecorder
         from .tools.recording import register_recording_tools
 

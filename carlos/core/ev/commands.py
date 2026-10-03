@@ -19,6 +19,11 @@ class Action:
     arguments: dict[str, Any]
 
 
+def network_request(text: str) -> bool:
+    clean = text.strip().replace("’", "'").rstrip(" .!?")
+    return re.fullmatch(r"why (?:can't|cannot) I (?:look anything up|connect to the internet)", clean, re.I) is not None
+
+
 def visual_action(text: str) -> Action | None:
     quoted = r'(?:"([^"\n]{1,500})"|\x27([^\x27\n]{1,500})\x27|“([^”\n]{1,500})”)'
     show = re.fullmatch(
@@ -267,6 +272,8 @@ def media_request(text: str) -> Action | None:
 
 
 def direct_action(text: str) -> Action | None:
+    if network_request(text):
+        return Action("system.diagnose_network", {})
     clean = request_text(text)
     if not clean:
         return None
@@ -283,6 +290,11 @@ def direct_action(text: str) -> Action | None:
     if action := handsfree_action(clean):
         return action
     clean = re.sub(r"\s+(?:right\s+)?now$", "", clean, flags=re.I)
+    if re.fullmatch(
+        r"(?:check|inspect|diagnose|show)(?: me)? (?:my |the )?(?:network|network diagnosis|network diagnostics)",
+        clean, re.I,
+    ):
+        return Action("system.diagnose_network", {})
     if re.fullmatch(
         r"(?:check|inspect|show)(?:\s+me)?\s+(?:my\s+|the\s+)?(?:boot(?:\s+status)?|firmware(?:\s+status)?)",
         clean,

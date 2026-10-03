@@ -135,6 +135,17 @@ in RAM; Guest cannot read or change them. Naming does not change display layout.
 
 ## Hardware readings
 
+Say `diagnose my network`, `show network diagnostics`, or `why can't I look
+anything up?` for a local configuration report. It reads both route families,
+interfaces, resolver generator evidence, Tailscale daemon state and the mobile
+backend's loopback health. It changes no settings and makes no DNS lookup or
+Internet connection. `dry run, diagnose my network` previews without observing.
+Linux route inventory needs `ip` from iproute2; missing commands yield an unknown
+or partial reading. A resolver marker is evidence of its generator, not proof of
+current ownership. Split DNS, browser DNS-over-HTTPS, policy route selection,
+gateway reachability and public mobile access remain separate checks. A link
+being up or Tailscale reporting Running does not establish Internet access.
+
 Ask "What is my fan speed?", "Check CPU clocks", "Show GPU usage", or
 "Is my CPU throttling?". These use local read-only sensors without a model
 request. `system.get_hardware_metrics` also returns them through the tool API.

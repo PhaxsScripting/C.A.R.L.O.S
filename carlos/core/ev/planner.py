@@ -11,7 +11,7 @@ from urllib.parse import quote_plus
 
 from .ai.offline import is_desktop_input_request, mask_desktop_literals, parse_desktop_input
 from .events import PhaxEventBus
-from .commands import clock_request, direct_action, request_text, browser_input
+from .commands import clock_request, direct_action, request_text, browser_input, network_request
 from .state import CoreState, StateMachine
 from .tools import ToolRegistry
 from .tools.results import OBSERVATION_TOOLS, evaluate_result
@@ -241,7 +241,7 @@ class TaskPlanner:
                     )
                 ],
             )
-        if request_text(original) is None and not re.search(
+        if request_text(original) is None and not network_request(original) and not re.search(
             r"\b(?:dry run|don't actually do it|do not actually do it|just show me)\b",
             original,
             re.I,

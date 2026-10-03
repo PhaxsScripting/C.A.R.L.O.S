@@ -19,7 +19,7 @@ development.find_project development.git_status development.inspect_build_error
 development.coding_agent_status development.coding_agent_result
 files.find files.info files.list files.read files.hash files.recent
 system.clock system.identity system.get_cpu_usage system.get_memory_usage
-system.get_disk_usage system.get_network_status system.get_battery system.get_temperature
+system.get_disk_usage system.get_network_status system.diagnose_network system.get_battery system.get_temperature
 system.get_processes system.devices system.mounts system.openrc_services
 system.boot.status system.startup.list system.power.status
 settings.overview settings.brightness.get settings.radios.status settings.audio.devices
