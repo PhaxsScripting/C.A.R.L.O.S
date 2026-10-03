@@ -490,3 +490,10 @@ and privacy changes clear the previous camera-evidence flag.
 `python3 carlos/tests/fixtures/presence_context_live.py` checks the real private
 Core event and IPC path with synthetic lock/hand observations. It does not
 lock your desktop, start a camera or establish physical presence.
+
+`python3 carlos/tests/fixtures/synthesis_recovery_live.py` checks Piper recovery
+with no playback. On Linux it pauses its own worker, observes the new request
+in that worker's input pipe, kills only that child and checks actual one-shot
+synthesis plus the next persistent request. It needs your configured local
+Piper runtime/model. It does not prove speech was heard or that the paused
+worker began synthesis; all owned children are checked after cleanup.
