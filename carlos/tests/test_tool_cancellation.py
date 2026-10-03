@@ -7,7 +7,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, PropertyMock, patch
 
 from ev.paths import Paths
 from ev.permissions import Permission
@@ -283,7 +283,9 @@ class ToolCancellationTests(unittest.IsolatedAsyncioTestCase):
         manager.diagnostics.update({'max_rms': .1, 'max_peak': .2})
         self.core.state.transition(CoreState.LISTENING, 'fixture capture')
         manager.command_handler = AsyncMock(side_effect=AssertionError('Stop reached normal planner'))
-        result = await asyncio.wait_for(manager.stop_capture('voice-stop'), 2)
+        with patch.object(type(manager.stt), 'available', new_callable=PropertyMock,
+                          return_value=(True, 'fixture recognizer')):
+            result = await asyncio.wait_for(manager.stop_capture('voice-stop'), 2)
         self.assertEqual(result['status'], 'conversation_ended')
         self.assertEqual((await task)['status'], 'cancelled')
         manager.command_handler.assert_not_awaited()
