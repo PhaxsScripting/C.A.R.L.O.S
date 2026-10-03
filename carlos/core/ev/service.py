@@ -1427,8 +1427,13 @@ class CarlosCore:
 
         review = None
         reason = spec.confirmation_reason
-        if spec.name == "vision.candidate.click":
-            review = await self.vision.visual_targets.confirmation_review(validated)
+        if spec.name in {"vision.candidate.click", "vision.click_text"}:
+            if spec.name == "vision.click_text":
+                validated, review = await asyncio.wait_for(
+                    self.vision.visual_targets.prepare_text_confirmation(validated), timeout=55
+                )
+            else:
+                review = await self.vision.visual_targets.confirmation_review(validated)
             reason = review.pop("reason")
             if generation != getattr(self, "_action_generation", 0):
                 return self._cancelled_tool_result(spec, dispatched=False)

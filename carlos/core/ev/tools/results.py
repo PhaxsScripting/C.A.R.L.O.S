@@ -110,7 +110,7 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             None if verified else "Capture not produced",
             scope="capture_only",
         )
-    if name == "vision.candidate.click":
+    if name in {"vision.candidate.click", "vision.click_text"}:
         accepted = data.get("input_sent") is True or data.get("delivery_unknown") is True
         verified = data.get("input_sent") is True and data.get("verified") is True
         return ExecutionResult(

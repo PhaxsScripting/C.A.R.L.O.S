@@ -1,4 +1,4 @@
-"""Private local visual inference; deliberately not a GUI-action verifier."""
+"""Local perception and guarded visual actions."""
 
 from ..permissions import Permission
 from .base import ToolSpec
@@ -44,6 +44,15 @@ def register_local_vision_tools(registry):
 
         return await context.vision.visual_targets.click(arguments, observe)
 
+    async def click_text(arguments, context):
+        if not arguments.get("candidate_id"):
+            raise ValueError("Visual text clicks must go through Carlos's preview confirmation")
+        require_local(context)
+        input_controller = context.vision.desktop.input
+        if not input_controller.status().get("connected"):
+            await input_controller.connect()
+        return await click({"candidate_id": arguments["candidate_id"], "expected": arguments["expected"]}, context)
+
     def normalize_click(arguments, context):
         require_local(context)
         return context.vision.visual_targets.validate_click(arguments)
@@ -60,6 +69,35 @@ def register_local_vision_tools(registry):
         "expires_in_seconds": {"type": "integer", "minimum": 0, "maximum": 60},
     }
     candidate_schema = object_schema(candidate_properties, list(candidate_properties))
+    click_result_schema = object_schema({
+            "candidate_id": candidate_properties["candidate_id"], "window_id": {"type": "string"},
+            "input_sent": {"type": "boolean"}, "verified": {"type": "boolean"},
+            "delivery_unknown": {"type": "boolean"}, "replay_allowed": {"type": "boolean", "enum": [False]},
+            "verification_scope": {"type": "string", "enum": ["declared_native_transition"]},
+            "before": {"type": "object"}, "after": {"type": "object"}, "message": {"type": "string"},
+        }, ["candidate_id", "window_id", "input_sent", "verified", "replay_allowed", "verification_scope", "message"])
+    registry.register(ToolSpec(
+        "vision.click_text", "VISION",
+        "Find exact visible text in one window, show its highlighted confirmation preview, then send one "
+        "guarded left click and check declared native changes. Duplicate labels require an explicit ordinal "
+        "in top-to-bottom, then left-to-right order. Carlos fills candidate_id when preparing confirmation.",
+        Permission.HIGH,
+        object_schema({
+            "window_id": {"type": "string", "minLength": 1, "maxLength": 100},
+            "text": {"type": "string", "minLength": 1, "maxLength": 500},
+            "ordinal": {"type": "integer", "minimum": 1, "maximum": 20},
+            "expected": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "object"}},
+            "candidate_id": candidate_properties["candidate_id"],
+        }, ["window_id", "text", "expected"]),
+        click_text, normalizer=normalize_click,
+        requires_confirmation=True, offline_available=True, reversible=False, timeout_seconds=90,
+        output_schema=click_result_schema,
+        verification="Fresh image pixels and native identity before input; declared native transition after one click",
+        platform_requirements=("Private capture/OCR", "Consented desktop input"),
+        side_effects=("prepares bounded private preview before confirmation", "may request native input consent",
+                      "focuses exact window", "sends one left click"),
+        expected_latency_ms=5000,
+    ))
     registry.register(ToolSpec(
         "vision.candidate.click", "VISION",
         "Request one left click on an existing highlighted candidate. Mandatory local confirmation shows "
@@ -74,13 +112,7 @@ def register_local_vision_tools(registry):
         click, normalizer=normalize_click,
         confirmation_reason="Review the highlighted candidate and expected native change before one click.",
         requires_confirmation=True, offline_available=True, reversible=False, timeout_seconds=30,
-        output_schema=object_schema({
-            "candidate_id": candidate_properties["candidate_id"], "window_id": {"type": "string"},
-            "input_sent": {"type": "boolean"}, "verified": {"type": "boolean"},
-            "delivery_unknown": {"type": "boolean"}, "replay_allowed": {"type": "boolean", "enum": [False]},
-            "verification_scope": {"type": "string", "enum": ["declared_native_transition"]},
-            "before": {"type": "object"}, "after": {"type": "object"}, "message": {"type": "string"},
-        }, ["candidate_id", "window_id", "input_sent", "verified", "replay_allowed", "verification_scope", "message"]),
+        output_schema=click_result_schema,
         verification="Native predicates must be observable and unmet before input, then satisfied after input",
         platform_requirements=("Native window identity", "Private capture", "Consented desktop input"),
         side_effects=("focuses exact window", "sends one left click", "consumes related visual proposals"),

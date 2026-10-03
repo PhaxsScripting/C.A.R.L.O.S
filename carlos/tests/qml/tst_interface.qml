@@ -440,6 +440,17 @@ TestCase {
         keyClick(Qt.Key_Escape)
         tryCompare(mock, "calls", [{approved:false}])
     }
+    function test_text_click_confirmation_also_requires_preview() {
+        mock.confirmation = {id:"text-click",tool:"vision.click_text",reason:"Fixture"}
+        const prompt = item("confirmation-prompt")
+        tryCompare(prompt, "opened", true)
+        verify(prompt.visualClick)
+        verify(!item("confirmation-approve").enabled)
+        prompt.respond(true)
+        compare(mock.calls.length, 0)
+        prompt.respond(false)
+        compare(mock.calls, [{approved:false}])
+    }
     function test_scene_card_sends_only_selected_fixture_id() {
         click("nav-10")
         click("open-scene-picker")

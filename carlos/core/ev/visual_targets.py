@@ -1,4 +1,4 @@
-"""Short-lived, window-bound visual proposals. These do not send input."""
+"""Private visual proposals and preview-confirmed one-use clicks."""
 
 import asyncio
 import hashlib
@@ -131,6 +131,7 @@ class VisualTargets:
                 if len(matches) > 20:
                     raise ValueError("Too many matching labels; use structured controls or a narrower target")
                 expires = time.monotonic() + 60
+                pixels_digest = self._pixels(data) if matches else None
                 for element in matches:
                     identifier, preview_id = uuid.uuid4().hex, uuid.uuid4().hex
                     preview = self._path(preview_id)
@@ -149,7 +150,7 @@ class VisualTargets:
                     records[identifier] = {
                         "candidate_id": identifier, "capture_id": source_id, "preview_id": preview_id,
                         "preview_sha256": private_png(preview)[2], "capture_sha256": digest,
-                        "capture_pixels_sha256": self._pixels(data),
+                        "capture_pixels_sha256": pixels_digest,
                         "target": before, "element": element, "expires": expires,
                     }
                 with self._state_lock:
@@ -247,6 +248,35 @@ class VisualTargets:
                       "and refuse if the image or target changed. Expected native result: "
                       + json.dumps(arguments["expected"], ensure_ascii=False),
         }
+
+    async def prepare_text_confirmation(self, arguments):
+        self.validate_click(arguments)
+        ordinal = arguments.get("ordinal")
+        if ordinal is not None and (type(ordinal) is not int or not 1 <= ordinal <= 20):
+            raise ValueError("Visual ordinal must be between one and twenty")
+        for condition in arguments["expected"]:
+            if condition.get("target", condition).get("window_id") != arguments["window_id"]:
+                raise ValueError("Expected result belongs to a different window")
+        result = await self.prepare(arguments["window_id"], arguments["text"])
+        candidates = result["candidates"]
+        if not candidates:
+            raise ValueError("No exact visible label matched; no click was requested")
+        if ordinal is None and len(candidates) != 1:
+            raise ValueError(f"Multiple matching labels ({len(candidates)}); specify an ordinal and review its preview")
+        with self._state_lock:
+            if any(c["candidate_id"] not in self._records for c in candidates):
+                raise ValueError("Visual proposals expired before selection")
+            ordered = sorted(candidates, key=lambda c: (
+                self._records[c["candidate_id"]]["element"]["center"]["y"],
+                self._records[c["candidate_id"]]["element"]["center"]["x"],
+            ))
+        if ordinal is not None and (type(ordinal) is not int or not 1 <= ordinal <= len(ordered)):
+            raise ValueError("Requested ordinal does not exist among the matching labels")
+        candidate = ordered[(ordinal or 1) - 1]
+        bound = {**arguments, "candidate_id": candidate["candidate_id"]}
+        review = await self.confirmation_review(bound)
+        review["reason"] += " Your desktop may also ask for its native input permission if no session is connected."
+        return bound, review
 
     async def click(self, arguments, requester):
         if self._lock.locked():

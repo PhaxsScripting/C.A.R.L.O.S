@@ -376,3 +376,11 @@ While Minecraft Java runs, Carlos yields ambient listening and background prewar
 Local visual proposals are available through `vision.candidates` with an exact window ID and visible text. Results contain confidence, separate duplicate candidates and a private highlighted preview. `vision.candidate.review` checks one candidate's current native identity and retained image hashes. Proposals expire after sixty seconds and are historical inference; they do not click or establish current scene truth.
 
 `vision.candidate.click` requests one left click on a specific candidate with 1-3 expected native result conditions in that same window. It always asks for confirmation with the private highlighted preview. Supported conditions cover window state/geometry/absence, exact semantic control state/text and native browser URL. Every condition must be observable and unmet before input. Carlos captures the window again, compares pixels, checks native process/window/output identity, and consumes the candidate and its siblings before attempting input. Delivery errors, timeouts and missing transitions never replay it. Changed images need a new inspection. The preview stays on the authenticated local client; event listings omit it. A verified result certifies only the declared native transition.
+
+You can request visual targets without handling identifiers:
+
+- `show visual targets for "Retry" in Firefox`
+- `visually click "Fullscreen" in Firefox expecting window to be fullscreen`
+- `visually click the second "Close" in Firefox expecting window to close`
+
+Labels must be quoted. Named window resolution uses native metadata first. Matching labels require an ordinal when there is more than one, ordered from top to bottom, then left to right. Click commands require a declared window change: close, be minimized, be maximized, be fullscreen or exit fullscreen. Carlos creates the preview before requesting approval. Native input consent may also be needed; expiration or any target/image change stops the action. `preview visually click ...` remains a dry run with no capture or input. Regular semantic-control click commands still use accessibility.

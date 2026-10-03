@@ -8,6 +8,7 @@ Popup {
     readonly property string requestId: String(client.confirmation.id || "")
     property bool submitted: false
     readonly property bool visualClick: client.confirmation.tool === "vision.candidate.click"
+                                       || client.confirmation.tool === "vision.click_text"
     readonly property var review: client.confirmation.review || ({})
     onRequestIdChanged: submitted = false
     objectName: "confirmation-prompt"

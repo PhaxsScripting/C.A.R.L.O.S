@@ -413,7 +413,28 @@ class TaskPlanner:
             else:
                 action = Action("interaction.selection_status", {})
         if action:
-            if action.tool == "controls.list":
+            if action.tool in {"vision.candidates", "vision.click_text"}:
+                arguments = {key: value for key, value in action.arguments.items() if key != "description"}
+                arguments["window_id"] = {"$ref": "window.result.window.id"}
+                if action.tool == "vision.click_text":
+                    arguments["expected"] = [
+                        {**condition, "window_id": {"$ref": "window.result.window.id"}}
+                        for condition in arguments["expected"]
+                    ]
+                steps = [
+                    self._step(
+                        "window", "desktop.window.resolve",
+                        {"description": self._resolve_window_pronoun(action.arguments["description"])},
+                        "One exact native window resolved",
+                    ),
+                    self._step(
+                        "visual", action.tool, arguments,
+                        "Highlighted proposals only" if action.tool == "vision.candidates" else
+                        "One preview-confirmed click with declared native result checks",
+                        ["window"],
+                    ),
+                ]
+            elif action.tool == "controls.list":
                 steps = [
                     self._step(
                         "window",

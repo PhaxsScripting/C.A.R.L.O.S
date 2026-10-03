@@ -53,7 +53,8 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
         self.desktop = SimpleNamespace(snapshot=AsyncMock(side_effect=self.snapshot))
         self.desktop.bridge = SimpleNamespace(request=AsyncMock(side_effect=self.bridge_request))
         self.input_events = []
-        self.portal = SimpleNamespace(notify=self.notify, _cancelled=threading.Event())
+        self.portal = SimpleNamespace(notify=self.notify, _cancelled=threading.Event(),
+                                      status=lambda: {"connected": True})
         self.desktop.input = DesktopInput(self.desktop, portal=self.portal)
         self.perception = ScreenPerception(self.root / "captures", self.desktop)
         self.targets = self.perception.visual_targets
@@ -476,11 +477,17 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
     async def test_core_socket_confirmation_carries_preview_and_token_cannot_replay(self):
         from ev.paths import Paths
         from ev.service import CarlosCore
+        from ev.desktop.world import DesktopWorldModel
 
         core = CarlosCore(paths=Paths(*(self.root / name for name in
                                       ("config", "data", "state", "cache", "runtime"))))
         core.config["providers"]["active"] = "offline"
         core.config["carlos"]["strict_permissions"] = False
+        native = DesktopWorldModel(self.desktop.bridge)
+        native.snapshot = self.desktop.snapshot
+        native.input = self.desktop.input
+        self.desktop = native
+        self.perception.desktop = native
         core.vision, core.desktop = self.perception, self.desktop
         core.tools.context.vision, core.tools.context.desktop = self.perception, self.desktop
         await core.ipc.start()
@@ -512,6 +519,19 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
             replay = await ipc("confirmation.respond", decision)
             self.assertEqual(replay["type"], "error")
             self.assertEqual(len(self.input_events), 2)
+            self.window["fullscreen"] = False
+            response = await ipc("command.submit", {"text": 'visually click "Retry" expecting window to be fullscreen',
+                                                     "speak": False})
+            self.assertEqual(response["payload"]["status"], "confirmation_required", response)
+            pending = response["payload"]["confirmation"]
+            self.assertEqual(pending["tool"], "vision.click_text")
+            self.assertIn("preview_url", pending["review"])
+            self.assertIn("candidate_id", pending["arguments"])
+            self.assertEqual(len(self.input_events), 2)
+            decision = {"id": pending["id"], "approval_token": pending["approval_token"], "approved": True}
+            response = await ipc("confirmation.respond", decision)
+            self.assertTrue(response["payload"]["result"]["verified"], response)
+            self.assertEqual(len(self.input_events), 4)
         finally:
             writer.close()
             await writer.wait_closed()
@@ -519,3 +539,54 @@ class VisualTargetTests(unittest.IsolatedAsyncioTestCase):
             core.daily.close()
             core.task_journal.close()
             core.memory.close()
+
+    async def test_text_confirmation_refuses_duplicate_labels_without_explicit_ordinal(self):
+        self.labels = [label(60, 40), label(10, 10)]
+        arguments = {"window_id": "exact", "text": "Retry", "expected": [
+            {"kind": "window_state", "window_id": "exact", "property": "fullscreen", "expected": True}]}
+        with self.assertRaisesRegex(ValueError, "Multiple"):
+            await self.targets.prepare_text_confirmation(arguments)
+        self.assertFalse(self.input_events)
+        self.targets.clear()
+        bound, review = await self.targets.prepare_text_confirmation({**arguments, "ordinal": 2,
+                                                                     "candidate_id": "0" * 32})
+        self.assertNotEqual(bound["candidate_id"], "0" * 32)
+        record = self.targets._records[bound["candidate_id"]]
+        self.assertEqual(record["element"]["center"], {"x": 80, "y": 47.5})
+        self.assertIn("Retry", review["caption"])
+        self.assertFalse(self.input_events)
+
+    async def test_text_confirmation_invalid_ordinal_and_different_target_refuse(self):
+        arguments = {"window_id": "exact", "text": "Retry", "expected": [
+            {"kind": "window_state", "window_id": "exact", "property": "fullscreen", "expected": True}]}
+        for ordinal in (0, 21, True, "2"):
+            with self.subTest(ordinal=ordinal), self.assertRaises(ValueError):
+                await self.targets.prepare_text_confirmation({**arguments, "ordinal": ordinal})
+        self.perception.capture.assert_not_awaited()
+        with self.assertRaisesRegex(ValueError, "different window"):
+            await self.targets.prepare_text_confirmation({**arguments, "window_id": "elsewhere"})
+        self.perception.capture.assert_not_awaited()
+        with self.assertRaisesRegex(ValueError, "ordinal does not exist"):
+            await self.targets.prepare_text_confirmation({**arguments, "ordinal": 2})
+        self.assertFalse(self.input_events)
+
+    async def test_text_executor_connects_native_input_only_when_executing_bound_confirmation(self):
+        spec = self.registry.get("vision.click_text")
+        arguments = {"window_id": "exact", "text": "Retry", "expected": [
+            {"kind": "window_state", "window_id": "exact", "property": "fullscreen", "expected": True}]}
+        bound, review = await self.targets.prepare_text_confirmation(arguments)
+        self.portal.status = lambda: {"connected": False}
+
+        async def connect():
+            self.assertFalse(self.input_events)
+            self.portal.status = lambda: {"connected": True}
+            return {"connected": True, "verified": True}
+
+        self.desktop.input.connect = AsyncMock(side_effect=connect)
+        with self.assertRaisesRegex(ValueError, "preview confirmation"):
+            await self.registry.execute(spec, arguments)
+        self.desktop.input.connect.assert_not_awaited()
+        result = await self.registry.execute(spec, bound)
+        self.assertTrue(result["verified"])
+        self.desktop.input.connect.assert_awaited_once()
+        self.assertEqual(len(self.input_events), 2)

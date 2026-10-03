@@ -77,8 +77,9 @@ class ToolCancellationTests(unittest.IsolatedAsyncioTestCase):
 
         async def execute(args, context):
             return await command([sys.executable, '-c',
-                'import os,time; from pathlib import Path; Path(' + repr(str(ready))
-                + ').write_text(str(os.getpid())); time.sleep(60)'], timeout=60)
+                'import os,time; from pathlib import Path; ready=Path(' + repr(str(ready))
+                + '); staged=ready.with_suffix(".ready"); staged.write_text(str(os.getpid())); '
+                + 'staged.replace(ready); time.sleep(60)'], timeout=60)
 
         spec = self.spec(execute)
         await self.core.ipc.start()

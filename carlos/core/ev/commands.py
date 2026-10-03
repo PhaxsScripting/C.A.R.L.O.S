@@ -19,6 +19,43 @@ class Action:
     arguments: dict[str, Any]
 
 
+def visual_action(text: str) -> Action | None:
+    quoted = r'(?:"([^"\n]{1,500})"|\x27([^\x27\n]{1,500})\x27|“([^”\n]{1,500})”)'
+    show = re.fullmatch(
+        r"(?:show|find)(?: me)? (?:the )?visual (?:targets|candidates) for " + quoted
+        + r"(?: (?:in|on) (.{1,100}?))?[.!?]*", text, re.I,
+    )
+    if show:
+        return Action("vision.candidates", {
+            "text": next(value for value in show.groups()[:3] if value is not None),
+            "description": show[4] or "current window",
+        })
+    ordinal_words = ("first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth")
+    click = re.fullmatch(
+        r"visually click (?:(?:the )?(" + "|".join(ordinal_words) + r"|[0-9]{1,2}) )?" + quoted
+        + r"(?: (?:in|on) (.{1,100}?))? expecting (?:the )?window (?:to )?"
+        + r"(close|be minimized|be maximized|be fullscreen|exit fullscreen)[.!?]*", text, re.I,
+    )
+    if not click:
+        return None
+    ordinal, *labels, description, transition = click.groups()
+    if ordinal:
+        ordinal = ordinal_words.index(ordinal.casefold()) + 1 if not ordinal.isdigit() else int(ordinal)
+        if not 1 <= ordinal <= 20:
+            return None
+    expected = ({"kind": "window_absent"} if transition.casefold() == "close" else {
+        "kind": "window_state",
+        "property": {"be minimized": "minimized", "be maximized": "maximized",
+                     "be fullscreen": "fullscreen", "exit fullscreen": "fullscreen"}[transition.casefold()],
+        "expected": transition.casefold() != "exit fullscreen",
+    })
+    arguments = {"description": description or "current window",
+                 "text": next(value for value in labels if value is not None), "expected": [expected]}
+    if ordinal:
+        arguments["ordinal"] = ordinal
+    return Action("vision.click_text", arguments)
+
+
 def clock_request(text: str) -> str | None:
     """Recognize a current local clock question, including a final correction.
 
@@ -233,6 +270,8 @@ def direct_action(text: str) -> Action | None:
     clean = request_text(text)
     if not clean:
         return None
+    if action := visual_action(clean):
+        return action
     if action := website_request(clean):
         return action
     if action := audio_request(clean):
