@@ -58,6 +58,61 @@ if(findWindow('live')!==live) throw Error('live window lost');
 )JS");
         QVERIFY2(!result.isError(), qPrintable(result.toString()));
     }
+    void pairGuardsBeforeEitherMutation() {
+        QFile source(CARLOS_WINDOW_BRIDGE);
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        QJSEngine engine;
+        QVERIFY(!engine.evaluate(R"JS(
+function callDBus() {}
+var moves=0;
+var panel={name:'screen',manufacturer:'Fixture',model:'Panel',serialNumber:'one',
+ devicePixelRatio:1,geometry:{x:100,y:200,width:801,height:600}};
+function owned(id,pid) {return {internalId:id,pid:pid,caption:id,desktopFileName:id,resourceClass:id,
+ desktops:[{id:'work'}],onAllDesktops:false,output:panel,normalWindow:true,specialWindow:false,
+ moveable:true,resizeable:true,minimized:true,fullScreen:true,tile:null,maximizeMode:3,
+ frameGeometry:{x:120,y:220,width:700,height:500},clientGeometry:{x:120,y:220,width:700,height:500},
+ setMaximize:function(v,h,rect){moves++;this.maximizeMode=0;}};}
+var a=owned('anchor',123),b=owned('target',456);
+var workspace={stackingOrder:[a,b],screens:[panel],currentDesktop:{id:'work'},
+ clientArea:function(){return {x:100,y:240,width:801,height:560};}};
+var KWin={MaximizeArea:1};
+)JS").isError());
+        QVERIFY(!engine.evaluate(QString::fromUtf8(source.readAll())).isError());
+        const auto result=engine.evaluate(R"JS(
+function command() {
+ return {action:'beside',arguments:{anchor_id:'anchor',window_id:'target',expected_desktop:'work',
+  expected_output:serializeOutput(panel),expected_windows:{anchor:serializeWindow(a),window:serializeWindow(b)}}};
+}
+function refuse(cmd) {
+ var before=moves,rejected=false;
+ try{execute(cmd);}catch(error){rejected=true;}
+ if(!rejected||moves!==before)throw Error('guard mutated a window');
+}
+var cmd=command();cmd.arguments.window_id='anchor';refuse(cmd);
+cmd=command();b.deleted=true;refuse(cmd);b.deleted=false;
+cmd=command();b.pid=999;refuse(cmd);b.pid=456;
+cmd=command();b.frameGeometry.x++;refuse(cmd);b.frameGeometry.x--;
+cmd=command();b.desktops=[{id:'elsewhere'}];refuse(cmd);b.desktops=[{id:'work'}];
+cmd=command();workspace.currentDesktop={id:'elsewhere'};refuse(cmd);workspace.currentDesktop={id:'work'};
+cmd=command();b.output={name:'other'};refuse(cmd);b.output=panel;
+cmd=command();panel.serialNumber='replacement';refuse(cmd);panel.serialNumber='one';
+cmd=command();b.resizeable=false;refuse(cmd);b.resizeable=true;
+cmd=command();b.tile={};refuse(cmd);b.tile=null;
+cmd=command();b.minSize={width:500,height:100};refuse(cmd);b.minSize=null;
+cmd=command();cmd.deadline_unix_ms=1;refuse(cmd);
+var front=workspace.activeWindow;
+var result=execute(command());
+if(moves!==2||a.frameGeometry.x!==100||a.frameGeometry.y!==240||a.frameGeometry.width!==400||
+ b.frameGeometry.x!==500||b.frameGeometry.width!==401||b.frameGeometry.height!==560)
+ throw Error('pair geometry');
+if(a.minimized||b.minimized||a.fullScreen||b.fullScreen||a.maximizeMode||b.maximizeMode)
+ throw Error('native state');
+if(workspace.activeWindow!==front)throw Error('focus changed');
+if(result.target_geometries.anchor.width+result.target_geometries.window.width!==801)
+ throw Error('odd width left a gap');
+)JS");
+        QVERIFY2(!result.isError(),qPrintable(result.toString()));
+    }
     void nativeStateAndRestore() {
         QFile source(CARLOS_WINDOW_BRIDGE);
         QVERIFY(source.open(QIODevice::ReadOnly));

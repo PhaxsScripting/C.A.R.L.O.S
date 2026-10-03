@@ -130,6 +130,63 @@ function snapshot() {
     };
 }
 
+function placeBeside(args) {
+    const ids = {anchor: args.anchor_id, window: args.window_id};
+    if (!ids.anchor || !ids.window || ids.anchor === ids.window)
+        throw new Error("Choose two different windows; no window moved");
+    const desktop = workspace.currentDesktop ? String(workspace.currentDesktop.id) : "";
+    if (!desktop || desktop !== args.expected_desktop)
+        throw new Error("Workspace changed before execution; no window moved");
+    const windows = {anchor: findWindow(ids.anchor), window: findWindow(ids.window)};
+    for (const role of ["anchor", "window"]) {
+        const window = windows[role];
+        const observed = serializeWindow(window);
+        const expected = (args.expected_windows || {})[role];
+        if (!expected || !observed.normal || observed.special || observed.deleted ||
+            observed.tiled || observed.unresponsive || !observed.moveable || !observed.resizeable ||
+            (!observed.on_all_desktops && observed.desktops.indexOf(desktop) === -1))
+            throw new Error("Window cannot be arranged on this workspace; no window moved");
+        for (const key of Object.keys(expected)) {
+            if (JSON.stringify(observed[key]) !== JSON.stringify(expected[key]))
+                throw new Error("Window changed before execution; no window moved");
+        }
+    }
+    const output = windows.anchor.output;
+    if (!output || windows.window.output !== output || workspace.screens.indexOf(output) === -1)
+        throw new Error("Both windows must remain on the same monitor; no window moved");
+    const observedOutput = serializeOutput(output);
+    const expectedOutput = args.expected_output;
+    if (!expectedOutput) throw new Error("Missing monitor identity; no window moved");
+    for (const key of Object.keys(expectedOutput)) {
+        if (JSON.stringify(observedOutput[key]) !== JSON.stringify(expectedOutput[key]))
+            throw new Error("Monitor changed before execution; no window moved");
+    }
+    const area = rectangle(workspace.clientArea(KWin.MaximizeArea, windows.anchor));
+    const otherArea = rectangle(workspace.clientArea(KWin.MaximizeArea, windows.window));
+    if (JSON.stringify(area) !== JSON.stringify(otherArea) ||
+        !Object.values(area).every(Number.isFinite) || area.width < 2 || area.height < 1)
+        throw new Error("Shared work area is unavailable; no window moved");
+    const left = Math.floor(area.width / 2);
+    const geometries = {
+        anchor: {x: area.x, y: area.y, width: left, height: area.height},
+        window: {x: area.x + left, y: area.y, width: area.width - left, height: area.height}
+    };
+    for (const role of ["anchor", "window"]) {
+        const minimum = windows[role].minSize;
+        if (minimum && (minimum.width > geometries[role].width || minimum.height > area.height))
+            throw new Error("A window needs more space than half the monitor; no window moved");
+    }
+    for (const role of ["anchor", "window"]) {
+        const window = windows[role];
+        window.tile = null;
+        window.minimized = false;
+        window.fullScreen = false;
+        window.setMaximize(false, false, geometries[role]);
+        window.frameGeometry = geometries[role];
+    }
+    return {target_geometries: geometries};
+}
+
 function execute(command) {
     if (command.deadline_unix_ms && Date.now() > Number(command.deadline_unix_ms))
         throw new Error("E.V. request expired before execution");
@@ -137,6 +194,7 @@ function execute(command) {
     const args = command.arguments || {};
     if (action === "ping") return {pong: true};
     if (action === "snapshot") return snapshot();
+    if (action === "beside") return placeBeside(args);
     if (action === "workspace_switch") {
         workspace.currentDesktop = findDesktop(String(args.desktop_id));
         return {desktop_id: String(workspace.currentDesktop.id)};

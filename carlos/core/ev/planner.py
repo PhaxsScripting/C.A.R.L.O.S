@@ -888,6 +888,35 @@ class TaskPlanner:
                 dry_run,
             )
 
+        beside = re.fullmatch(
+            r"(?:put|place|move)\s+(.+?)\s+(?:beside|next\s+to)\s+(.+?)[.!?]*",
+            request, re.I,
+        )
+        if beside:
+            anchor = self._resolve_window_pronoun(beside[2])
+            target = self._resolve_window_pronoun(beside[1])
+            anchor_id = {"$ref": "anchor.result.window.id"}
+            target_id = {"$ref": "window.result.window.id"}
+            steps = [
+                self._step("anchor", "desktop.window.resolve", {"description": anchor},
+                           "One exact reference window"),
+                self._step("window", "desktop.window.resolve", {"description": target},
+                           "One exact requested window", ["anchor"]),
+                self._step("pair", "desktop.window.beside",
+                           {"window_id": target_id, "anchor_id": anchor_id},
+                           "Both windows match the panel-aware side-by-side layout", ["anchor", "window"]),
+            ]
+            return TaskPlan(
+                uuid.uuid4().hex, correlation_id, original,
+                f"Place {target} beside {anchor}", steps, dry_run,
+                goal_conditions=[
+                    {"kind": "window_geometry", "window_id": anchor_id,
+                     "geometry": {"$ref": "pair.result.expected.anchor"}},
+                    {"kind": "window_geometry", "window_id": target_id,
+                     "geometry": {"$ref": "pair.result.expected.window"}},
+                ], goal_source="trusted_intent",
+            )
+
         centered = re.fullmatch(
             r"(?:center|centre)\s+(.+?)(?:\s+(?:window|app|application))?[.!?]?$",
             request,
@@ -1478,6 +1507,7 @@ class TaskPlanner:
                 if step.tool in {
                     "desktop.window.state",
                     "desktop.window.layout",
+                    "desktop.window.beside",
                     "desktop.window.move_resize",
                     "desktop.window.move_to_output",
                     "desktop.window.move_to_workspace",

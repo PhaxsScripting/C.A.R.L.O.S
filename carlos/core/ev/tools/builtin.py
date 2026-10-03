@@ -3781,3 +3781,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
     from .application_windows import register_application_window_tools
 
     register_application_window_tools(registry)
+
+    from .window_pair import register_window_pair_tool
+
+    register_window_pair_tool(registry)

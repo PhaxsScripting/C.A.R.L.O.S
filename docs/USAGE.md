@@ -52,6 +52,15 @@ A failed or uncertain launch is never replayed automatically. This path needs
 native compositor inventory and the installed desktop entry; it does not
 infer application readiness from a window title.
 
+`put Firefox beside Konsole` arranges two existing normal windows on the same
+monitor and current workspace, with Konsole on the left and Firefox on the right.
+`put Firefox beside that one` uses the exact recent window reference. Both IDs
+are resolved before any move, then KWin checks their identities and current
+state together. Missing, changed, tiled or cross-monitor targets refuse. Window
+minimum sizes and panel space are respected; both positions are read back.
+`undo that` restores one window at a time, so reversing the pair takes two undo
+requests. An uncertain or partially completed pair is never replayed automatically.
+
 Use `plans` for plans, `agent-tasks` for task history, and `security` for the
 current permission settings. `stop` shuts down the core. `--help` lists the rest
 of the CLI commands.
