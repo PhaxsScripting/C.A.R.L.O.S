@@ -13,7 +13,7 @@ sys.path.insert(0,str(CORE))
 os.environ['PYTHONPATH']=str(CORE)
 
 
-def run():
+def run(check=None, *, monitor=False):
     from ev.paths import get_paths
     config_path=get_paths().config_file
     with tempfile.TemporaryDirectory(prefix='carlos-audio-test-') as directory:
@@ -52,6 +52,8 @@ context.objects = [
  } }
 ]
 ''')
+        if monitor:
+            server.write_text(server.read_text().replace('monitor = false', 'monitor = true'))
         pulse = root / 'pulse.conf'
         pulse.write_text('''stream.properties = { adapter.auto-port-config = { mode = dsp } }
 context.spa-libs = { support.* = support/libspa-support audio.convert.* = audioconvert/libspa-audioconvert }
@@ -96,7 +98,7 @@ context.modules = [
                                              'Spa:String:JSON'], env=env, capture_output=True,
                                             text=True, timeout=2)
                 assert configured.returncode == 0
-                report = asyncio.run(check_speech(root,runtime,pactl,config_path))
+                report = asyncio.run((check or check_speech)(root,runtime,pactl,config_path))
 
             finally:
                 for child in reversed(children):

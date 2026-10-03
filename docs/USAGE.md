@@ -497,3 +497,11 @@ in that worker's input pipe, kills only that child and checks actual one-shot
 synthesis plus the next persistent request. It needs your configured local
 Piper runtime/model. It does not prove speech was heard or that the paused
 worker began synthesis; all owned children are checked after cleanup.
+
+`python3 carlos/tests/fixtures/privacy_listening_live.py` checks DO NOT LISTEN
+through a real private Core and its IPC API. It creates isolated audio servers
+and captures only their null-sink monitor. It starts the configured local wake,
+STT, preview-STT and VAD workers, verifies they and the recorder exit on mute,
+checks capture refusal, then verifies Normal mode creates new ambient workers.
+It needs the local models and PipeWire/Pulse tools. Host microphone, playback
+routes and Carlos settings are not changed; this is not a room-acoustic test.
