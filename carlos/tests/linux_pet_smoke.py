@@ -2,12 +2,19 @@
 """Exercise portable pet lock handling on an isolated session bus."""
 
 import os
+import asyncio
+import logging
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'core'))
+from ev.events import PhaxEventBus
+from ev.ipc.server import IpcServer
+from ev.session_lock import SessionLockMonitor
 
 import dbus
 import dbus.service
@@ -20,6 +27,55 @@ server.set_exit_on_disconnect(False)
 loop = GLib.MainLoop()
 thread = threading.Thread(target=loop.run, daemon=True)
 thread.start()
+
+
+class PanelFixture:
+    def __init__(self, runtime):
+        self.runtime = runtime
+        self.ipc = None
+        self.task = None
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self.loop.run_forever, daemon=True)
+        self.thread.start()
+
+    async def initialize(self):
+        self.bus = PhaxEventBus()
+        self.locked = None
+
+        def observed(locked, _idle, _source):
+            self.locked = locked
+            self.bus.publish('presence.session_changed', 'fixture', {})
+
+        async def summary(request):
+            assert request['type'] == 'panel.summary'
+            return {'privacy_mode': False, 'session_locked': self.locked is not False,
+                    'state': 'DORMANT'}
+
+        (self.runtime / 'ev').mkdir(mode=0o700)
+        self.ipc = IpcServer(self.runtime / 'ev/ev.sock', self.bus, summary,
+                             logging.getLogger('portable-pet-fixture'))
+        await self.ipc.start()
+        self.monitor = SessionLockMonitor(observed)
+        self.task = asyncio.create_task(self.monitor.run())
+
+    def start(self):
+        asyncio.run_coroutine_threadsafe(self.initialize(), self.loop).result(timeout=5)
+
+    async def finish(self):
+        if self.task is not None:
+            self.task.cancel()
+            await asyncio.gather(self.task, return_exceptions=True)
+        if self.ipc is not None:
+            await self.ipc.stop()
+
+    def close(self):
+        try:
+            asyncio.run_coroutine_threadsafe(self.finish(), self.loop).result(timeout=5)
+        finally:
+            self.loop.call_soon_threadsafe(self.loop.stop)
+            self.thread.join(timeout=3)
+            assert not self.thread.is_alive(), 'Owned panel fixture did not stop'
+            self.loop.close()
 
 
 def wait_property(client, prop, expected):
@@ -89,13 +145,14 @@ class KWinScripts(dbus.service.Object):
 
 def check(service, path, scripts=None):
     class ScreenLock(dbus.service.Object):
+        active = False
         @dbus.service.method(service, in_signature="", out_signature="b")
         def GetActive(self):
-            return False
+            return self.active
 
         @dbus.service.signal(service, signature="b")
         def ActiveChanged(self, active):
-            pass
+            self.active = bool(active)
 
     name = dbus.service.BusName(service, server)
     lock = ScreenLock(server, path)
@@ -103,15 +160,19 @@ def check(service, path, scripts=None):
     client.set_exit_on_disconnect(False)
     try:
         with tempfile.TemporaryDirectory(prefix="carlos-pet-lock-") as directory:
-            env = {
-                **os.environ,
-                "QT_QPA_PLATFORM": "offscreen",
-                "QT_QUICK_BACKEND": "software",
-                "XDG_CONFIG_HOME": directory,
-                "XDG_CURRENT_DESKTOP": "GNOME",
-            }
-            process = subprocess.Popen([str(Path(sys.argv[1]).resolve())], env=env)
+            panel = PanelFixture(Path(directory))
+            process = None
             try:
+                panel.start()
+                env = {
+                    **os.environ,
+                    "QT_QPA_PLATFORM": "offscreen",
+                    "QT_QUICK_BACKEND": "software",
+                    "XDG_CONFIG_HOME": directory,
+                    "XDG_RUNTIME_DIR": directory,
+                    "XDG_CURRENT_DESKTOP": "GNOME",
+                }
+                process = subprocess.Popen([str(Path(sys.argv[1]).resolve())], env=env)
                 wait_shown(client, True)
                 if scripts:
                     wait_property(client, "observing", True)
@@ -122,13 +183,22 @@ def check(service, path, scripts=None):
                 if scripts:
                     assert scripts.starts == 1, scripts.starts
                     assert not scripts.errors, scripts.errors
-                print(service, "unlock / lock / unlock passed", flush=True)
             finally:
-                process.terminate()
-                process.wait(timeout=5)
-                assert process.returncode == 0, process.returncode
+                try:
+                    if process is not None:
+                        if process.poll() is None:
+                            process.terminate()
+                        try:
+                            process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait(timeout=3)
+                        assert process.returncode == 0, process.returncode
+                finally:
+                    panel.close()
                 if scripts:
                     assert not scripts.sources, scripts.sources
+            print(service, "unlock / lock / unlock and owned cleanup passed", flush=True)
     finally:
         client.close()
         lock.remove_from_connection()

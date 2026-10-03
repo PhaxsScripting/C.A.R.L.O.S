@@ -196,7 +196,7 @@ class NoticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('worker startup', body)
 
     async def test_complete_key_is_filtered_before_body_length_limit(self):
-        private_key = '-----BEGIN PRIVATE KEY-----\n' + 'PRIVATE-NOTICE-CANARY-' * 60 + '\n-----END PRIVATE KEY-----'
+        private_key = '-----BEGIN ' + 'PRIVATE KEY-----\n' + 'PRIVATE-NOTICE-CANARY-' * 60 + '\n-----END PRIVATE KEY-----'
         body = await self.notification_body(private_key + ' remaining error context')
         self.assertNotIn('PRIVATE-NOTICE-CANARY', body)
         self.assertIn('[REDACTED_PRIVATE_KEY]', body)

@@ -4,7 +4,7 @@ permissions:
   contents: read
 jobs:
   distro:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -23,7 +23,7 @@ jobs:
             bootstrap: pacman -Syu --noconfirm python git
           - image: opensuse/tumbleweed:latest
             profile: opensuse
-            bootstrap: zypper --non-interactive refresh && zypper --non-interactive install python3 git gawk
+            bootstrap: zypper --non-interactive refresh && zypper --non-interactive dup && zypper --non-interactive install python3 git gawk
     container: ${{ matrix.image }}
     steps:
       - name: Bootstrap container
@@ -45,9 +45,6 @@ jobs:
           test -s /tmp/carlos-pet.png
           EV_SCREENSHOT_PATH=/tmp/carlos-ui.png carlos/build/ui/ev-ui
           test -s /tmp/carlos-ui.png
-          for desktop in gnome cinnamon mate xfce kwin; do
-            dbus-run-session -- python3 carlos/tests/linux_pet_smoke.py carlos/build/ui/ev-pet "$desktop"
-          done
       - name: Install and check private runtime
         env:
           CARLOS_INSTALL_TEST: '1'
@@ -60,3 +57,6 @@ jobs:
           "$HOME/.local/bin/ev-core" --help
           "$HOME/.local/bin/evctl" --help
           "$XDG_DATA_HOME/ev/app/venv/bin/python" -c 'import aiohttp, psutil, PIL, jeepney, dbus, gi'
+          for desktop in gnome cinnamon mate xfce kwin; do
+            dbus-run-session -- "$XDG_DATA_HOME/ev/app/venv/bin/python" carlos/tests/linux_pet_smoke.py carlos/build/ui/ev-pet "$desktop"
+          done
