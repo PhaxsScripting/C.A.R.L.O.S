@@ -435,3 +435,10 @@ measures a cancellation flag; running playback measures the owned process exit.
 Neither measures microphone recognition, speaker buffering or room acoustics.
 The dated `barge_in_latency_ms` is populated only for an accepted wake while a
 playback process was running.
+
+`python3 carlos/tests/fixtures/speech_stop_live.py` checks typed interruption and
+persistent Piper worker recovery with your installed voice model. It requires
+PipeWire/Pulse command tools and creates its own temporary audio servers, clock,
+null sink and explicit link. It never captures the host microphone or plays
+through your speakers. A successful exit confirms child cleanup and a completed
+private playback stream; it does not establish acoustic voice quality.

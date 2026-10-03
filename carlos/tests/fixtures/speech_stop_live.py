@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 import shutil
 import subprocess
@@ -35,14 +34,27 @@ context.modules = [
  { name = libpipewire-module-protocol-native }
  { name = libpipewire-module-spa-node-factory }
  { name = libpipewire-module-client-node }
+ { name = libpipewire-module-link-factory }
  { name = libpipewire-module-adapter }
  { name = libpipewire-module-metadata }
  { name = libpipewire-module-access }
 ]
-context.objects = [ { factory = metadata args = { metadata.name = default } } ]
+context.objects = [
+ { factory = metadata args = { metadata.name = default } }
+ { factory = spa-node-factory args = {
+   factory.name = support.node.driver node.name = Dummy-Driver
+   node.group = pipewire.dummy priority.driver = 200000
+ } }
+ { factory = adapter args = {
+   factory.name = support.null-audio-sink node.name = carlos_speech_fixture
+   media.class = Audio/Sink audio.channels = 1 audio.position = [ MONO ]
+   adapter.auto-port-config = { mode = dsp monitor = false position = preserve }
+ } }
+]
 ''')
         pulse = root / 'pulse.conf'
-        pulse.write_text('''context.spa-libs = { support.* = support/libspa-support audio.convert.* = audioconvert/libspa-audioconvert }
+        pulse.write_text('''stream.properties = { adapter.auto-port-config = { mode = dsp } }
+context.spa-libs = { support.* = support/libspa-support audio.convert.* = audioconvert/libspa-audioconvert }
 context.modules = [
  { name = libpipewire-module-protocol-native }
  { name = libpipewire-module-client-node }
@@ -78,15 +90,13 @@ context.modules = [
                     time.sleep(.02)
                 # This environment belongs to the fixture process only.
                 os.environ.update(env)
-                pactl('load-module', 'module-null-sink', 'sink_name=carlos_speech_fixture',
-                      'channels=1', 'channel_map=mono')
                 pactl('set-default-sink', 'carlos_speech_fixture')
                 configured = subprocess.run(['pw-metadata', '-n', 'default', '0',
                                              'default.audio.sink', '{"name":"carlos_speech_fixture"}',
                                              'Spa:String:JSON'], env=env, capture_output=True,
                                             text=True, timeout=2)
                 assert configured.returncode == 0
-                asyncio.run(check_speech(root,runtime,pactl,config_path))
+                report = asyncio.run(check_speech(root,runtime,pactl,config_path))
 
             finally:
                 for child in reversed(children):
@@ -97,6 +107,8 @@ context.modules = [
                     except subprocess.TimeoutExpired:
                         child.kill()
                         child.wait(timeout=3)
+    report['owned_audio_server_cleanup_completed'] = True
+    print(json.dumps(report), flush=True)
 
 
 async def check_speech(root,runtime,pactl,config_path):
@@ -118,7 +130,7 @@ async def check_speech(root,runtime,pactl,config_path):
     paths.config_file.write_text(json.dumps(config))
     core=CarlosCore(paths=paths)
     speech=None
-    report={'scope':'Actual temporary Core IPC and Piper/paplay playback on an isolated null sink; explicit typed stop, not acoustic barge-in',
+    report={'scope':'Actual temporary Core IPC and Piper/paplay playback on an isolated null sink; typed stop and owned worker crash recovery, not acoustic acceptance',
             'host_playback_touched':False,'host_microphone_touched':False}
     try:
         await core.ipc.start()
@@ -151,6 +163,61 @@ async def check_speech(root,runtime,pactl,config_path):
                       pending_speech_cleared=True,next_read_only_request_completed=True,
                       acoustic_latency_verified=False,playback_device='private null sink')
         assert core.voice.diagnostics['barge_in_latency_ms'] is None
+
+        await core.voice.tts.prewarm()
+        crashed = core.voice.tts.piper._worker
+        assert crashed is not None and crashed.returncode is None
+        crashed.kill()
+        await asyncio.wait_for(crashed.wait(), 3)
+        recovery_started = time.monotonic()
+        speech = asyncio.create_task(core.voice.speak(
+            'This private speech should finish after the worker restarts.',
+            'owned-worker-recovery', False))
+        async with asyncio.timeout(15):
+            while core.voice.tts_process is None or not core.voice.speaking:
+                if speech.done():
+                    raise RuntimeError('Recovery ended before playback: ' + str(speech.result()))
+                await asyncio.sleep(.005)
+            recovered_player = core.voice.tts_process
+            while not json.loads(await asyncio.to_thread(pactl, '-f', 'json', 'list', 'sink-inputs')):
+                if speech.done():
+                    raise RuntimeError('Recovery produced no native playback')
+                await asyncio.sleep(.01)
+        recovered_worker = core.voice.tts.piper._worker
+        assert recovered_worker is not None and recovered_worker is not crashed
+        assert recovered_worker.pid != crashed.pid and recovered_worker.returncode is None
+        recovery_startup_ms = (time.monotonic() - recovery_started) * 1000
+        link_deadline = time.monotonic() + 3
+        while True:
+            outputs = await asyncio.to_thread(subprocess.run, ['pw-link', '-o'],
+                                              capture_output=True, text=True, timeout=2)
+            inputs = await asyncio.to_thread(subprocess.run, ['pw-link', '-i'],
+                                             capture_output=True, text=True, timeout=2)
+            source_ports = outputs.stdout.splitlines()
+            sink_ports = [port for port in inputs.stdout.splitlines()
+                          if port.startswith('carlos_speech_fixture:')]
+            if source_ports and sink_ports:
+                assert outputs.returncode == 0 and inputs.returncode == 0
+                assert len(source_ports) == len(sink_ports) == 1, (source_ports, sink_ports)
+                linked = await asyncio.to_thread(subprocess.run,
+                    ['pw-link', source_ports[0], sink_ports[0]],
+                    capture_output=True, text=True, timeout=2)
+                assert linked.returncode == 0, linked.stderr
+                break
+            if time.monotonic() >= link_deadline:
+                raise RuntimeError('Private ports missing: ' + repr((source_ports, inputs.stdout.splitlines())))
+            await asyncio.sleep(.01)
+        recovered = await asyncio.wait_for(speech, 20)
+        assert recovered['status'] == 'completed' and recovered['engine'] == 'piper', recovered
+        assert recovered_player.returncode == 0
+        assert core.state.current.value == 'DORMANT'
+        assert not core.voice.speaking and not core.voice.speech_pending and core.voice.tts_process is None
+        next_request = await request('command.submit', {'text': 'what time is it?', 'speak': False})
+        assert next_request['type'] == 'response' and next_request['payload']['status'] == 'completed'
+        report.update(crashed_owned_worker_reaped=True, replacement_worker_verified=True,
+                      recovery_playback_completed=True, recovery_player_reaped=True,
+                      recovery_startup_ms=round(recovery_startup_ms, 3),
+                      recovery_next_request_completed=True)
     finally:
         if speech is not None and not speech.done():speech.cancel();await asyncio.gather(speech,return_exceptions=True)
         await core.voice.close()
@@ -159,7 +226,7 @@ async def check_speech(root,runtime,pactl,config_path):
             await core.brain.provider.close()
         core.memory.close();core.task_journal.close();core.daily.close()
         report['owned_worker_cleanup_completed']=True
-    print(json.dumps(report),flush=True)
+    return report
 
 
 if __name__ == '__main__':
