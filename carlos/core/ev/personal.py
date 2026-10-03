@@ -25,6 +25,19 @@ class PersonalStore:
         if kind not in self.KINDS:
             raise ValueError("Unknown personal item kind")
 
+    def _read_back(self, expected: dict[str, Any]) -> dict[str, Any]:
+        with self.daily.connect() as db:
+            row = db.execute(
+                "SELECT * FROM personal_items WHERE id=? AND kind=?",
+                (expected["id"], expected["kind"]),
+            ).fetchone()
+        if row is None or dict(row) != expected:
+            raise RuntimeError(
+                f"The {expected['kind']} was written but its committed readback no longer matches. "
+                "Inspect it before changing it again."
+            )
+        return dict(row)
+
     def create(self, kind: str, title: str, content: str = "") -> dict[str, Any]:
         self._kind(kind)
         title = title.strip()
@@ -58,7 +71,9 @@ class PersonalStore:
                 "INSERT INTO personal_items VALUES (:id,:kind,:title,:content,:done,:archived,:created,:updated)",
                 item,
             )
-        return {"verified": True, "item": item, "message": f"Saved {kind}: {title}."}
+        item = self._read_back(item)
+        return {"verified": True, "verification_scope": "committed_sqlite_readback",
+                "item": item, "message": f"Saved {kind}: {title}."}
 
     def listing(self, kind: str, query: str = "", state: str = "active") -> dict[str, Any]:
         self._kind(kind)
@@ -150,7 +165,9 @@ class PersonalStore:
             "archive": "Archived",
             "restore": "Restored",
         }[operation]
-        return {"verified": True, "item": item, "message": f"{verb} {kind}: {item['title']}."}
+        item = self._read_back(item)
+        return {"verified": True, "verification_scope": "committed_sqlite_readback",
+                "item": item, "message": f"{verb} {kind}: {item['title']}."}
 
     def snooze(self, identifier: str, seconds: float) -> dict[str, Any]:
         if not 1 <= seconds <= 31622400:

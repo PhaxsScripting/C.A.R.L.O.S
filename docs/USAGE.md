@@ -517,3 +517,10 @@ History remains project-scoped and explicitly historical; saved approvals stay
 unusable and further actions require fresh observations. Paged running steps
 retain a null finish time rather than appearing completed. The schema validator
 supports `oneOf` for exactly one allowed shape and rejects conflicting variants.
+
+Personal-item saves, appends, task state changes and archive/restore check the
+exact committed SQLite row before reporting success. If a later writer changes
+or removes it before the check, the action reports a readback error; Carlos does
+not repeat the write or undo the later edit. This verifies one observed database
+state, not that the item will remain unchanged. Private-session writes still use
+RAM-only storage, and guest mode still denies personal tools.

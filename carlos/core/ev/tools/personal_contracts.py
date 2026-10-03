@@ -33,3 +33,16 @@ PERSONAL_OBSERVATION_SCHEMAS.update({
     'interaction.selection_status': record({'verified': {'type': 'boolean', 'enum': [False]},
                                              'message': text()}),
 })
+
+PERSONAL_MUTATION_SCHEMAS = {}
+for kind, prefix in (('note', 'notes'), ('task', 'tasks'), ('bookmark', 'bookmarks'), ('snippet', 'snippets')):
+    operations = ['create', 'archive', 'restore']
+    if kind == 'task':
+        operations += ['complete', 'reopen']
+    elif kind == 'note':
+        operations += ['append']
+    for operation in operations:
+        PERSONAL_MUTATION_SCHEMAS[prefix + '.' + operation] = record({
+            'verified': {'type': 'boolean', 'enum': [True]},
+            'verification_scope': {'type': 'string', 'enum': ['committed_sqlite_readback']},
+            'item': item(kind, content=True), 'message': text()})

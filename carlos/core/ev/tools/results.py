@@ -7,6 +7,8 @@ to EXECUTED_UNVERIFIED rather than inheriting a success claim from their prose.
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from .personal_contracts import PERSONAL_MUTATION_SCHEMAS
+
 # Audited observation primitives, not utterance matching. New tools opt in via
 # ToolSpec.read_only; SAFE permission alone does not imply read-only (launch is SAFE).
 OBSERVATION_TOOLS = frozenset("""
@@ -180,6 +182,17 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             verified,
             None if verified else "Project command did not exit successfully",
             scope="process_exit_only",
+        )
+    if name in PERSONAL_MUTATION_SCHEMAS:
+        verified = (data.get("verified") is True
+                    and data.get("verification_scope") == "committed_sqlite_readback"
+                    and isinstance(data.get("item"), dict))
+        return ExecutionResult(
+            verified, "SUCCEEDED_VERIFIED" if verified else "FAILED", verified,
+            None if verified else "Committed personal item readback was not verified",
+            retryable=False, changed_state=True if verified else None,
+            verification_hint="Selected SQLite row matched after commit; later state can change",
+            scope="committed_sqlite_readback",
         )
     if "verified" in data or name.endswith(".resolve") or name == "desktop.window.wait":
         verified = data.get("verified", data.get("resolved")) is True

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from .base import ToolRegistry, ToolSpec
-from .personal_contracts import PERSONAL_OBSERVATION_SCHEMAS
+from .personal_contracts import PERSONAL_OBSERVATION_SCHEMAS, PERSONAL_MUTATION_SCHEMAS
 from .builtin import object_schema, resolve_allowed, clipboard_read, clipboard_write
 from ..permissions import Permission
 from ..utilities import calculate, convert, world_clock, text_stats
@@ -162,6 +162,11 @@ def register_personal_tools(registry: ToolRegistry):
     identify = object_schema({"identifier": text}, ["identifier"])
 
     def reg(name, description, schema, executor, permission=Permission.LOW_RISK, **kw):
+        if name in PERSONAL_MUTATION_SCHEMAS:
+            kw.update(read_only=False, offline_available=True, reversible=False,
+                      output_schema=PERSONAL_MUTATION_SCHEMAS[name],
+                      side_effects=("Writes the selected local personal item",),
+                      verification="Exact committed SQLite row readback; later changes are not replayed or undone")
         if name in PERSONAL_OBSERVATION_SCHEMAS:
             kw.update(read_only=True, offline_available=True, reversible=False,
                       output_schema=PERSONAL_OBSERVATION_SCHEMAS[name],
