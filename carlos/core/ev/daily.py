@@ -143,6 +143,17 @@ class DailyStore:
                     db.execute("UPDATE reminders SET state='fired' WHERE id=?", (row["id"],))
         return rows
 
+    def reminder_is_current(self, reminder: dict[str, Any], claimed_at: float) -> bool:
+        expected = dict(reminder)
+        repeat = expected["repeat_seconds"]
+        if repeat:
+            expected["due"] += (int((claimed_at - expected["due"]) // repeat) + 1) * repeat
+        else:
+            expected["state"] = "fired"
+        with self.connect() as db:
+            row = db.execute("SELECT * FROM reminders WHERE id=?", (expected["id"],)).fetchone()
+        return row is not None and dict(row) == expected
+
     def records(self, kind: str) -> dict[str, Any]:
         with self.connect() as db:
             return {

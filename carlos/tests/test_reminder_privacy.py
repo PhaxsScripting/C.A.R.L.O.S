@@ -67,8 +67,8 @@ class ReminderPrivacyTests(unittest.IsolatedAsyncioTestCase):
         result = await self.request('carlos.privacy.set', {'mode': mode})
         self.assertEqual(result['mode'], mode)
 
-    def add_due(self, label):
-        saved = self.core.daily.add_reminder(label, 60)['reminder']
+    def add_due(self, label, repeat_seconds=0):
+        saved = self.core.daily.add_reminder(label, 60, repeat_seconds)['reminder']
         with self.core.daily.connect() as db:
             db.execute('UPDATE reminders SET due=? WHERE id=?', (time.time() - 2, saved['id']))
         return saved['id']
@@ -87,7 +87,7 @@ class ReminderPrivacyTests(unittest.IsolatedAsyncioTestCase):
         self.core.voice.speech_pending = False
         self.add_due('Owned fresh reminder')
         await self.emitted('Owned fresh reminder')
-        async with asyncio.timeout(3):
+        async with asyncio.timeout(4):
             while not self.speak.await_count:
                 await asyncio.sleep(.02)
         self.assertEqual([call.args[0] for call in self.speak.await_args_list],
@@ -162,6 +162,75 @@ class ReminderPrivacyTests(unittest.IsolatedAsyncioTestCase):
         await self.emitted('Owned stopped reminder')
         await self.core._stop_all_actions('owned-reminder-stop')
         await self.fresh_delivery()
+
+
+    async def test_snoozed_waiting_occurrence_is_not_spoken(self):
+        identifier = self.add_due('Owned snoozed reminder')
+        self.start()
+        await self.emitted('Owned snoozed reminder')
+        result = await self.request('tool.call', {'name': 'reminders.snooze',
+                                                'arguments': {'identifier': identifier, 'seconds': 300}})
+        self.assertEqual(result['status'], 'completed')
+        await self.fresh_delivery()
+        with self.core.daily.connect() as db:
+            row = db.execute('SELECT state,due FROM reminders WHERE id=?', (identifier,)).fetchone()
+        self.assertEqual(row['state'], 'pending')
+        self.assertGreater(row['due'], time.time() + 200)
+
+    async def test_cancelled_recurring_occurrence_is_not_spoken(self):
+        identifier = self.add_due('Owned cancelled recurrence', repeat_seconds=60)
+        self.start()
+        await self.emitted('Owned cancelled recurrence')
+        result = await self.request('tool.call', {'name': 'reminders.cancel',
+                                                'arguments': {'identifier': identifier}})
+        self.assertEqual(result['status'], 'completed')
+        await self.fresh_delivery()
+        with self.core.daily.connect() as db:
+            self.assertEqual(db.execute('SELECT state FROM reminders WHERE id=?',
+                                        (identifier,)).fetchone()[0], 'cancelled')
+
+    async def test_deleted_waiting_occurrence_is_not_recreated_or_spoken(self):
+        identifier = self.add_due('Owned deleted reminder')
+        self.start()
+        await self.emitted('Owned deleted reminder')
+        with self.core.daily.connect() as db:
+            db.execute('DELETE FROM reminders WHERE id=?', (identifier,))
+        await self.fresh_delivery()
+        with self.core.daily.connect() as db:
+            self.assertIsNone(db.execute('SELECT id FROM reminders WHERE id=?', (identifier,)).fetchone())
+
+    async def test_current_recurring_occurrence_delivers_once(self):
+        identifier = self.add_due('Owned fresh reminder', repeat_seconds=60)
+        self.core.voice.speech_pending = False
+        self.start()
+        await self.emitted('Owned fresh reminder')
+        await asyncio.sleep(1.1)
+        self.speak.assert_awaited_once()
+        self.assertEqual(self.speak.await_args.args[0], 'Reminder: Owned fresh reminder')
+        with self.core.daily.connect() as db:
+            row = db.execute('SELECT state,due FROM reminders WHERE id=?', (identifier,)).fetchone()
+        self.assertEqual(row['state'], 'pending')
+        self.assertGreater(row['due'], time.time())
+
+    async def test_privacy_change_during_delivery_readback_cannot_speak_old_label(self):
+        self.add_due('Owned stale delivery reminder')
+        self.core.voice.speech_pending = False
+        checking = threading.Event()
+        original = self.core.daily.reminder_is_current
+        def delayed(reminder, claimed_at):
+            current = original(reminder, claimed_at)
+            if reminder['label'] == 'Owned stale delivery reminder':
+                checking.set()
+                if not self.release.wait(5):
+                    raise RuntimeError('Owned fixture did not release its delivery check')
+            return current
+        with patch.object(self.core.daily, 'reminder_is_current', side_effect=delayed):
+            self.start()
+            self.assertTrue(await asyncio.to_thread(checking.wait, 3))
+            await self.mode('GUEST')
+            await self.mode('NORMAL')
+            self.release.set()
+            await self.fresh_delivery()
 
 
 if __name__ == '__main__':

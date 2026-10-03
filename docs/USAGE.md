@@ -529,3 +529,10 @@ Waiting reminder speech belongs to the privacy mode and action generation that
 claimed it. Changing privacy mode or explicitly stopping actions discards that
 waiting speech. Guest mode does not claim or publish personal reminders. A
 worker returning after a privacy transition cannot publish the old labels.
+
+Queued reminder speech also checks the exact claimed database occurrence before
+delivery. Snoozing it, cancelling a recurring reminder or removing the record
+prevents the stale occurrence from being spoken. Repeated claims for the same
+reminder replace its older queued occurrence. A privacy change during the
+readback still discards the old speech. This observes database state before
+speech dispatch; subsequent changes can race with speech already in progress.

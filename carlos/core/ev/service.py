@@ -2728,7 +2728,7 @@ class CarlosCore:
         raise ValueError(f"unsupported request type: {request_type}")
 
     async def _reminder_loop(self) -> None:
-        pending: list[dict[str, Any]] = []
+        pending: list[tuple[dict[str, Any], float]] = []
         queue_scope = (self._action_generation, self.privacy.mode)
         while not self.stop_event.is_set():
             try:
@@ -2739,22 +2739,27 @@ class CarlosCore:
                 if self.privacy.changing or scope[1] == "GUEST":
                     await asyncio.sleep(1)
                     continue
-                due = await asyncio.to_thread(self.daily.due, time.time())
+                claimed_at = time.time()
+                due = await asyncio.to_thread(self.daily.due, claimed_at)
                 if (self.privacy.changing
                         or scope != (self._action_generation, self.privacy.mode)):
                     pending.clear()
                     continue
                 for reminder in due:
                     self.bus.publish("reminder.due", "reminders", reminder)
-                    pending.append(reminder)
+                    pending = [entry for entry in pending if entry[0]["id"] != reminder["id"]]
+                    pending.append((reminder, claimed_at))
                 if (
                     pending
                     and self.state.current == CoreState.DORMANT
                     and not self.voice.speech_pending
                     and not self.voice.privacy_mode
                 ):
-                    item = pending.pop(0)
-                    if self.voice.tts_available:
+                    item, claimed_at = pending.pop(0)
+                    current = await asyncio.to_thread(self.daily.reminder_is_current, item, claimed_at)
+                    if (current and not self.privacy.changing
+                            and scope == (self._action_generation, self.privacy.mode)
+                            and self.voice.tts_available):
                         await self.voice.speak(
                             "Reminder: " + item["label"], uuid.uuid4().hex, allow_follow_up=False
                         )
