@@ -6,6 +6,7 @@ import re
 import time
 
 from ..permissions import Permission
+from ..context_age import recent_age
 from .base import ToolSpec, ValidationError
 from .builtin import object_schema, desktop_entries, resolve_allowed
 
@@ -105,8 +106,9 @@ def context_records(text, daily, entities, *, learn_style=False, memory=None, pr
             }
         )
     window = entities.get("window")
-    age = time.monotonic() - entities.get("window_at", 0)
-    if isinstance(window, dict) and 0 <= age <= 300:
+    age = recent_age(entities.get("window_at"), 300)
+    window_id = window.get('id') if isinstance(window, dict) else None
+    if isinstance(window_id, str) and window_id.strip() and age is not None:
         hint = {k: window.get(k) for k in ("id", "pid", "app_id", "resource_class")}
         result.append(
             {

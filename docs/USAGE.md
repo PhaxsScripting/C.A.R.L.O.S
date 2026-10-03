@@ -449,3 +449,8 @@ available loopback port. It refuses an unrelated listener, kills only its own
 worker and checks replacement recognition. It needs your configured local
 Piper/Whisper models and ffmpeg. It never records the microphone, plays audio or
 submits a desktop command; temporary files and owned workers are removed.
+
+Follow-ups such as `center that one` use the saved native window ID for up to
+five minutes. They never switch to another window with the same app or title
+when that ID closes. Numbered list selections expire after two minutes. Missing
+or invalid timestamps expire the reference; name or inspect a current target.

@@ -13,6 +13,7 @@ from .ai.offline import is_desktop_input_request, mask_desktop_literals, parse_d
 from .events import PhaxEventBus
 from .commands import clock_request, direct_action, request_text, browser_input, network_request
 from .state import CoreState, StateMachine
+from .context_age import recent_age
 from .tools import ToolRegistry
 from .tools.results import OBSERVATION_TOOLS, evaluate_result
 
@@ -188,21 +189,17 @@ class TaskPlanner:
 
     def _resolve_window_pronoun(self, description: str) -> str:
         cleaned = _clean_entity(description)
-        if cleaned.casefold() not in {"it", "that", "this", "the one"}:
+        if cleaned.casefold() not in {"it", "that", "this", "the one", "that one", "this one"}:
             return cleaned
         previous = self.last_entities.get("window")
         if not isinstance(previous, dict):
             return "window-id:missing-context"
-        if time.monotonic() - float(self.last_entities.get("window_at", 0)) > 300:
+        if recent_age(self.last_entities.get("window_at"), 300) is None:
             return "window-id:expired-context"
-        if previous.get("id"):
-            return f"window-id:{previous['id']}"
-        return str(
-            previous.get("app_id")
-            or previous.get("resource_class")
-            or previous.get("title")
-            or cleaned
-        )
+        window_id = previous.get("id")
+        if not isinstance(window_id, str) or not window_id.strip():
+            return "window-id:missing-context"
+        return f"window-id:{window_id}"
 
     @staticmethod
     def _browser_search_request(text: str) -> tuple[str, str] | None:
@@ -314,8 +311,10 @@ class TaskPlanner:
         if (
             correction
             and self.last_window_operation
-            and previous_window.get("id")
-            and time.monotonic() - float(self.last_entities.get("window_at", 0)) <= 300
+            and isinstance(previous_window, dict)
+            and isinstance(previous_window.get("id"), str)
+            and previous_window['id'].strip()
+            and recent_age(self.last_entities.get("window_at"), 300) is not None
         ):
             operation = self.last_window_operation
             arguments = {**operation["arguments"], "window_id": {"$ref": "window.result.window.id"}}
@@ -399,7 +398,7 @@ class TaskPlanner:
                 },
             }
             tool = mapping.get(kind, {}).get(verb)
-            if tool and time.monotonic() - saved.get("at", 0) <= 120 and 0 <= index < len(items):
+            if tool and recent_age(saved.get("at"), 120) is not None and 0 <= index < len(items):
                 item = items[index]
                 args = (
                     {"identifier": item["id"]}
