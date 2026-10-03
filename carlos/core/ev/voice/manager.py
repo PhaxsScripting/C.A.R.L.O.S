@@ -167,7 +167,13 @@ class VoiceManager:
             "tool_result": "",
             "tts_state": "IDLE",
             "tts_startup_latency_ms": None,
+            "speech_stop_latency_ms": None,
+            "speech_stop_latency_scope": None,
+            "speech_stop_reason": None,
+            "speech_stop_observed_at": None,
             "barge_in_latency_ms": None,
+            "barge_in_latency_scope": None,
+            "barge_in_observed_at": None,
             "follow_up_state": "IDLE",
             "pipeline_test": {},
             "stt_latency_ms": None,
@@ -894,7 +900,8 @@ class VoiceManager:
             self.bus.publish(
                 "voice.barge_in",
                 "voice",
-                {"interruption_latency_ms": round((time.monotonic() - interrupted_at) * 1000, 3)},
+                {"interruption_latency_ms": round((time.monotonic() - interrupted_at) * 1000, 3),
+                 "scope": "accepted_wake_to_stop_backend_completion", "acoustic_latency_verified": False},
                 correlation_id,
             )
         if generating_speech and self.interrupt_handler:
@@ -2518,6 +2525,7 @@ class VoiceManager:
             return {"status": "not_speaking"}
         self.tts_cancel_reason = reason
         process = self.tts_process
+        player_was_running = process is not None and process.returncode is None
         if process is not None and process.returncode is None:
             try:
                 process.terminate()
@@ -2532,13 +2540,21 @@ class VoiceManager:
                     pass
                 await process.wait()
         latency_ms = (time.monotonic() - started) * 1000
+        scope = "accepted_stop_to_playback_process_exit" if player_was_running else "accepted_stop_to_cancel_flag"
+        observed_at = time.time()
         self.diagnostics.update(
-            {"tts_state": "CANCELLED", "barge_in_latency_ms": round(latency_ms, 3)}
+            {"tts_state": "CANCELLED", "speech_stop_latency_ms": round(latency_ms, 3),
+             "speech_stop_latency_scope": scope, "speech_stop_reason": reason,
+             "speech_stop_observed_at": observed_at}
         )
+        if reason == "wake_word_barge_in" and player_was_running:
+            self.diagnostics.update(barge_in_latency_ms=round(latency_ms, 3),
+                                    barge_in_latency_scope=scope, barge_in_observed_at=observed_at)
         self.bus.publish(
             "tts.interrupted",
             "voice",
-            {"reason": reason, "latency_ms": round(latency_ms, 3)},
+            {"reason": reason, "latency_ms": round(latency_ms, 3), "scope": scope,
+             "player_was_running": player_was_running, "acoustic_latency_verified": False},
             correlation_id,
             latency_ms,
         )
@@ -2546,7 +2562,8 @@ class VoiceManager:
             self.state.transition(
                 CoreState.DORMANT, f"Speech interrupted: {reason}", correlation_id
             )
-        return {"status": "cancelled", "reason": reason, "latency_ms": round(latency_ms, 3)}
+        return {"status": "cancelled", "reason": reason, "latency_ms": round(latency_ms, 3),
+                "latency_scope": scope, "acoustic_latency_verified": False}
 
     async def end_conversation(
         self, reason: str = "spoken_stop", correlation_id: str | None = None

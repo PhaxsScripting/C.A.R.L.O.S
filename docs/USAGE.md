@@ -428,3 +428,10 @@ needs ffmpeg, uses a fixed generated phrase and submits no command if recognitio
 differs from that exact read-only question. It changes no microphone settings
 and plays no audio. Its timings cover transport/computation, not room acoustics,
 first speaker audio, human wake detection or cold model loading.
+
+Speech diagnostics distinguish `speech_stop_latency_ms` from accepted wake
+interruptions. Each has a scope and observation timestamp. Pending synthesis
+measures a cancellation flag; running playback measures the owned process exit.
+Neither measures microphone recognition, speaker buffering or room acoustics.
+The dated `barge_in_latency_ms` is populated only for an accepted wake while a
+playback process was running.
