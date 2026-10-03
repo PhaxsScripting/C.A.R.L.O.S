@@ -58,3 +58,5 @@ Tumbleweed and Gentoo is in [Linux setup](docs/LINUX.md). The UI builds with Qt 
 and runs outside KDE too. The pet has a portable X11/XWayland backend; KWin app
 comments and verified desktop automation remain KDE features. The guide lists
 those differences and the actual test coverage.
+
+Current evidence: [acceptance matrix](docs/STATUS.md) and [performance observations](docs/PERFORMANCE.md).
