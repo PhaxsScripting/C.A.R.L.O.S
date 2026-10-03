@@ -2,6 +2,10 @@ import asyncio
 import copy
 import json
 import re
+import signal
+from unittest.mock import patch
+
+import aiohttp
 import socket
 import sys
 import tempfile
@@ -23,7 +27,8 @@ async def check(root, voice):
     adapter = None
     resampler = None
     workers = []
-    report = {'scope': 'Owned local recognition worker recovery using fixed generated PCM; no microphone, playback or desktop action',
+    pending = None
+    report = {'scope': 'Owned local recognition worker recovery between requests and during an uploaded pending request; fixed generated PCM, no microphone, playback or desktop action',
               'host_workers_touched': False, 'acoustic_acceptance': False}
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reserved:
@@ -79,7 +84,58 @@ async def check(root, voice):
                       crashed_worker_reaped=True, fixed_query_recognized_twice=True,
                       transcript_variants=[normalize_transcript(first.raw), normalize_transcript(recovered.raw)],
                       next_server_request_completed=True, command_submitted=False)
+        uploaded = asyncio.Event()
+        sent_bytes = 0
+        trace = aiohttp.TraceConfig()
+
+        async def observe_upload(session, context, params):
+            nonlocal sent_bytes
+            if (params.method == 'POST' and params.url.path == '/inference'
+                    and params.url.host == '127.0.0.1' and params.url.port == config['server_port']):
+                sent_bytes += len(params.chunk)
+                if sent_bytes >= len(pcm):
+                    uploaded.set()
+
+        trace.on_request_chunk_sent.append(observe_upload)
+        native_session = aiohttp.ClientSession
+
+        def traced_session(*args, **kwargs):
+            kwargs['trace_configs'] = [*kwargs.get('trace_configs', []), trace]
+            return native_session(*args, **kwargs)
+
+        crashed = adapter._server_process
+        record = adapter._server_ownership
+        assert crashed is not None and record is not None
+        assert record.server.pid == crashed.pid and await adapter._managed_server_ready(record)
+        crashed.send_signal(signal.SIGSTOP)
+        started = time.monotonic()
+        with patch.object(aiohttp, 'ClientSession', traced_session):
+            pending = asyncio.create_task(adapter.transcribe(pcm))
+            await asyncio.wait_for(uploaded.wait(), 5)
+            assert not pending.done() and crashed.returncode is None
+            assert adapter._server_ownership is record and adapter._owns_loopback_listener(record)
+            assert list(runtime.glob('stt-*.wav'))
+            crashed.kill()
+            await asyncio.wait_for(crashed.wait(), 3)
+            fallback = await asyncio.wait_for(pending, 20)
+        fallback_text = normalize_transcript(fallback.raw)
+        assert re.fullmatch(r'(?:what\s+is|what[\x27\u2019]s)\s+my\s+cpu\s+usage[?.!]*', fallback_text, re.I), fallback_text
+        assert adapter._server_process is None and not adapter._ownership_path.exists()
+        assert not list(runtime.glob('stt-*.wav'))
+        fallback_ms = (time.monotonic() - started) * 1000
+        restarted = await transcribe()
+        assert adapter._server_process.pid != crashed.pid
+        report.update(pending_request_upload_observed=True, pending_worker_crash_reaped=True,
+                      generated_audio_fallback_recognized=True,
+                      pending_crash_fallback_ms=round(fallback_ms, 3),
+                      failed_listener_record_removed=True, failed_request_audio_removed=True,
+                      next_persistent_request_completed=True,
+                      next_persistent_transcript=normalize_transcript(restarted.raw),
+                      server_inference_completion_not_claimed=True)
     finally:
+        if pending is not None and not pending.done():
+            pending.cancel()
+            await asyncio.gather(pending, return_exceptions=True)
         if resampler is not None and resampler.returncode is None:
             resampler.kill()
             await resampler.wait()

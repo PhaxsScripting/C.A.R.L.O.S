@@ -460,7 +460,10 @@ private playback stream; it does not establish acoustic voice quality.
 `python3 carlos/tests/fixtures/recognition_recovery_live.py` checks persistent
 whisper.cpp listener ownership and recovery using generated audio and an
 available loopback port. It refuses an unrelated listener, kills only its own
-worker and checks replacement recognition. It needs your configured local
+worker and checks replacement recognition. It also pauses its own server,
+observes a real pending HTTP audio upload, kills that worker and checks the
+CLI fallback plus the next persistent request. This does not prove that server
+inference started or completed. It needs your configured local
 Piper/Whisper models and ffmpeg. It never records the microphone, plays audio or
 submits a desktop command; temporary files and owned workers are removed.
 
