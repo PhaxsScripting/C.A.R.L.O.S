@@ -12,6 +12,7 @@ from ev.events import PhaxEventBus
 from ev.tools import ToolRegistry, ToolContext
 from ev.commands import direct_action
 from ev.tools.results import evaluate_result
+from ev.tools.base import validate_schema
 
 
 def tree(rows, complete=True):
@@ -99,6 +100,17 @@ class CoreResourceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(spec.offline_available)
         self.assertEqual(spec.schema['properties']['seconds']['maximum'], 15)
         self.assertEqual(spec.timeout_seconds, 20)
+        self.assertFalse(spec.reversible)
+        self.assertEqual(spec.public()['contract_gaps'], [])
+
+    async def test_catalogue_schema_accepts_complete_partial_and_failed_evidence(self):
+        registry = ToolRegistry(ToolContext({}, PhaxEventBus(), logging.getLogger('test')))
+        register_core_resources(registry)
+        schema = registry.get('system.carlos_resources').output_schema
+        first = tree({(1, 100): row(1)})
+        for last in (tree({(1, 100): row(1.2)}), tree({(1, 100): row(1.2, pss=None)}, complete=False),
+                     tree({(1, 101): row(1)})):
+            validate_schema(await self.measure(first, last), schema)
 
     def test_explicit_resource_question_routes_without_a_model_or_cleanup_action(self):
         for text in ("check Carlos resources", "show Carlos's resource usage", "how much RAM is Carlos using?"):

@@ -421,3 +421,10 @@ Window undo checks its exact saved record. If fresh, complete native evidence
 shows that window has closed, Carlos removes that record without moving an
 older window. Request undo again for the preceding change. Incomplete or stale
 evidence keeps the record; a newer action's history is preserved during undo.
+
+With Carlos already running, `python3 carlos/scripts/check-voice-transport.py
+--run` checks local synthesis, transcription and one CPU query silently. It
+needs ffmpeg, uses a fixed generated phrase and submits no command if recognition
+differs from that exact read-only question. It changes no microphone settings
+and plays no audio. Its timings cover transport/computation, not room acoustics,
+first speaker audio, human wake detection or cold model loading.
