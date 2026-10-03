@@ -471,3 +471,16 @@ Follow-ups such as `center that one` use the saved native window ID for up to
 five minutes. They never switch to another window with the same app or title
 when that ID closes. Numbered list selections expire after two minutes. Missing
 or invalid timestamps expire the reference; name or inspect a current target.
+
+## Presence observations
+
+A locked session clears recent assistant interaction. Queued wake, listening
+or command events cannot mark that locked session engaged; unlocking alone
+does not establish desk occupancy. Hand presence uses fresh bounded metadata
+from an already-running HoloHand tracker. Missing or malformed readings stay
+unknown, and a hand reading never identifies a person. Explicit interaction
+and privacy changes clear the previous camera-evidence flag.
+
+`python3 carlos/tests/fixtures/presence_context_live.py` checks the real private
+Core event and IPC path with synthetic lock/hand observations. It does not
+lock your desktop, start a camera or establish physical presence.

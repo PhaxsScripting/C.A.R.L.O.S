@@ -3,6 +3,8 @@
 import asyncio
 import time
 
+from .context_age import recent_age
+
 
 class PresenceMonitor:
     def __init__(self, bus, config=None):
@@ -20,12 +22,16 @@ class PresenceMonitor:
 
     def consume(self, event):
         now = time.monotonic()
+        if self.state.get("session") == "LOCKED":
+            self.last_addressed = 0.0
+            return
         if event.type in {"wake.detected", "command.received", "voice.transcription_complete"}:
             self.last_addressed = now
             self.state.update(
                 attention="ENGAGED",
                 presence="ENGAGED",
                 confidence=0.9,
+                camera_used=False,
                 evidence="Explicit assistant interaction; person identity unverified",
             )
         elif event.type == "voice.listening_started":
@@ -36,6 +42,7 @@ class PresenceMonitor:
                 attention="DORMANT",
                 presence="UNKNOWN",
                 confidence=0.0,
+                camera_used=False,
                 evidence="Previous interaction context cleared",
             )
         elif event.type == "voice.barge_in":
@@ -47,6 +54,7 @@ class PresenceMonitor:
             session="LOCKED" if locked else "UNLOCKED", observed_at=time.time(), camera_used=False
         )
         if locked:
+            self.last_addressed = 0.0
             if self.locked_since is None:
                 self.locked_since = now
             self.state.update(
@@ -75,7 +83,8 @@ class PresenceMonitor:
                 )
                 self.last_greeting = now
             self.locked_since = None
-            engaged = bool(self.last_addressed and now - self.last_addressed < 30)
+            age = recent_age(self.last_addressed, 30, now=now) if self.last_addressed else None
+            engaged = age is not None and age < 30
             self.state.update(
                 presence="ENGAGED" if engaged else "UNKNOWN",
                 confidence=0.9 if engaged else 0.2,
@@ -96,19 +105,22 @@ class PresenceMonitor:
         now = time.monotonic() if now is None else now
         if not self.config.get("hand_presence", True) or self.state.get("session") != "UNLOCKED":
             return
-        if self.last_addressed and now - self.last_addressed < 30:
+        age = recent_age(self.last_addressed, 30, now=now) if self.last_addressed else None
+        if age is not None and age < 30:
             return
+        status = status if isinstance(status, dict) else {}
         tracking = status.get("tracking", {})
+        tracking = tracking if isinstance(tracking, dict) else {}
+        confidence = tracking.get("confidence")
+        hand_age = tracking.get("age_ms")
         if (
             status.get("state") == "READY"
             and tracking.get("hand_visible") is True
-            and isinstance(tracking.get("confidence"), (int, float))
-            and tracking["confidence"] >= 0.8
-            and isinstance(tracking.get("age_ms"), (int, float))
-            and 0 <= tracking["age_ms"] <= 1000
+            and type(confidence) in (int, float) and 0.8 <= confidence <= 1
+            and type(hand_age) in (int, float) and 0 <= hand_age <= 1000
         ):
             idle = self.state.get("idle_seconds")
-            active = isinstance(idle, (int, float)) and 0 <= idle <= 60
+            active = type(idle) in (int, float) and 0 <= idle <= 60
             self.state.update(
                 presence="AT_DESK" if active else "PRESENT",
                 confidence=0.75 if active else 0.65,
@@ -120,6 +132,7 @@ class PresenceMonitor:
                 presence="UNKNOWN",
                 confidence=0.2,
                 camera_used=False,
+                attention="DORMANT",
                 evidence="No fresh desk evidence; absence is not proven",
             )
 
