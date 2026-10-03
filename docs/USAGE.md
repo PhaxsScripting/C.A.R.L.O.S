@@ -524,3 +524,8 @@ or removes it before the check, the action reports a readback error; Carlos does
 not repeat the write or undo the later edit. This verifies one observed database
 state, not that the item will remain unchanged. Private-session writes still use
 RAM-only storage, and guest mode still denies personal tools.
+
+Waiting reminder speech belongs to the privacy mode and action generation that
+claimed it. Changing privacy mode or explicitly stopping actions discards that
+waiting speech. Guest mode does not claim or publish personal reminders. A
+worker returning after a privacy transition cannot publish the old labels.

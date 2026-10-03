@@ -2729,9 +2729,21 @@ class CarlosCore:
 
     async def _reminder_loop(self) -> None:
         pending: list[dict[str, Any]] = []
+        queue_scope = (self._action_generation, self.privacy.mode)
         while not self.stop_event.is_set():
             try:
+                scope = (self._action_generation, self.privacy.mode)
+                if scope != queue_scope or self.privacy.changing:
+                    pending.clear()
+                    queue_scope = scope
+                if self.privacy.changing or scope[1] == "GUEST":
+                    await asyncio.sleep(1)
+                    continue
                 due = await asyncio.to_thread(self.daily.due, time.time())
+                if (self.privacy.changing
+                        or scope != (self._action_generation, self.privacy.mode)):
+                    pending.clear()
+                    continue
                 for reminder in due:
                     self.bus.publish("reminder.due", "reminders", reminder)
                     pending.append(reminder)
