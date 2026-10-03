@@ -320,6 +320,11 @@ Catalogue snapshots include contract_gaps for undeclared offline support,
 reversibility or output schemas. Undeclared values are not a support claim;
 request cancellation does not mean an already-dispatched effect can be undone.
 
+The local clock, CPU, memory, temperature, disk, battery, system identity and
+mount tools validate their returned fields before reporting a result. Missing
+temperature and battery sensors remain unknown or absent. These observations
+work offline and do not change settings; they do not verify a later action.
+
 Say `undo volume`, `undo mute`, or `undo the audio change` to reverse Carlos's
 most recent output-volume or mute adjustment. The undo history stays in memory,
 holds up to 32 changes, and expires after ten minutes. It restores exact channel

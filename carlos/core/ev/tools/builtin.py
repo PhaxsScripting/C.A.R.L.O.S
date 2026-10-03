@@ -28,6 +28,7 @@ from ..telemetry import read_temperature
 from .base import ToolContext, ToolRegistry, ToolSpec, ValidationError
 from .media import control_media
 from . import audio_undo, window_undo
+from .system_contracts import SYSTEM_OBSERVATION_SCHEMAS
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}, "additionalProperties": False}
 _AUDIO_STATE_PROPERTIES = {
@@ -2333,6 +2334,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_clock,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.clock'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
@@ -2343,6 +2347,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_cpu_usage,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.get_cpu_usage'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
@@ -2353,6 +2360,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_memory_usage,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.get_memory_usage'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
@@ -2363,6 +2373,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_temperature,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.get_temperature'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
@@ -2373,6 +2386,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             object_schema({"path": {"type": "string", "maxLength": 4096}}),
             get_disk_usage,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.get_disk_usage'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
@@ -2409,6 +2425,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_battery,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.get_battery'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
@@ -2419,6 +2438,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_system_identity,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.identity'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
@@ -2429,6 +2451,9 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.SAFE,
             EMPTY_SCHEMA,
             get_mounts,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=SYSTEM_OBSERVATION_SCHEMAS['system.mounts'],
+            verification="Read-only local OS observation; unavailable sensors remain unknown",
         )
     )
     register(
