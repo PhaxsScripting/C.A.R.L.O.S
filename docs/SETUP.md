@@ -10,8 +10,9 @@ the repo root as your normal user.
 - Python 3.11+; tested with 3.14.
 - CMake 3.21+, a C++20 compiler and Qt 6.4+ with Core, Gui, Qml, Quick,
   QuickControls2, Network, Widgets, DBus and Test.
-- LayerShellQt 6.4+ on Linux for the voice HUD and desktop pet. The pet also needs
-  a KDE Plasma Wayland session.
+- Optional LayerShellQt 6.6+ for native KDE Wayland overlays. Other desktops
+  use portable Qt/XWayland windows with compositor-dependent stacking; see
+  [Linux desktop support](LINUX.md#desktop-support).
 - Qt's `qmltestrunner` for the QML tests.
 - Bubblewrap (`bwrap`) for sandboxed project execution and its Linux tests.
 

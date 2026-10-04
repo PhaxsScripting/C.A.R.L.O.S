@@ -22,6 +22,10 @@ to set up your own speech runtimes and models.
 | [`carlos/tests`](carlos/tests) | Core and UI tests |
 | [`docs`](docs) | Setup, usage and test results |
 
+[Architecture](docs/ARCHITECTURE.md) maps the running components and ownership
+boundaries. [Desk and room design](docs/ROOM-DESIGN.md) covers future device
+interfaces without requiring extra hardware.
+
 This repo is just Carlos. HoloHand and the phone app are installed separately.
 Carlos has optional hooks for them and a small [Sentinel reference](docs/SENTINEL.md)
 for future independent wake hardware. No separate device is provisioned automatically;

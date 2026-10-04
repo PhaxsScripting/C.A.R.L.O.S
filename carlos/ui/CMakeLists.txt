@@ -75,6 +75,12 @@ install(TARGETS ev-ui RUNTIME DESTINATION bin)
 
 include(CTest)
 if(BUILD_TESTING)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/packaged-test-runtime")
+    file(CHMOD "${CMAKE_CURRENT_BINARY_DIR}/packaged-test-runtime" PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE)
+    add_test(NAME carlos-packaged-ui COMMAND ev-ui)
+    set_tests_properties(carlos-packaged-ui PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;EV_SCREENSHOT_PATH=${CMAKE_CURRENT_BINARY_DIR}/packaged-ui.png;XDG_RUNTIME_DIR=${CMAKE_CURRENT_BINARY_DIR}/packaged-test-runtime"
+        TIMEOUT 15)
     find_package(Qt6 REQUIRED COMPONENTS Test)
     qt_add_executable(ev-client-tests ../tests/test_ev_client.cpp src/EvClient.cpp src/EvClient.h)
     target_include_directories(ev-client-tests PRIVATE src)
