@@ -2243,23 +2243,19 @@ async def vision_ocr(arguments: dict[str, Any], context: ToolContext) -> dict[st
 def memory_search(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if context.memory is None:
         raise RuntimeError("memory store is unavailable")
-    return {
-        "memories": context.memory.list_memories(
-            arguments.get("query", ""), int(arguments.get("limit", 20))
-        )
-    }
+    return context.memory.observe_memories(arguments.get("query", ""), int(arguments.get("limit", 20)))
 
 
 def memory_remember(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if context.memory is None:
         raise RuntimeError("memory store is unavailable")
-    return {"memory": context.memory.remember(arguments["content"], arguments.get("tags", []))}
+    return context.memory.remember_verified(arguments["content"], arguments.get("tags", []))
 
 
 def memory_forget(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if context.memory is None:
         raise RuntimeError("memory store is unavailable")
-    return {"removed": context.memory.forget(arguments["id"]), "id": arguments["id"]}
+    return context.memory.forget_verified(arguments["id"])
 
 
 def get_clock(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
@@ -3737,6 +3733,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         )
     )
 
+    from .project_memory_contracts import GENERAL_MEMORY_SCHEMAS
+
     register(
         ToolSpec(
             "memory.search",
@@ -3750,6 +3748,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 }
             ),
             memory_search,
+            read_only=True, offline_available=True, reversible=False,
+            output_schema=GENERAL_MEMORY_SCHEMAS['memory.search'],
         )
     )
     register(
@@ -3770,6 +3770,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
                 ["content"],
             ),
             memory_remember,
+            offline_available=True, reversible=True,
+            output_schema=GENERAL_MEMORY_SCHEMAS['memory.remember'],
             confirmation_reason="This stores the supplied statement in E.V.'s durable local memory.",
         )
     )
@@ -3781,6 +3783,8 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
             Permission.DESTRUCTIVE,
             object_schema({"id": {"type": "string", "minLength": 32, "maxLength": 32}}, ["id"]),
             memory_forget,
+            offline_available=True, reversible=False,
+            output_schema=GENERAL_MEMORY_SCHEMAS['memory.forget'],
             confirmation_reason="This permanently removes the selected explicit memory.",
         )
     )

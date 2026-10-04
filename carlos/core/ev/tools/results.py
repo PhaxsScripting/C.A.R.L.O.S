@@ -9,6 +9,7 @@ from typing import Any
 
 from .archive_contracts import ARCHIVE_SCHEMAS, validate_archive_result
 from .personal_contracts import PERSONAL_MUTATION_SCHEMAS
+from .project_memory_contracts import PROJECT_MEMORY_SCHEMAS, GENERAL_MEMORY_SCHEMAS
 
 # Audited observation primitives, not utterance matching. New tools opt in via
 # ToolSpec.read_only; SAFE permission alone does not imply read-only (launch is SAFE).
@@ -219,6 +220,19 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             verification_hint="Selected SQLite row matched after commit; later state can change",
             scope="committed_sqlite_readback",
         )
+    if name in {'memory.project.remember', 'memory.project.forget', 'memory.remember', 'memory.forget'}:
+        from .base import ValidationError, validate_schema
+        try:
+            validate_schema(data, {**PROJECT_MEMORY_SCHEMAS, **GENERAL_MEMORY_SCHEMAS}[name])
+            if name.endswith('.remember') and not data['memory']['content'].strip():
+                raise ValidationError('Empty project note')
+        except (ValidationError, TypeError):
+            return ExecutionResult(False, 'FAILED', False, 'Committed project note readback is incomplete',
+                                   retryable=False, scope='committed_sqlite_readback')
+        changed = True if name.endswith('.remember') else data['removed']
+        return ExecutionResult(True, 'SUCCEEDED_VERIFIED', True, retryable=False,
+                               changed_state=changed, scope='committed_sqlite_readback',
+                               verification_hint='Exact project row matched after commit, or absence was read back; later state can change')
     if "verified" in data or name.endswith(".resolve") or name == "desktop.window.wait":
         verified = data.get("verified", data.get("resolved")) is True
         return ExecutionResult(

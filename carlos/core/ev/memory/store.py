@@ -162,6 +162,35 @@ class MemoryStore:
             self._connection.commit()
             return cursor.rowcount == 1
 
+    def explicit_memory(self, memory_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute('SELECT * FROM memories WHERE id=?', (memory_id,)).fetchone()
+            return None if row is None else {'id': row['id'], 'content': row['content'],
+                                              'tags': json.loads(row['tags_json']), 'created_at': row['created_at']}
+
+    def observe_memories(self, query: str, limit: int) -> dict[str, Any]:
+        with self._lock:
+            return {'memories': self.list_memories(query, limit),
+                    'storage': 'RAM_ONLY' if self.private else 'PERSISTENT'}
+
+    def remember_verified(self, content: str, tags=None) -> dict[str, Any]:
+        if not content.strip():
+            raise ValueError('Supply a nonempty explicit note')
+        with self._lock:
+            note = self.remember(content, tags)
+            if self.explicit_memory(note['id']) != note:
+                raise RuntimeError('Committed explicit note did not match; inspect it before repeating')
+            return {'memory': note, 'storage': 'RAM_ONLY' if self.private else 'PERSISTENT',
+                    'verified': True, 'verification_scope': 'committed_sqlite_readback'}
+
+    def forget_verified(self, memory_id: str) -> dict[str, Any]:
+        with self._lock:
+            removed = self.forget(memory_id)
+            if self.explicit_memory(memory_id) is not None:
+                raise RuntimeError('Deleted explicit note is still present; inspect it before repeating')
+            return {'removed': removed, 'id': memory_id, 'storage': 'RAM_ONLY' if self.private else 'PERSISTENT',
+                    'verified': True, 'verification_scope': 'committed_sqlite_readback'}
+
     def remember_project(self, project: str, content: str, tags: list[str] | None = None) -> dict[str, Any]:
         memory_id, timestamp = uuid.uuid4().hex, now()
         clean_tags = sorted({tag.strip().lower() for tag in (tags or []) if tag.strip()})[:20]
@@ -206,6 +235,39 @@ class MemoryStore:
                 'SELECT 1 FROM project_memories m JOIN projects p ON m.project_id=p.id WHERE p.path=? AND m.id=?',
                 (project, memory_id),
             ).fetchone() is not None
+
+    def project_memory(self, project: str, memory_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._connection.execute(
+                'SELECT m.* FROM project_memories m JOIN projects p ON m.project_id=p.id '
+                'WHERE p.path=? AND m.id=?', (project, memory_id),
+            ).fetchone()
+            return None if row is None else {
+                'id': row['id'], 'project': project, 'content': row['content'],
+                'tags': json.loads(row['tags_json']), 'created_at': row['created_at'],
+            }
+
+    def observe_project_memories(self, project: str, query: str, limit: int) -> dict[str, Any]:
+        with self._lock:
+            return {'memories': self.list_project_memories(project, query, limit),
+                    'storage': 'RAM_ONLY' if self.private else 'PERSISTENT'}
+
+    def remember_project_verified(self, project: str, content: str, tags=None) -> dict[str, Any]:
+        with self._lock:
+            note = self.remember_project(project, content, tags)
+            if self.project_memory(project, note['id']) != note:
+                raise RuntimeError('Committed project note did not match; inspect it before repeating')
+            return {'memory': note, 'storage': 'RAM_ONLY' if self.private else 'PERSISTENT',
+                    'verified': True, 'verification_scope': 'committed_sqlite_readback'}
+
+    def forget_project_verified(self, project: str, memory_id: str) -> dict[str, Any]:
+        with self._lock:
+            removed = self.forget_project(project, memory_id)
+            if self.project_memory(project, memory_id) is not None:
+                raise RuntimeError('Deleted project note is still present; inspect it before repeating')
+            return {'removed': removed, 'id': memory_id, 'project': project,
+                    'storage': 'RAM_ONLY' if self.private else 'PERSISTENT',
+                    'verified': True, 'verification_scope': 'committed_sqlite_readback'}
 
     def add_conversation(self, correlation_id: str, role: str, content: str, *, project: str | None = None) -> None:
         if role not in {"user", "assistant", "system", "tool"}:

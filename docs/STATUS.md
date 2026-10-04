@@ -7,16 +7,16 @@ names the observed blocker. Component availability and FULLY_READY diagnostics
 are runtime readiness observations, not acceptance of this whole matrix.
 
 Evidence and test boundaries are recorded in [VALIDATION.md](VALIDATION.md).
-The latest full suite passed 1,612 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
+The latest full suite passed 1,624 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
 silent mocked speech sink. File checks use owned temporary files, native
 permissions and installed-source private IPC; no host personal content is read.
-The installed catalogue contains 257 tools and 179 incomplete declarations.
+The installed catalogue contains 257 tools and 173 incomplete declarations.
 
 | Feature | Status | Evidence and remaining scope |
 | --- | --- | --- |
 | Carlos Core | WORKING | Earlier installed Core health/IPC checks passed; latest installed file/transfer checks used an isolated instance and preserved the stopped host Core. Latest installed archive fixtures also passed in an isolated instance. Other-machine boot and long-run acceptance remain separate. |
 | Event Fabric | WORKING | Actual private Core event subscriptions and Unix IPC passed reminder privacy and stop checks; this is local transport evidence. |
-| Capability Registry | PARTIAL | 257 registered tools; 179 declarations still have contract gaps. Registration and live availability do not prove an action succeeded. |
+| Capability Registry | PARTIAL | 257 registered tools; 173 declarations still have contract gaps. Registration and live availability do not prove an action succeeded. |
 | Planner | PARTIAL | Deterministic plans and bounded no-replay recovery pass regressions; unrestricted natural requests and room conversation need broader acceptance. |
 | Executor | WORKING | Shared execution path passed owned-window actions and actual private SQLite mutations. Tool-specific limits still apply. |
 | Verifier | PARTIAL | Exact window/database and file-content readbacks and scoped receipts pass; input delivery, inference and OS power dispatch cannot prove their final effect. |
@@ -47,7 +47,7 @@ The installed catalogue contains 257 tools and 179 incomplete declarations.
 | Carlos Engineering | PARTIAL | Reviewed isolated coding jobs are supported. Broad real-project and contextual initiation acceptance remain. |
 | Self Healing | PARTIAL | Owned VAD, STT, Piper and Core failures were exercised. Physical device/network and whole-session chaos coverage remain. |
 | Rollback | PARTIAL | Scoped installed backups and guarded owned-window undo are verified. Arbitrary external actions are not automatically reversible. |
-| Carlos Memory | PARTIAL | Project-scoped history and explicit personal data pass native/private SQLite checks. Broader memory-tier and retention audit remain. |
+| Carlos Memory | PARTIAL | Project-scoped history and explicit personal data pass native/private SQLite checks. General/project saves and deletions now read back exact committed rows; corruption and reinsertion refuse success without replay. Private labels/readbacks share the store lock. Broader retention and physical acceptance remain. |
 | Workspace Snapshots | PARTIAL | Owned saved layout snapshots work. Unsaved editor buffers and arbitrary terminal state remain unsupported. |
 | Workspace Restoration | PARTIAL | Exact saved layouts and native relaunch checks pass. Unsaved application state cannot be reconstructed generically. |
 | Carlos Mobile | PARTIAL | Backend/browser checks and local health pass. Latest school-iPad/device-wide acceptance remains unverified. |
