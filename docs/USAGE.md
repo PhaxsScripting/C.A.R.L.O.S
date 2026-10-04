@@ -606,3 +606,25 @@ numeric rate and alert-threshold CLI requests, temporary settings, two rate
 samples and one warning routed through actual event persistence and silent Piper;
 it does not play audio or open a microphone. `--core-dir` selects an installed
 Core tree; `--config` selects the configuration providing TTS dependency paths.
+
+
+Archive evidence
+
+`files.archive_inspect` reports a ZIP/TAR inventory with a preview of at most
+50 members. Its verified receipt covers metadata only; `payload_verified` stays
+false, including when a compressed file has a bad CRC. A limited preview is
+not a partial inventory: accepted input was checked against the existing entry,
+expansion, path and member-type limits before returning it.
+
+`files.archive_extract` requires a new destination. It fully reads payloads,
+checks staged SHA-256 hashes and uses Linux atomic no-overwrite publication.
+Its receipt covers that staged publication, not protection against later edits
+or crash durability of the parent directory. Existing destinations and bad
+payload CRCs are refused; temporary staging is cleaned up. Neither tool runs
+archive content, and extraction does not retain executable permissions.
+
+Both tools declare offline support, strict typed outputs and no automatic undo.
+Constant output fields are enforced, including false mutation/recovery flags;
+JSON booleans and numbers are distinct, while equivalent numeric constants
+remain accepted. Missing, contradictory or inconsistent archive evidence never
+receives a generic verified result.

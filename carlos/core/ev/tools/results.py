@@ -7,6 +7,7 @@ to EXECUTED_UNVERIFIED rather than inheriting a success claim from their prose.
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from .archive_contracts import ARCHIVE_SCHEMAS, validate_archive_result
 from .personal_contracts import PERSONAL_MUTATION_SCHEMAS
 
 # Audited observation primitives, not utterance matching. New tools opt in via
@@ -183,6 +184,20 @@ def evaluate_result(name: str, data: dict[str, Any], *, read_only: bool = False)
             None if verified else "Project command did not exit successfully",
             scope="process_exit_only",
         )
+    if name in ARCHIVE_SCHEMAS:
+        from .base import ValidationError
+        inspection = name == 'files.archive_inspect'
+        try:
+            validate_archive_result(name, data)
+        except ValidationError:
+            return ExecutionResult(False, 'FAILED', False, 'Archive evidence is incomplete or inconsistent',
+                                   retryable=False, changed_state=False if inspection else None,
+                                   scope='archive_metadata_only' if inspection else 'staged_archive_publication')
+        return ExecutionResult(True, 'SUCCEEDED_VERIFIED', True, retryable=False,
+                               changed_state=False if inspection else True,
+                               verification_hint=('Metadata only; compressed file payloads were not verified' if inspection
+                                                  else 'Staged content matched before no-overwrite publication; later writers can change it'),
+                               scope=data['verification_scope'])
     if name in {'files.copy', 'files.move'}:
         verified = (data.get('verified') is True
                     and data.get('verification_scope') == 'filesystem_content_readback')

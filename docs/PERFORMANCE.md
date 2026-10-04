@@ -13,7 +13,7 @@ benchmark and cannot establish the requested whole-desktop RAM target.
 | Interval CPU | 29.691% of one logical CPU | Identity-stable sample, including measurement overhead; completeness: True |
 | Core health | DORMANT, healthy | Observation after checked deployments |
 | Runtime readiness | FULLY_READY | Current component subset; does not certify full specification acceptance |
-| Full Python suite | 1,580 tests, 113.132 seconds | October 4 development run; not an acoustic or idle benchmark |
+| Full Python suite | 1,588 tests, 115.109 seconds | October 4 development run; not an acoustic or idle benchmark |
 
 The resource sample includes whichever ambient/model workers were alive; it
 is not a model-only or quiescent-idle measurement. Source/import/container

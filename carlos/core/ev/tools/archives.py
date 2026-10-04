@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from ..permissions import Permission
+from .archive_contracts import ARCHIVE_SCHEMAS
 from .base import ToolSpec, ValidationError
 from .builtin import object_schema, resolve_allowed, resolve_destination
 
@@ -169,6 +170,7 @@ def _operation(arguments, context, cancelled, *, extract):
             return {
                 **summary,
                 "payload_verified": False,
+                "verification_scope": "archive_metadata_only",
                 "entries": [
                     {"path": name, "directory": directory, "bytes": size}
                     for name, directory, size, _ in entries[:50]
@@ -220,6 +222,7 @@ def _operation(arguments, context, cancelled, *, extract):
             "destination": str(destination),
             "verified": True,
             "files_verified": len(digests),
+            "verification_scope": "staged_archive_publication",
             "verification": "Complete payload read, staged SHA-256 readback, atomic no-overwrite publication",
             "executable_permissions_preserved": False,
         }
@@ -252,6 +255,8 @@ def register_archive_tools(registry):
             object_schema({"path": path}, ["path"]),
             inspect_archive,
             read_only=True,
+            offline_available=True, reversible=False,
+            output_schema=ARCHIVE_SCHEMAS["files.archive_inspect"],
         )
     )
     registry.register(
@@ -262,6 +267,8 @@ def register_archive_tools(registry):
             Permission.LOW_RISK,
             object_schema({"path": path, "destination": path}, ["path", "destination"]),
             extract_archive,
+            offline_available=True, reversible=False,
+            output_schema=ARCHIVE_SCHEMAS["files.archive_extract"],
             verification="Staged file SHA-256 readback and no-overwrite publication",
             side_effects=("creates a new directory and files",),
         )

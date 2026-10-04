@@ -115,6 +115,20 @@ def _type_matches(value: Any, expected: str) -> bool:
     return False
 
 
+def _json_equal(value, expected):
+    if isinstance(value, bool) or isinstance(expected, bool):
+        return type(value) is type(expected) and value == expected
+    if isinstance(value, (int, float)) and isinstance(expected, (int, float)):
+        return value == expected
+    if type(value) is not type(expected):
+        return False
+    if isinstance(value, dict):
+        return value.keys() == expected.keys() and all(_json_equal(value[key], expected[key]) for key in value)
+    if isinstance(value, list):
+        return len(value) == len(expected) and all(_json_equal(a, b) for a, b in zip(value, expected))
+    return value == expected
+
+
 def validate_schema(value: Any, schema: dict[str, Any], path: str = "arguments") -> Any:
     expected = schema.get("type")
     if expected and not _type_matches(value, expected):
@@ -133,7 +147,9 @@ def validate_schema(value: Any, schema: dict[str, Any], path: str = "arguments")
             matched += 1
         if matched != 1:
             raise ValidationError(f"{path} must match exactly one allowed shape")
-    if "enum" in schema and value not in schema["enum"]:
+    if "const" in schema and not _json_equal(value, schema["const"]):
+        raise ValidationError(f"{path} must match its constant value")
+    if "enum" in schema and not any(_json_equal(value, choice) for choice in schema["enum"]):
         raise ValidationError(f"{path} must be one of {schema['enum']}")
     if isinstance(value, str):
         if len(value) < int(schema.get("minLength", 0)):
