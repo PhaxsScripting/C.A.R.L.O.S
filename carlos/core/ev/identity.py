@@ -40,4 +40,10 @@ def event_name(kind, payload):
         "voice.transcription_complete": "voice.final_transcript",
         "tts.started": "voice.audio_started",
         "tts.cancelled": "voice.cancelled",
+        "coding.started": "codex.started",
+        "coding.progress": "codex.output",
+        "coding.waiting": "codex.waiting",
+        "coding.completed": "codex.finished",
+        "coding.failed": "codex.failed",
+        "coding.cancelled": "codex.cancelled",
     }.get(kind, kind)

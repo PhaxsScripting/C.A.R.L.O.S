@@ -3549,7 +3549,7 @@ def register_builtin_tools(registry: ToolRegistry) -> None:
         ToolSpec(
             "development.coding_agent_cancel",
             "DEVELOPMENT",
-            "Cancel one running isolated Carlos Engineering job. Completion is reported separately; existing edits remain in its private worktree.",
+            "Cancel a pending engineering review or running isolated job. Running cleanup is reported separately; worktree edits and commits are preserved.",
             Permission.LOW_RISK,
             object_schema({"proposal_id": proposal_id}, ["proposal_id"]),
             lambda a, c: c.coding_agent.cancel(a["proposal_id"]),

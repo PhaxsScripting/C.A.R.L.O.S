@@ -1,5 +1,10 @@
 """HUD projection of execution events, never model claims or invented progress."""
 
+from copy import deepcopy
+import re
+
+from .context_age import recent_age
+
 
 class AgentActivity:
     def __init__(self):
@@ -17,7 +22,7 @@ class AgentActivity:
         self._task_running = False
 
     def snapshot(self):
-        return dict(self.data)
+        return deepcopy(self.data)
 
     def consume(self, event):
         before = dict(self.data)
@@ -27,7 +32,27 @@ class AgentActivity:
 
             previous = self.data.get("engineering", {})
             identifier = p.get("proposal_id", event.correlation_id)
-            if kind == "coding.started":
+            if kind == "coding.waiting":
+                if (event.source != "coding_agent" or event.private
+                        or set(p) != {"proposal_id", "phase", "observed_at", "approval_required"}
+                        or not isinstance(identifier, str) or not re.fullmatch("[a-f0-9]{32}", identifier)
+                        or p.get("approval_required") is not True
+                        or not isinstance(p.get("phase"), str)
+                        or p.get("phase") not in {"REVIEW_PROPOSAL", "REVIEW_DEPLOYMENT"}
+                        or recent_age(p.get("observed_at"), 30, now=time.time()) is None
+                        or previous.get("state") == "RUNNING"
+                        or (identifier == previous.get("proposal_id")
+                            and previous.get("state") in {"CANCELLED", "FAILED", "VALIDATION_FAILED"})):
+                    return False
+                self.data["engineering"] = {
+                    "proposal_id": identifier,
+                    "state": "WAITING_FOR_USER",
+                    "review_phase": p["phase"],
+                    "message": ("Coding proposal ready for review" if p["phase"] == "REVIEW_PROPOSAL"
+                                else "Checks passed; deployment needs separate approval"),
+                    "observed_monotonic": time.monotonic(),
+                }
+            elif kind == "coding.started":
                 self.data["engineering"] = {
                     "proposal_id": identifier,
                     "state": "RUNNING",

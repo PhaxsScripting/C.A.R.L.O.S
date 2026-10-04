@@ -1226,7 +1226,7 @@ ApplicationWindow {
         property var engineering: appWindow.get(evClient.activity, "engineering", {})
         property string rememberedFailure: ""
         property bool showFailure: false
-        readonly property bool engineeringActive: engineering.state === "RUNNING" || showFailure
+        readonly property bool engineeringActive: ["RUNNING", "WAITING_FOR_USER"].indexOf(engineering.state) >= 0 || showFailure
         function observeEngineering() {
             if (appWindow.hudEnabled && !interactionActive && ["FAILED", "VALIDATION_FAILED"].indexOf(engineering.state) >= 0 && engineering.proposal_id !== rememberedFailure) {
                 rememberedFailure = engineering.proposal_id;
@@ -1252,6 +1252,7 @@ ApplicationWindow {
         y: Screen.virtualY + Screen.desktopAvailableHeight - height - 18
 
         function titleForState() {
+            if (!interactionActive && engineering.state === "WAITING_FOR_USER") return "Carlos Engineering // REVIEW NEEDED"
             if (!interactionActive && engineeringActive) return "Carlos Engineering // " + engineering.state
             if (evClient.state === "WAITING_FOR_CONFIRMATION") return "Carlos  //  NEEDS CONFIRMATION"
             if (evClient.state === "USING_TOOL") return "Carlos  //  " + evClient.detail.toUpperCase()

@@ -14,6 +14,45 @@ from ev.coding_agent import CodingAgentGateway
 
 
 class CodingAgentGatewayTests(unittest.TestCase):
+    def test_cancel_pending_review_survives_reload_without_editing_project(self):
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory)
+            root = base / "project"
+            root.mkdir()
+            self._repository(root)
+            events = []
+            gateway = CodingAgentGateway([directory], base / "state",
+                                         lambda *args: events.append(args))
+            before = (root / "README.md").read_bytes()
+            with patch.object(gateway, "status", return_value={"available": True}):
+                proposal = gateway.propose("Fix the parser", str(root))
+            result = gateway.cancel(proposal["proposal_id"])
+            self.assertEqual(result["status"], "CANCELLED")
+            self.assertTrue(result["verified"])
+            self.assertIsNone(gateway.waiting_summary(proposal["proposal_id"]))
+            reloaded = CodingAgentGateway([directory], base / "state")
+            self.assertEqual(reloaded.result(proposal["proposal_id"])["status"], "CANCELLED")
+            self.assertEqual((root / "README.md").read_bytes(), before)
+            self.assertEqual(events[-1][0], "coding.cancelled")
+            self.assertEqual(gateway.cancel(proposal["proposal_id"])["status"], "NOT_RUNNING")
+
+    def test_stop_all_cancels_both_review_phases_and_preserves_review_commit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            gateway = CodingAgentGateway([directory], Path(directory) / "state")
+            ready = {"proposal_id": "a"*32, "status": "READY_FOR_REVIEW", "approval_required": True,
+                     "executed": False, "checkpoint_possible": True, "agent": {"available": True},
+                     "created_epoch": 1.}
+            validated = {**ready, "proposal_id": "b"*32, "status": "VALIDATED_AWAITING_DEPLOYMENT_REVIEW",
+                         "executed": True, "deployment_approved": False, "commit_id": "f"*40,
+                         "tests": [{"passed": True}], "completed_epoch": 2.}
+            for proposal in (ready, validated):
+                gateway.record_proposal(proposal)
+            result = gateway.cancel_all()
+            self.assertEqual(set(result["cancel_requested"]), {"a"*32, "b"*32})
+            self.assertEqual(gateway.result("b"*32)["commit_id"], "f"*40)
+            self.assertEqual(gateway.result("b"*32)["status"], "CANCELLED")
+            self.assertEqual(gateway.cancel_all()["cancel_requested"], [])
+
     @staticmethod
     def _repository(root: Path) -> None:
         subprocess.run(["/usr/bin/git", "init", "-q", str(root)], check=True)

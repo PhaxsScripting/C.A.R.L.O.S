@@ -70,6 +70,7 @@ TestCase {
         mock.settingsBusy=false; mock.connected=true; mock.confirmation={}; mock.state="DORMANT"
         mock.timeline=[{kind:"USER",title:"ME",body:"Fixture request"}]
         mock.voice={wake_active:true}
+        mock.activity={phase:"IDLE"}
         mock.activityHistory={}; mock.projectMemories={}
         mock.daily={reminders:[],aliases:{},routines:{},scenes:[{id:"test-scene",name:"Fixture scene",live:false,preview:Qt.resolvedUrl("../../ui/assets/ev-neural-brain.png"),accent:"#70e6ff",background:"#061320",secondary:"#b1baff"}],spotify:{}}
         ui=createTemporaryObject(appComponent,null)
@@ -79,6 +80,18 @@ TestCase {
         waitForRendering(ui.contentItem)
     }
     function cleanup() { ui.close() }
+    function test_engineering_hud_shows_review_without_claiming_execution() {
+        const hud = findChild(ui, "voice-hud")
+        mock.activity={phase:"IDLE",engineering:{state:"WAITING_FOR_USER",review_phase:"REVIEW_PROPOSAL",message:"Coding proposal ready for review"}}
+        tryCompare(hud, "engineeringActive", true)
+        tryCompare(hud, "visible", true)
+        verify(hud.titleForState().indexOf("REVIEW NEEDED") >= 0)
+        mock.activity={phase:"IDLE",engineering:{state:"CANCELLED"}}
+        tryCompare(hud, "visible", false)
+        mock.activity={phase:"IDLE",engineering:{state:"RUNNING"}}
+        tryCompare(hud, "visible", true)
+        verify(hud.titleForState().indexOf("RUNNING") >= 0)
+    }
     function test_personality_controls_send_typed_choices_and_disable_offline() {
         mock.personality={humor:"light",sarcasm:"off",name_usage:"rare",speaking_rate:1.18}
         click("nav-9")

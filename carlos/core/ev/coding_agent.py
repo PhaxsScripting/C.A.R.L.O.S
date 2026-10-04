@@ -213,6 +213,16 @@ class CodingAgentGateway:
             event = self._running.get(proposal_id)
             if event is not None:
                 event.set()
+            else:
+                proposal = self._proposals.get(proposal_id)
+                if waiting_summary(proposal) is not None:
+                    proposal.update(status="CANCELLED", completed_epoch=time.time())
+                    self._save(proposal)
+                    self._status_cache = None
+                    self._emit("coding.cancelled", self._public(proposal), proposal_id)
+                    return {"proposal_id": proposal_id, "cancel_requested": True,
+                            "status": "CANCELLED", "verified": True,
+                            "scope": "Review cancelled; preserved worktree and commits are unchanged"}
         return {
             "proposal_id": proposal_id,
             "cancel_requested": event is not None,
@@ -223,9 +233,11 @@ class CodingAgentGateway:
 
     def cancel_all(self):
         with self._running_lock:
-            ids = list(self._running)
-            for event in self._running.values():
-                event.set()
+            ids = list(dict.fromkeys([*self._running,
+                *(identifier for identifier, proposal in self._proposals.items()
+                  if waiting_summary(proposal) is not None)]))
+            for identifier in ids:
+                self.cancel(identifier)
         return {"cancel_requested": ids}
 
     def execute(self, proposal_id: str, timeout_seconds: int = 1200, *, cancel_event=None) -> dict[str, Any]:

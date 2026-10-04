@@ -1,4 +1,5 @@
 import unittest
+import time
 
 from ev.activity import AgentActivity
 from ev.events import Event
@@ -97,3 +98,53 @@ class ActivityTests(unittest.TestCase):
         self.assertEqual(self.activity.snapshot()["engineering"]["state"], "RUNNING")
         self.send("coding.cancelled", proposal_id="job")
         self.assertEqual(self.activity.snapshot()["engineering"]["state"], "CANCELLED")
+
+    def waiting(self, **changes):
+        payload = {"proposal_id": "a" * 32, "phase": "REVIEW_PROPOSAL",
+                   "approval_required": True, "observed_at": time.time()}
+        payload.update(changes)
+        return Event(1, "coding.waiting", "coding_agent", payload, "a" * 32)
+
+    def test_review_before_any_job_and_after_validation_is_truthful(self):
+        self.assertTrue(self.activity.consume(self.waiting()))
+        card = self.activity.snapshot()["engineering"]
+        self.assertEqual(card["state"], "WAITING_FOR_USER")
+        self.assertEqual(card["review_phase"], "REVIEW_PROPOSAL")
+        self.send("coding.started", proposal_id="a" * 32)
+        self.send("coding.completed", proposal_id="a" * 32,
+                  status="VALIDATED_AWAITING_DEPLOYMENT_REVIEW")
+        self.assertTrue(self.activity.consume(self.waiting(phase="REVIEW_DEPLOYMENT")))
+        self.assertEqual(self.activity.snapshot()["engineering"]["review_phase"], "REVIEW_DEPLOYMENT")
+        self.assertNotIn("project", self.activity.snapshot()["engineering"])
+
+    def test_waiting_cannot_replace_a_live_job_or_revive_a_cancelled_job(self):
+        self.send("coding.started", proposal_id="a" * 32)
+        self.assertFalse(self.activity.consume(self.waiting()))
+        self.assertFalse(self.activity.consume(self.waiting(proposal_id="b" * 32)))
+        self.send("coding.cancelled", proposal_id="a" * 32)
+        self.assertFalse(self.activity.consume(self.waiting()))
+
+    def test_untrusted_private_stale_or_malformed_review_events_are_ignored(self):
+        for field, value in (("phase", []), ("phase", "FAKE"), ("observed_at", True),
+                             ("observed_at", time.time()-31), ("observed_at", time.time()+100),
+                             ("observed_at", float("nan")), ("observed_at", 10**400),
+                             ("proposal_id", "bad"), ("approval_required", 1), ("request", "secret")):
+            self.assertFalse(self.activity.consume(self.waiting(**{field: value})))
+        event = self.waiting()
+        event.source = "model"
+        self.assertFalse(self.activity.consume(event))
+        event.source, event.private = "coding_agent", True
+        self.assertFalse(self.activity.consume(event))
+
+    def test_snapshot_cannot_mutate_nested_engineering_state(self):
+        self.activity.consume(self.waiting())
+        self.activity.snapshot()["engineering"]["state"] = "FAKE"
+        self.assertEqual(self.activity.snapshot()["engineering"]["state"], "WAITING_FOR_USER")
+
+    def test_codex_event_names_preserve_legacy_routing(self):
+        for suffix, canonical in (("started", "started"), ("progress", "output"),
+                                  ("waiting", "waiting"), ("completed", "finished"),
+                                  ("failed", "failed"), ("cancelled", "cancelled")):
+            event = Event(1, "coding." + suffix, "coding_agent", {}, "fixture").as_dict()
+            self.assertEqual(event["type"], "coding." + suffix)
+            self.assertEqual(event["name"], "codex." + canonical)

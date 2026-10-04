@@ -7,7 +7,7 @@ names the observed blocker. Component availability and FULLY_READY diagnostics
 are runtime readiness observations, not acceptance of this whole matrix.
 
 Evidence and test boundaries are recorded in [VALIDATION.md](VALIDATION.md).
-The latest full suite passed 1,634 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
+The latest full suite passed 1,641 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
 silent mocked speech sink. File checks use owned temporary files, native
 permissions and installed-source private IPC; no host personal content is read.
 The installed catalogue contains 257 tools and 173 incomplete declarations.
@@ -81,3 +81,5 @@ silent Piper PCM. This does not verify room hearing or a daily-session soak;
 explicit current Codex proposal/deployment review prompts are connected through fresh owned-job metadata. Privacy changes and job advancement discard or cancel them. Physical hearing remains unverified.
 
 See [PERFORMANCE.md](PERFORMANCE.md) for measured values and missing measurements.
+
+Engineering review now appears in the HUD before execution, with canonical Codex event names and cancellable proposal/deployment reviews. Actual private IPC and native UI tests passed; preserving a review commit does not deploy it.
