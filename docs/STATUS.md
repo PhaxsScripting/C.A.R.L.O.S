@@ -1,13 +1,13 @@
 # Current acceptance
 
-Updated October 4, 2026 after proactive warnings and archive evidence contracts. This is a progress
+Updated October 4, 2026 after proactive warnings, archive contracts and Sentinel reference validation. This is a progress
 matrix, not a declaration that the entire specification is complete. WORKING
 means tested in the stated scope; PARTIAL names the remaining work; BLOCKED
 names the observed blocker. Component availability and FULLY_READY diagnostics
 are runtime readiness observations, not acceptance of this whole matrix.
 
 Evidence and test boundaries are recorded in [VALIDATION.md](VALIDATION.md).
-The latest full suite passed 1,588 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
+The latest full suite passed 1,612 Python tests. Reminder checks use real private Core IPC and temporary SQLite data with a
 silent mocked speech sink. File checks use owned temporary files, native
 permissions and installed-source private IPC; no host personal content is read.
 The installed catalogue contains 257 tools and 179 incomplete declarations.
@@ -64,7 +64,7 @@ The installed catalogue contains 257 tools and 179 incomplete declarations.
 | Wake-on-WLAN | PARTIAL | Firmware/adapter support and end-to-end wireless wake are not established. |
 | Intel AMT/vPro | PARTIAL | No tested management provisioning or power-state control evidence is available; hardware support is not claimed. |
 | Remote Power | PARTIAL | Native scheduled power intent/cancellation is checked. Final shutdown/suspend/wake effects were not exercised in this pass. |
-| Carlos Sentinel | BLOCKED | Installed runtime reports NOT_INSTALLED for an independent Sentinel node. No provisioned independent node was available to this validation. |
+| Carlos Sentinel | PARTIAL | Bundled authenticated reference node, safe no-network simulation, actual private Unix client/server and trusted loopback TLS checks pass. Replay survives restart; fresh signed host heartbeat is required for ONLINE. Independent hardware remains NOT_INSTALLED; physical wake is unverified. See SENTINEL.md. |
 | Privacy Modes | PARTIAL | Actual private audio worker stop, RAM-only storage and queued-reminder scope checks pass. Physical hardware mute and whole-session network audit remain. |
 | Authentication | PARTIAL | Protected public routes refuse unauthenticated requests. Current device token/passkey lifecycle acceptance remains. |
 | Security Monitoring | PARTIAL | Local inspection and scoped observations exist. Complete exposure, retention and remote-device audit remain. |

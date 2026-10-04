@@ -628,3 +628,5 @@ Constant output fields are enforced, including false mutation/recovery flags;
 JSON booleans and numbers are distinct, while equivalent numeric constants
 remain accepted. Missing, contradictory or inconsistent archive evidence never
 receives a generic verified result.
+
+The separate always-on Sentinel reference service is documented in [SENTINEL.md](SENTINEL.md). Safe simulation and an owned private-socket CLI check are available; no independent device or wake daemon is activated automatically.
