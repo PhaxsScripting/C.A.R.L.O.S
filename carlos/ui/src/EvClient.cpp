@@ -534,6 +534,18 @@ void EvClient::processResponse(const QJsonObject &message) {
         m_diagnostics = payload.toVariantMap();
         emit phase3Changed();
     } else if (requestType == QStringLiteral("personality.update")) {
+        if (!payload.value(QStringLiteral("updated")).toBool()
+            || !payload.value(QStringLiteral("applies_immediately")).toBool()
+            || !payload.value(QStringLiteral("personality")).isObject()
+            || payload.value(QStringLiteral("personality")).toObject().isEmpty()
+            || payload.value(QStringLiteral("status")).toString() == QStringLiteral("denied")
+            || payload.value(QStringLiteral("status")).toString() == QStringLiteral("failed")
+            || (payload.contains(QStringLiteral("error")) && !payload.value(QStringLiteral("error")).isNull())) {
+            const QString reason = payload.value(QStringLiteral("error")).toString();
+            setStatus(reason.isEmpty()
+                ? QStringLiteral("Personality update was not confirmed; current settings kept") : reason);
+            return;
+        }
         m_personality = objectMap(payload.value(QStringLiteral("personality")));
         emit phase3Changed();
         setStatus(QStringLiteral("Personality updated"));

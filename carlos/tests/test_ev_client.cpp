@@ -31,6 +31,38 @@ class EvClientTests : public QObject {
     }
 
   private slots:
+    void personalityRefusalsKeepKnownSettings() {
+        auto respond = [this](const QJsonObject &payload) {
+            client->updatePersonality("tone", "calm");
+            QTRY_VERIFY(peer->canReadLine());
+            const auto request = QJsonDocument::fromJson(peer->readLine()).object();
+            QCOMPARE(request.value("type").toString(), QString("personality.update"));
+            send({{"type", "response"}, {"id", request.value("id")}, {"payload", payload}});
+            QTest::qWait(30);
+        };
+        respond({{"updated", true}, {"applies_immediately", true},
+                 {"personality", QJsonObject{{"tone", "natural"}, {"speaking_rate", 1.18}}}});
+        QTRY_COMPARE(client->personality().value("tone").toString(), QString("natural"));
+        for (const QJsonObject &failure : {
+                 QJsonObject{{"status", "denied"}, {"error", "Unavailable in guest mode"}},
+                 QJsonObject{{"updated", false}, {"personality", QJsonObject{{"tone", "calm"}}}},
+                 QJsonObject{{"updated", true}, {"applies_immediately", true}},
+                 QJsonObject{{"updated", true}, {"personality", QJsonObject{{"tone", "calm"}}}},
+                 QJsonObject{{"status", "denied"}, {"updated", true}, {"applies_immediately", true},
+                             {"personality", QJsonObject{{"tone", "calm"}}}},
+                 QJsonObject{{"error", true}, {"updated", true}, {"applies_immediately", true},
+                             {"personality", QJsonObject{{"tone", "calm"}}}}}) {
+            respond(failure);
+            QCOMPARE(client->personality().value("tone").toString(), QString("natural"));
+            QCOMPARE(client->personality().value("speaking_rate").toDouble(), 1.18);
+            QVERIFY(client->statusMessage() != "Personality updated");
+        }
+        respond({{"updated", true}, {"applies_immediately", true},
+                 {"personality", QJsonObject{{"tone", "calm"}, {"speaking_rate", 1.18}}}});
+        QTRY_COMPARE(client->personality().value("tone").toString(), QString("calm"));
+        QCOMPARE(client->statusMessage(), QString("Personality updated"));
+    }
+
     void securityMonitorUsesOnlyLiveStatusAndClearsOnPrivacyChange() {
         const QJsonObject observation{{"type", "security.monitor_status"},
             {"source", "security_monitor"}, {"payload", QJsonObject{{"state", "MONITORING"},
