@@ -90,14 +90,23 @@ TestCase {
         scroll.contentY=Math.max(0,rate.mapToItem(scroll.contentItem,0,0).y-70)
         waitForRendering(ui.contentItem)
         verify(rate.text.indexOf("1.18x") >= 0)
-        click("personality-humor")
+        function activate(name) {
+            const control=item(name)
+            scroll.contentY=Math.max(0,control.mapToItem(scroll.contentItem,0,0).y-70)
+            waitForRendering(ui.contentItem)
+            click(name)
+        }
+        activate("personality-proactive")
+        compare(mock.calls[mock.calls.length-1].personality,"proactive_speech_threshold")
+        compare(mock.calls[mock.calls.length-1].value,"high")
+        activate("personality-humor")
         compare(mock.calls[mock.calls.length-1].personality,"humor")
         compare(mock.calls[mock.calls.length-1].value,"normal")
-        click("personality-sarcasm")
+        activate("personality-sarcasm")
         compare(mock.calls[mock.calls.length-1].value,"light")
-        click("personality-name-usage")
+        activate("personality-name-usage")
         compare(mock.calls[mock.calls.length-1].value,"normal")
-        click("personality-speaking-rate")
+        activate("personality-speaking-rate")
         compare(typeof mock.calls[mock.calls.length-1].value,"number")
         const controls=item("personality-controls")
         verify(rate.mapToItem(controls,0,0).y + rate.height <= controls.height)
@@ -107,6 +116,7 @@ TestCase {
         verify(!item("personality-humor").enabled)
         verify(!item("personality-sarcasm").enabled)
         verify(!item("personality-name-usage").enabled)
+        verify(!item("personality-proactive").enabled)
     }
     function test_settings_undo_and_controls_wait_for_pending_response() {
         mock.daily={settings:{undo_available:true,fields:[{key:"media_ducking",section:"Voice",label:"Lower media volume",value:false}],choices:[{key:"operating_mode",section:"General",label:"Mode",value:"DAILY",choices:[{value:"DAILY",label:"Daily"},{value:"DEV",label:"Development"}]}]}}

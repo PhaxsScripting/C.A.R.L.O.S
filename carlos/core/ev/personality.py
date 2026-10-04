@@ -6,6 +6,7 @@ CHOICES = {
     'technical_language': {'simple', 'balanced', 'technical'},
     'humor': {'off', 'light', 'normal'},
     'sarcasm': {'off', 'light'},
+    'proactive_speech_threshold': {'off', 'high', 'emergency'},
     'name_usage': {'rare', 'normal', 'often'},
 }
 RANGES = {'voice_expressiveness': (0.1, 1.0), 'speaking_rate': (0.65, 1.5)}

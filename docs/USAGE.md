@@ -581,11 +581,28 @@ evctl personality speaking_rate 1.15
 Rates accept numeric values from 0.65 through 1.50. Invalid mixed updates leave
 settings unchanged. Persistent personality changes are refused during Private
 Session, Guest mode and privacy transitions. Greeting frequency is controlled
-separately in Presence settings. Proactive speech threshold controls remain
-unfinished.
+separately in Presence settings.
+
+Alert Voice defaults to off. Set it in Settings or with
+`evctl personality proactive_speech_threshold high` (HIGH and EMERGENCY),
+`emergency` (EMERGENCY only), or `off`. Thermal alerts come from telemetry;
+storage and security alerts require a recent local monitor observation. These
+warnings use fixed text and never read event messages or filenames aloud.
+HIGH waits until Carlos is idle. EMERGENCY may interrupt his current speech,
+but does not interrupt tools, open the microphone or start a follow-up window.
+
+Delivery requires a fresh unlocked session, enabled speech output and available
+TTS. Privacy/guest sessions, quiet scenes and gaming suspension suppress alerts.
+Stop, lock, privacy, scene and resume changes discard queued warnings; policy
+changes during delivery cancel only the owned alert speech task. Queued events
+expire after ten seconds. Same-kind events coalesce, with a two-minute cooldown
+per kind and priority after an attempt, including failed or cancelled attempts.
+The disabled worker waits for an event without an idle polling loop. Explicit
+Codex waiting prompts are not currently connected to this speech queue.
 
 For a silent native check with installed Piper/model dependencies, run
 `python3 carlos/scripts/check-personality-delivery.py`. It uses private Core IPC,
-a real numeric CLI request, temporary settings and two generated PCM samples;
+numeric rate and alert-threshold CLI requests, temporary settings, two rate
+samples and one warning routed through actual event persistence and silent Piper;
 it does not play audio or open a microphone. `--core-dir` selects an installed
 Core tree; `--config` selects the configuration providing TTS dependency paths.

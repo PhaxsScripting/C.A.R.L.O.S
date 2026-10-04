@@ -1060,6 +1060,13 @@ ApplicationWindow {
                                             onClicked: evClient.updatePersonality("sarcasm", appWindow.nextChoice(get(evClient.personality, "sarcasm", "off"), ["off", "light"]))
                                         }
                                     }
+                                    HudButton {
+                                        objectName: "personality-proactive"
+                                        Layout.fillWidth: true
+                                        enabled: evClient.connected
+                                        text: "ALERT VOICE // " + String(get(evClient.personality, "proactive_speech_threshold", "off")).toUpperCase()
+                                        onClicked: evClient.updatePersonality("proactive_speech_threshold", appWindow.nextChoice(get(evClient.personality, "proactive_speech_threshold", "off"), ["off", "high", "emergency"]))
+                                    }
                                     RowLayout {
                                         Layout.fillWidth: true
                                         HudButton {

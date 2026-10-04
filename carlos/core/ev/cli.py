@@ -93,6 +93,7 @@ def parser() -> argparse.ArgumentParser:
             "acknowledgements",
             "technical_language",
             "voice_expressiveness",
+            "proactive_speech_threshold",
             "humor",
             "sarcasm",
             "name_usage",

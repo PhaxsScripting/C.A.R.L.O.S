@@ -53,6 +53,7 @@ from .voice import VoiceManager, is_conversation_stop
 from .vision import ScreenPerception
 from .identity import identity
 from .privacy import PrivacyPolicy
+from .proactive import ProactiveSpeech
 from .personality import snapshot as personality_snapshot, update_values as personality_update
 
 
@@ -362,6 +363,7 @@ class CarlosCore:
         self._notification_last: dict[str, float] = {}
         from .notices import NoticeQueue
         self._notification_queue = NoticeQueue(maxsize=32)
+        self.proactive = ProactiveSpeech(self)
         if self.privacy.ephemeral:
             self.privacy.apply_storage()
         self.voice.privacy_mode = self.privacy.mode == "DO NOT LISTEN"
@@ -577,6 +579,11 @@ class CarlosCore:
                     "tool.completed",
                 }:
                     self._notification_queue.offer(event)
+                try:
+                    self.proactive.offer(event)
+                except Exception as error:
+                    self.logger.warning("Proactive alert projection failed; event persistence continues",
+                                        extra={"fields": {"error_type": type(error).__name__}})
                 if self.timeline.should_record(event):
                     await asyncio.to_thread(self.timeline.record, event)
             except Exception as error:
@@ -672,6 +679,7 @@ class CarlosCore:
             "activity": self.activity.snapshot(),
             "insights": self.insights.snapshot(),
             "personality": personality_snapshot(self.config),
+            "proactive": self.proactive.snapshot(),
             "tools": {
                 "registered": len(self.tools.catalog()),
                 "pending_confirmations": self.permissions.list_public(),
@@ -2805,6 +2813,7 @@ class CarlosCore:
         self._persistence_subscriber, persistence_queue = self.bus.subscribe()
         self._persistence_task = asyncio.create_task(self._persist_events(persistence_queue))
         notification_task = asyncio.create_task(self._deliver_notifications())
+        proactive_task = asyncio.create_task(self.proactive.run())
         telemetry_task = asyncio.create_task(self.telemetry.run(self.stop_event))
         confirmation_expiry_task = asyncio.create_task(self._confirmation_expiry_loop())
         capture_prune_task = asyncio.create_task(self._capture_prune_loop())
@@ -2848,6 +2857,7 @@ class CarlosCore:
             "background_loops",
             (
                 telemetry_task,
+                proactive_task,
                 confirmation_expiry_task,
                 capture_prune_task,
                 reminder_task,

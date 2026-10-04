@@ -31,6 +31,7 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "acknowledgements": "important_only",
         "technical_language": "balanced",
         "voice_expressiveness": 0.62,
+        "proactive_speech_threshold": "off",
         "humor": "light",
         "sarcasm": "off",
         "name_usage": "rare",
