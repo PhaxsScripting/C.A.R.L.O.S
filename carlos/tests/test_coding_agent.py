@@ -122,7 +122,8 @@ else:
                 encoding="utf-8",
             )
             fake.chmod(0o700)
-            gateway = CodingAgentGateway([str(base)], base / "state")
+            events = []
+            gateway = CodingAgentGateway([str(base)], base / "state", lambda kind,payload,correlation:events.append((kind,payload)))
             with patch.object(CodingAgentGateway, "_codex_executable", return_value=str(fake)):
                 proposal = gateway.propose("Add generated.txt", str(root))
                 result = gateway.execute(proposal["proposal_id"], 60)
@@ -132,6 +133,9 @@ else:
             self.assertTrue(result["commit_id"])
             self.assertFalse((root / "generated.txt").exists())
             self.assertTrue((Path(result["worktree"]) / "generated.txt").is_file())
+            waiting = [payload for kind,payload in events if kind == 'coding.waiting']
+            self.assertEqual([item['phase'] for item in waiting], ['REVIEW_PROPOSAL','REVIEW_DEPLOYMENT'])
+            self.assertTrue(all(set(item) == {'proposal_id','phase','observed_at','approval_required'} for item in waiting))
 
     def test_running_job_reports_safe_progress_and_cancels_without_commit(self):
         import concurrent.futures

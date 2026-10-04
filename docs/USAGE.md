@@ -630,3 +630,11 @@ remain accepted. Missing, contradictory or inconsistent archive evidence never
 receives a generic verified result.
 
 The separate always-on Sentinel reference service is documented in [SENTINEL.md](SENTINEL.md). Safe simulation and an owned private-socket CLI check are available; no independent device or wake daemon is activated automatically.
+
+With Alert Voice set to high, an owned ready coding proposal or validated
+result awaiting deployment review can give one short prompt while Carlos is
+idle. The prompt has no project path, diagnostic or request content. It does
+not grant approval or start a job. Advancing/cancelling the job, changing
+privacy, stopping, locking or entering a quiet scene clears pending speech.
+Direct coding proposals obey the same privacy/scope checks as tool proposals;
+private/local-only/Guest requests do not probe or save a new proposal.

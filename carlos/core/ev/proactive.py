@@ -31,6 +31,14 @@ class ProactiveSpeech:
         data = event.payload
         if not isinstance(data, dict) or event.private:
             return None
+        if (event.type == 'coding.waiting' and event.source == 'coding_agent'
+                and self.core.privacy.mode == 'NORMAL'
+                and data.get('approval_required') is True and event.priority == 'HIGH'
+                and recent_age(data.get('observed_at'), 30, now=self.wall_clock()) is not None
+                and data == self.core.coding_agent.waiting_summary(data.get('proposal_id'))):
+            text = ('The coding proposal is ready for your review.' if data['phase'] == 'REVIEW_PROPOSAL'
+                    else 'The coding result passed its checks and is waiting for deployment review.')
+            return 'coding', text
         if event.type == 'system.warning' and event.source == 'telemetry' and data.get('kind') == 'thermal':
             value = data.get('celsius')
             if type(value) in (int, float) and 90 <= value <= 200:
@@ -77,12 +85,16 @@ class ProactiveSpeech:
                               'sequence': event.sequence, 'correlation': event.correlation_id,
                               'scope': (self.core._action_generation, self.core.privacy.mode, self.threshold(), self.revision),
                               'interrupted': bool(previous and previous.get('interrupted'))}
+        if kind == 'coding':
+            self.pending[kind]['waiting'] = dict(event.payload)
         self.wake.set()
         return True
 
     def current(self, item):
         return (self.allowed() and recent_age(item['at'], 10, now=self.clock()) is not None
-                and item['scope'] == (self.core._action_generation, self.core.privacy.mode, self.threshold(), self.revision))
+                and item['scope'] == (self.core._action_generation, self.core.privacy.mode, self.threshold(), self.revision)
+                and ('waiting' not in item or (self.core.privacy.mode == 'NORMAL'
+                     and item['waiting'] == self.core.coding_agent.waiting_summary(item['waiting']['proposal_id']))))
 
     async def deliver_one(self):
         if not self.allowed():

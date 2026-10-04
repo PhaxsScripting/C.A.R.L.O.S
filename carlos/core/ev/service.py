@@ -144,6 +144,7 @@ class CarlosCore:
             )
         )
         self.tools.context.capability_probe = self.holosystem.capabilities
+        self.tools.context.coding_proposal = self.prepare_coding_proposal
         register_builtin_tools(self.tools)
         from .tools.project_memory import register_project_memory
 
@@ -437,6 +438,13 @@ class CarlosCore:
                 return
             title = "Carlos security observation"
             body = str(event.payload.get("message", "Local security evidence changed."))
+        elif (event.type == 'coding.waiting' and event.source == 'coding_agent'
+              and self.privacy.mode == 'NORMAL'
+              and event.payload.get('approval_required') is True and event.priority == 'HIGH'
+              and event.payload == self.coding_agent.waiting_summary(event.payload.get('proposal_id'))):
+            title = 'Carlos coding review'
+            body = ('A coding proposal needs your review.' if event.payload.get('phase') == 'REVIEW_PROPOSAL'
+                    else 'A validated coding result needs deployment review.')
         elif event.type == "voice.full_test_complete":
             title = "Carlos voice test complete"
             body = "The real microphone-to-speaker pipeline completed successfully."
@@ -574,6 +582,7 @@ class CarlosCore:
                     "system.error",
                     "security.alert",
                     "security.observed",
+                    "coding.waiting",
                     "voice.full_test_complete",
                     "voice.full_test_failed",
                     "tool.completed",
@@ -656,6 +665,21 @@ class CarlosCore:
             )
         else:
             self.bus.publish(event_type, "coding_agent", payload, correlation_id)
+
+    async def prepare_coding_proposal(self, payload):
+        mode, generation = self.privacy.mode, self._action_generation
+        error = self.privacy.tool_error('development.coding_agent_propose')
+        if error:
+            return {'status': 'denied', 'error': error}
+        if self._stopping_tools or self.stop_event.is_set():
+            return {'status': 'denied', 'error': 'Carlos is stopping; proposal was not started'}
+        proposal = await asyncio.to_thread(self.coding_agent.inspect_proposal,
+                                          str(payload.get('request', '')), str(payload.get('project', '')),
+                                          str(payload.get('diagnostics', '')))
+        if (self.privacy.changing or self.privacy.mode != mode or self._action_generation != generation
+                or self._stopping_tools or self.stop_event.is_set()):
+            return {'status': 'denied', 'error': 'Request scope changed; proposal was not saved'}
+        return self.coding_agent.record_proposal(proposal)
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -2611,12 +2635,7 @@ class CarlosCore:
                 return {"status": "denied", "error": "Privacy settings changed; retry the observation"}
             return result
         if request_type == "coding.propose":
-            return await asyncio.to_thread(
-                self.coding_agent.propose,
-                str(payload.get("request", "")),
-                str(payload.get("project", "")),
-                str(payload.get("diagnostics", "")),
-            )
+            return await self.prepare_coding_proposal(payload)
         if request_type == "coding.result":
             mode = self.privacy.mode
             error = self.privacy.tool_error("development.coding_agent_result")

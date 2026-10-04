@@ -14,7 +14,7 @@ ACTIVITY_TYPES = frozenset({
     'system.resource_mode_changed', 'task.started', 'task.completed',
     'task.failed', 'task.recovered', 'tool.completed', 'tool.failed',
     'voice.conversation_ended', 'wake.detected', 'plan.failed',
-    'coding.started', 'coding.completed', 'coding.failed', 'coding.cancelled',
+    'coding.started', 'coding.completed', 'coding.failed', 'coding.cancelled', 'coding.waiting',
     'health.repair_started', 'health.repair_finished', 'health.repair_failed',
     'health.probe_failed', 'power.scheduled', 'power.dispatching',
     'power.requested', 'power.cancelled',

@@ -22,9 +22,10 @@ to set up your own speech runtimes and models.
 | [`carlos/tests`](carlos/tests) | Core and UI tests |
 | [`docs`](docs) | Setup, usage and test results |
 
-This repo is just Carlos now. HoloHand, the phone app and the separate wake
-server aren't included. Carlos still has optional hooks for those apps if you
-install them separately. They aren't needed to build or test the assistant.
+This repo is just Carlos. HoloHand and the phone app are installed separately.
+Carlos has optional hooks for them and a small [Sentinel reference](docs/SENTINEL.md)
+for future independent wake hardware. No separate device is provisioned automatically;
+these integrations are not required to build or use the assistant.
 
 ## Get started
 

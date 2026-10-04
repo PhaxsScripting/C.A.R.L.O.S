@@ -16,6 +16,10 @@ def priority_for(kind, source, payload):
         return "HIGH"
     if kind == "tool.permission_check" and payload.get("decision") == "PENDING":
         return "HIGH"
+    if (kind == 'coding.waiting' and source == 'coding_agent'
+            and payload.get('approval_required') is True
+            and payload.get('phase') in ('REVIEW_PROPOSAL', 'REVIEW_DEPLOYMENT')):
+        return 'HIGH'
     if kind in {
         "tool.completed",
         "system.telemetry",

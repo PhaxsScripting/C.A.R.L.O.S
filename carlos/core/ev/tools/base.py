@@ -43,6 +43,7 @@ class ToolContext:
     project_changed: Any = None
     project_scope: Any = None
     audio_undo: list[dict[str, Any]] = field(default_factory=list)
+    coding_proposal: Any = None
 
 
 @dataclass(slots=True)

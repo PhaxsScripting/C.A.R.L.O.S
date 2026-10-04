@@ -2039,14 +2039,20 @@ def coding_agent_status(_arguments: dict[str, Any], context: ToolContext) -> dic
     return context.coding_agent.status()
 
 
-def coding_agent_proposal(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
+async def coding_agent_proposal(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:
     if context.coding_agent is None:
         raise RuntimeError("The coding-agent gateway is unavailable")
-    return context.coding_agent.propose(
-        str(arguments["request"]),
-        str(arguments["project"]),
-        str(arguments.get("diagnostics", "")),
-    )
+    if context.coding_proposal is not None:
+        return await context.coding_proposal(arguments)
+    mode = context.config.get('carlos', {}).get('privacy_mode', 'NORMAL')
+    if mode in {'LOCAL ONLY', 'PRIVATE SESSION', 'GUEST'}:
+        return {'status': 'denied', 'error': 'Coding proposals are disabled by the current privacy policy'}
+    proposal = await asyncio.to_thread(context.coding_agent.inspect_proposal,
+                                      str(arguments['request']), str(arguments['project']),
+                                      str(arguments.get('diagnostics', '')))
+    if context.config.get('carlos', {}).get('privacy_mode', 'NORMAL') != mode:
+        return {'status': 'denied', 'error': 'Privacy settings changed; proposal was not saved'}
+    return context.coding_agent.record_proposal(proposal)
 
 
 async def coding_agent_execute(arguments: dict[str, Any], context: ToolContext) -> dict[str, Any]:

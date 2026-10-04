@@ -13,6 +13,7 @@ import subprocess
 import time
 import uuid
 from copy import deepcopy
+from .coding_wait import waiting_summary
 from pathlib import Path
 from typing import Any, Callable
 
@@ -134,6 +135,9 @@ class CodingAgentGateway:
         return root
 
     def propose(self, request: str, project: str, diagnostics: str = "") -> dict[str, Any]:
+        return self.record_proposal(self.inspect_proposal(request, project, diagnostics))
+
+    def inspect_proposal(self, request: str, project: str, diagnostics: str = "") -> dict[str, Any]:
         clean = request.strip()
         if not clean or len(clean) > 4000:
             raise ValueError("coding request must be 1-4000 characters")
@@ -182,11 +186,27 @@ class CodingAgentGateway:
                 }
             ),
         }
-        self._proposals[proposal_id] = proposal
+        return proposal
+
+    def record_proposal(self, proposal):
+        proposal = deepcopy(proposal)
+        proposal_id = proposal['proposal_id']
         self._save(proposal)
+        self._proposals[proposal_id] = proposal
         self._status_cache = None
         self._emit("coding.proposed", proposal, proposal_id)
+        self._emit_waiting(proposal)
         return self._public(proposal)
+
+    def waiting_summary(self, proposal_id):
+        if not isinstance(proposal_id, str):
+            return None
+        return waiting_summary(self._proposals.get(proposal_id))
+
+    def _emit_waiting(self, proposal):
+        summary = waiting_summary(proposal)
+        if summary is not None:
+            self._emit('coding.waiting', summary, summary['proposal_id'])
 
     def cancel(self, proposal_id: str) -> dict[str, Any]:
         with self._running_lock:
@@ -422,6 +442,7 @@ class CodingAgentGateway:
         self._status_cache = None
         self._emit("coding.cancelled" if proposal["status"] == "CANCELLED" else "coding.completed",
                    self._public(proposal), proposal_id)
+        self._emit_waiting(proposal)
         return self._public(proposal)
 
     def _set_phase(self, proposal, phase):
