@@ -14,7 +14,9 @@ from ev.tools.native_settings import (
 
 class NativeSettingsTests(unittest.TestCase):
     def test_empty_profile_backend_is_unavailable(self):
-        with patch("ev.tools.native_settings.checked", return_value=""):
+        with patch("ev.tools.native_settings.checked", return_value=""), patch(
+            "ev.tools.power_profiles.status", return_value={"available": False}
+        ):
             self.assertFalse(power_profile_status({}, None)["available"])
             with self.assertRaises(ValueError):
                 power_profile_set({"profile": "performance"}, None)
